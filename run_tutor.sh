@@ -37,7 +37,26 @@ else
 fi
 
 # Get the python executable (now guaranteed to be from venv)
-PYTHON_BIN="$(command -v python3 || command -v python)"
+# On Windows, explicitly use the venv's Python to avoid finding system Python
+if [[ -n "$VIRTUAL_ENV" ]]; then
+    # Use the venv's Python explicitly
+    if [[ -f "$VIRTUAL_ENV/Scripts/python.exe" ]]; then
+        # Windows native path
+        PYTHON_BIN="$VIRTUAL_ENV/Scripts/python.exe"
+    elif [[ -f "$VIRTUAL_ENV/bin/python3" ]]; then
+        # Unix-style path (Git Bash/Linux/Mac)
+        PYTHON_BIN="$VIRTUAL_ENV/bin/python3"
+    elif [[ -f "$VIRTUAL_ENV/bin/python" ]]; then
+        PYTHON_BIN="$VIRTUAL_ENV/bin/python"
+    else
+        # Fallback to PATH search if venv Python not found
+        PYTHON_BIN="$(command -v python3 || command -v python)"
+        echo "⚠️  Warning: Could not find venv Python, using: $PYTHON_BIN"
+    fi
+else
+    # No venv active, search PATH
+    PYTHON_BIN="$(command -v python3 || command -v python)"
+fi
 echo "Using Python: $PYTHON_BIN"
 
 # Array to hold the PIDs of background processes

@@ -80,7 +80,7 @@ class UserManager:
         """Create users folder if it doesn't exist"""
         if not os.path.exists(self.users_folder):
             os.makedirs(self.users_folder)
-            print(f"📁 Created {self.users_folder} folder for user data")
+            print(f"[FOLDER] Created {self.users_folder} folder for user data", flush=True)
     
     def get_user_file_path(self, user_id: str) -> str:
         """Get the file path for a user's JSON file"""
@@ -114,7 +114,7 @@ class UserManager:
         )
         
         self.save_user(user_profile)
-        print(f"👤 Created new user profile: {user_id}")
+        print(f"[USER] Created new user profile: {user_id}", flush=True)
         return user_profile
     
     def load_user(self, user_id: str) -> Optional[UserProfile]:
@@ -129,11 +129,11 @@ class UserManager:
                 data = json.load(f)
             
             user_profile = UserProfile.from_dict(data)
-            print(f"📂 Loaded user profile: {user_id}")
+            print(f"[LOADED] Loaded user profile: {user_id}", flush=True)
             return user_profile
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            print(f"❌ Error loading user {user_id}: {e}")
+            print(f"[ERROR] Error loading user {user_id}: {e}", flush=True)
             return None
     
     def save_user(self, user_profile: UserProfile):
@@ -145,10 +145,10 @@ class UserManager:
             with open(file_path, 'w') as f:
                 json.dump(user_profile.to_dict(), f, indent=2)
             
-            print(f"💾 Saved user profile: {user_profile.user_id}")
+            print(f"[SAVED] Saved user profile: {user_profile.user_id}", flush=True)
             
         except Exception as e:
-            print(f"❌ Error saving user {user_profile.user_id}: {e}")
+            print(f"[ERROR] Error saving user {user_profile.user_id}: {e}", flush=True)
     
     def get_or_create_user(self, user_id: str, all_skill_ids: List[str]) -> UserProfile:
         """Get existing user or create new one if doesn't exist"""
@@ -167,7 +167,7 @@ class UserManager:
                         practice_count=0,
                         correct_count=0
                     )
-                print(f"➕ Added {len(missing_skills)} new skills to user {user_id}")
+                print(f"[ADDED] Added {len(missing_skills)} new skills to user {user_id}", flush=True)
                 self.save_user(user_profile)
         
         return user_profile

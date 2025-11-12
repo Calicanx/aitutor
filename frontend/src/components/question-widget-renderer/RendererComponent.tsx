@@ -19,7 +19,10 @@ const RendererComponent = () => {
     const rendererRef = useRef<ServerItemRenderer>(null);
 
     useEffect(() => {
-        fetch("http://localhost:8001/api/questions/16")
+        // Use DASH API with intelligent question selection
+        // Default user_id, can be made configurable later
+        const user_id = "default_user";
+        fetch(`http://localhost:8000/api/questions/16?user_id=${user_id}`)
             .then((response) => response.json())
             .then((data) => {
                 console.log("API response:", data);

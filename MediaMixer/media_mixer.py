@@ -13,6 +13,7 @@ import asyncio
 import websockets
 import signal
 import json
+import time
 
 
 class MediaMixer:
@@ -41,7 +42,13 @@ class MediaMixer:
             if self.camera.isOpened():
                 self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
                 self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-                print("Camera initialized successfully")
+                # Try to read a frame to ensure camera is actually working
+                ret, frame = self.camera.read()
+                if ret and frame is not None:
+                    print("Camera initialized successfully and verified working")
+                else:
+                    print("Warning: Camera opened but failed to read initial frame")
+                    # Don't release yet, might need warm-up time
             else:
                 print("Warning: Could not open camera")
                 self.camera = None
@@ -55,12 +62,55 @@ class MediaMixer:
 
     def get_camera_frame(self):
         """Get camera frame if enabled"""
-        if not self.show_camera or not self.camera:
+        if not self.show_camera:
             return None
+        
+        # Check if camera exists and is opened
+        if not self.camera:
+            # Log once when camera is None but show_camera is True
+            if not hasattr(self, '_camera_none_logged') or time.time() - self._camera_none_logged > 10:
+                print("Warning: Camera is None but show_camera is True. Re-initializing...")
+                self.init_camera()
+                self._camera_none_logged = time.time()
+            return None
+        
+        # Verify camera is still opened (it might have been closed externally)
+        if not self.camera.isOpened():
+            print("Warning: Camera was closed, re-initializing...")
+            self.camera.release()
+            self.camera = None
+            self.init_camera()
+            if not self.camera or not self.camera.isOpened():
+                return None
 
         ret, frame = self.camera.read()
-        if ret:
-            return cv2.resize(frame, (self.width, self.section_height))
+        if ret and frame is not None:
+            # Verify frame has valid dimensions
+            if frame.size > 0 and frame.shape[0] > 0 and frame.shape[1] > 0:
+                return cv2.resize(frame, (self.width, self.section_height))
+            else:
+                # Log once if frame is empty
+                if not hasattr(self, '_empty_frame_logged') or time.time() - self._empty_frame_logged > 5:
+                    print(f"Warning: Camera frame is empty (shape={frame.shape if frame is not None else 'None'})")
+                    self._empty_frame_logged = time.time()
+        else:
+            # Log error if read fails (but don't spam the logs)
+            if not hasattr(self, '_last_camera_error_log') or time.time() - self._last_camera_error_log > 5:
+                print(f"Warning: Failed to read camera frame (ret={ret}, frame is None={frame is None}, isOpened={self.camera.isOpened()})")
+                # Try to re-initialize if read consistently fails
+                if hasattr(self, '_camera_read_fail_count'):
+                    self._camera_read_fail_count += 1
+                else:
+                    self._camera_read_fail_count = 1
+                
+                # If we've failed 10 times in a row, try re-initializing
+                if self._camera_read_fail_count >= 10:
+                    print("Camera read failing repeatedly, attempting re-initialization...")
+                    self.release_camera()
+                    self.init_camera()
+                    self._camera_read_fail_count = 0
+                
+                self._last_camera_error_log = time.time()
         return None
 
     def get_screen_frame(self):
