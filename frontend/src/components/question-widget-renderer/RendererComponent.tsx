@@ -16,18 +16,19 @@ const RendererComponent = () => {
     const [endOfTest, setEndOfTest] = useState(false);
     const [score, setScore] = useState<KEScore>();
     const [isAnswered, setIsAnswered] = useState(false);
+    const [startTime, setStartTime] = useState<number>(Date.now());
     const rendererRef = useRef<ServerItemRenderer>(null);
+    const user_id = "default_user"; // Can be made configurable later
 
     useEffect(() => {
         // Use DASH API with intelligent question selection
-        // Default user_id, can be made configurable later
-        const user_id = "default_user";
         fetch(`http://localhost:8000/api/questions/16?user_id=${user_id}`)
             .then((response) => response.json())
             .then((data) => {
                 console.log("API response:", data);
                 setPerseusItems(data);
                 setLoading(false);
+                setStartTime(Date.now()); // Reset timer for first question
             })
             .catch((err) => {
                 console.error("Failed to fetch questions:", err);
@@ -49,12 +50,13 @@ const RendererComponent = () => {
             }
 
             setIsAnswered(false);
+            setStartTime(Date.now()); // Reset timer for next question
             return index;
         });
     };
 
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (rendererRef.current) {
             const userInput = rendererRef.current.getUserInput();
             const question = perseusItem.question;
@@ -64,7 +66,35 @@ const RendererComponent = () => {
             const maxCompatGuess = [rendererRef.current.getUserInputLegacy(), []];
             const keScore = keScoreFromPerseusScore(score, maxCompatGuess, rendererRef.current.getSerializedState().question);
 
-            // return score for the given question 
+            // Calculate response time
+            const responseTimeSeconds = (Date.now() - startTime) / 1000;
+
+            // Submit answer to DASH API for tracking and adaptive difficulty
+            try {
+                // For now, use placeholder values since we don't have direct access to question_id and skill_ids from Perseus items
+                // In a production system, you'd include these in the Perseus item response
+                const answerData = {
+                    question_id: `q_${item}`, // Placeholder - ideally from perseusItem metadata
+                    skill_ids: ["counting_1_10"], // Placeholder - ideally from perseusItem metadata
+                    is_correct: keScore.correct,
+                    response_time_seconds: responseTimeSeconds
+                };
+
+                const response = await fetch(`http://localhost:8000/api/submit-answer/${user_id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(answerData),
+                });
+
+                const result = await response.json();
+                console.log("Answer submitted to DASH:", result);
+            } catch (error) {
+                console.error("Failed to submit answer to DASH:", error);
+            }
+
+            // Display score to user
             setIsAnswered(true);
             setScore(keScore);
             console.log("Score:", keScore);

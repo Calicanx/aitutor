@@ -1,9 +1,21 @@
 import json
 import os
 import time
+import logging
+import sys
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s|%(message)s|file:%(filename)s:line No.%(lineno)d',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 @dataclass
 class QuestionAttempt:
@@ -80,7 +92,7 @@ class UserManager:
         """Create users folder if it doesn't exist"""
         if not os.path.exists(self.users_folder):
             os.makedirs(self.users_folder)
-            print(f"[FOLDER] Created {self.users_folder} folder for user data", flush=True)
+            logger.info(f"[FOLDER] Created {self.users_folder} folder for user data")
     
     def get_user_file_path(self, user_id: str) -> str:
         """Get the file path for a user's JSON file"""
@@ -114,7 +126,7 @@ class UserManager:
         )
         
         self.save_user(user_profile)
-        print(f"[USER] Created new user profile: {user_id}", flush=True)
+        logger.info(f"[USER] Created new user profile: {user_id}")
         return user_profile
     
     def load_user(self, user_id: str) -> Optional[UserProfile]:
@@ -129,11 +141,12 @@ class UserManager:
                 data = json.load(f)
             
             user_profile = UserProfile.from_dict(data)
-            print(f"[LOADED] Loaded user profile: {user_id}", flush=True)
+            # Reduced verbosity - only log on errors
+            pass  # logger.info(f"[LOADED] Loaded user profile: {user_id}")
             return user_profile
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            print(f"[ERROR] Error loading user {user_id}: {e}", flush=True)
+            logger.error(f"[ERROR] Error loading user {user_id}: {e}")
             return None
     
     def save_user(self, user_profile: UserProfile):
@@ -145,10 +158,11 @@ class UserManager:
             with open(file_path, 'w') as f:
                 json.dump(user_profile.to_dict(), f, indent=2)
             
-            print(f"[SAVED] Saved user profile: {user_profile.user_id}", flush=True)
+            # Reduced verbosity - only log on errors
+            pass  # logger.info(f"[SAVED] Saved user profile: {user_profile.user_id}")
             
         except Exception as e:
-            print(f"[ERROR] Error saving user {user_profile.user_id}: {e}", flush=True)
+            logger.error(f"[ERROR] Error saving user {user_profile.user_id}: {e}")
     
     def get_or_create_user(self, user_id: str, all_skill_ids: List[str]) -> UserProfile:
         """Get existing user or create new one if doesn't exist"""
@@ -167,7 +181,7 @@ class UserManager:
                         practice_count=0,
                         correct_count=0
                     )
-                print(f"[ADDED] Added {len(missing_skills)} new skills to user {user_id}", flush=True)
+                logger.info(f"[ADDED] Added {len(missing_skills)} new skills to user {user_id}")
                 self.save_user(user_profile)
         
         return user_profile

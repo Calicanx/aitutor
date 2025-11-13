@@ -81,8 +81,8 @@ echo "Starting Python backend... Logs -> logs/mediamixer.log"
 pids+=($!)
 
 # Start the FastAPI server in the background
-echo "Starting DASH API server... Logs -> logs/api.log"
-(cd "$SCRIPT_DIR" && "$PYTHON_BIN" DashSystem/dash_api.py) > "$SCRIPT_DIR/logs/api.log" 2>&1 &
+echo "Starting DASH API server... Logs -> logs/dash_api.log"
+(cd "$SCRIPT_DIR" && "$PYTHON_BIN" DashSystem/dash_api.py) > "$SCRIPT_DIR/logs/dash_api.log" 2>&1 &
 pids+=($!)
 
 # Start the SherlockEDExam FastAPI server in the background

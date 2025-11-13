@@ -3,6 +3,7 @@ import time
 import json
 import os
 import sys
+import logging
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
@@ -10,10 +11,20 @@ from enum import Enum
 from user_manager import UserManager, UserProfile, SkillState
 from QuestionGeneratorAgent.question_generator_agent import QuestionGeneratorAgent
 
-# Helper function to ensure logs are flushed immediately
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s|%(message)s|file:%(filename)s:line No.%(lineno)d',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Helper function for backward compatibility
 def log_print(message: str):
-    """Print with immediate flush to ensure logs appear in redirected output"""
-    print(message, flush=True)
+    """Wrapper for logger.info for easier migration"""
+    logger.info(message)
 
 class GradeLevel(Enum):
     K = 0
@@ -302,23 +313,17 @@ class DASHSystem:
             new_strength = min(5.0, current_strength + strength_increment)
             state.memory_strength = new_strength
             
-            # Log memory strength update
-            log_print(f"[MEMORY_UPDATE] Student {student_id}, Skill {skill_name} ({skill_id}): CORRECT answer")
-            log_print(f"  - Previous strength: {prev_strength:.3f} (decayed from {prev_strength:.3f} over {time_since_last:.1f}s)")
-            log_print(f"  - Strength increment: {strength_increment:.3f} (time penalty: {time_penalty:.2f})")
-            log_print(f"  - New strength: {new_strength:.3f} (practice: {prev_practice_count}->{state.practice_count}, "
-                  f"correct: {prev_correct_count}->{state.correct_count})")
+            # Compact memory update log
+            strength_change = new_strength - prev_strength
+            log_print(f"  |- {skill_name}: {prev_strength:.3f} -> {new_strength:.3f} ({strength_change:+.3f})")
         else:
             # Slight decrease for incorrect answers
             new_strength = max(-2.0, current_strength - 0.2)
             state.memory_strength = new_strength
             
-            # Log memory strength update
-            log_print(f"[MEMORY_UPDATE] Student {student_id}, Skill {skill_name} ({skill_id}): INCORRECT answer")
-            log_print(f"  - Previous strength: {prev_strength:.3f} (decayed from {prev_strength:.3f} over {time_since_last:.1f}s)")
-            log_print(f"  - Strength decrement: -0.2")
-            log_print(f"  - New strength: {new_strength:.3f} (practice: {prev_practice_count}->{state.practice_count}, "
-                  f"correct: {prev_correct_count}->{state.correct_count})")
+            # Compact memory update log
+            strength_change = new_strength - prev_strength
+            log_print(f"  |- {skill_name}: {prev_strength:.3f} -> {new_strength:.3f} ({strength_change:+.3f})")
         
         # Update last practice time
         state.last_practice_time = current_time
@@ -402,20 +407,13 @@ class DASHSystem:
         
         skill_names = [self.skills.get(sid).name if self.skills.get(sid) else sid for sid in skill_ids]
         
-        log_print(f"[QUESTION_ATTEMPT] Student {user_profile.user_id}: Recording attempt for question {question_id}")
-        log_print(f"  - Result: {'CORRECT' if is_correct else 'INCORRECT'}")
-        log_print(f"  - Skills: {', '.join(skill_names)} ({', '.join(skill_ids)})")
-        log_print(f"  - Difficulty: {question_difficulty}, Response time: {response_time_seconds:.1f}s "
-              f"(expected: {expected_time:.1f}s, ratio: {time_ratio:.2f}x)")
-        if time_penalty_applied:
-            log_print(f"  - Time penalty applied (response time > 180s)")
+        result_str = 'CORRECT' if is_correct else 'INCORRECT'
+        log_print(f"[ANSWER_SUBMITTED] Q:{question_id} | {result_str} | Time:{response_time_seconds:.1f}s | Skills:{','.join(skill_ids)}")
         
         # Update memory states
         affected_skills = self.update_with_prerequisites(
             user_profile.user_id, skill_ids, is_correct, current_time, response_time_seconds
         )
-        
-        log_print(f"  - Updated {len(affected_skills)} skill(s): {', '.join(affected_skills)}")
         
         # Save to persistent storage
         self.save_user_state(user_profile.user_id, user_profile)
@@ -425,9 +423,6 @@ class DASHSystem:
             user_profile, question_id, skill_ids, is_correct, 
             response_time_seconds, time_penalty_applied
         )
-        
-        total_attempts = len(user_profile.question_history)
-        log_print(f"  - Total question attempts: {total_attempts}")
         
         return affected_skills
     
@@ -490,28 +485,8 @@ class DASHSystem:
         ))
         
         # Log detailed information about skill recommendations
-        log_print(f"[LEARNING_JOURNEY] Student {student_id}: Analyzing skills for recommendations (threshold={threshold:.2f})")
-        log_print(f"[LEARNING_JOURNEY] Found {len(recommendations)} skills needing practice")
-        
-        if recommendations:
-            log_print(f"[LEARNING_JOURNEY] Recommended skills (sorted by learning journey):")
-            for idx, (skill_id, skill, prob) in enumerate(recommendations[:10], 1):  # Log top 10
-                log_print(f"  {idx}. {skill.name} (Grade {skill.grade_level.value}, Order {skill.order}, "
-                      f"Probability: {prob:.3f}, Skill ID: {skill_id})")
-            if len(recommendations) > 10:
-                log_print(f"  ... and {len(recommendations) - 10} more skills")
-        
-        if skipped_prerequisites:
-            log_print(f"[LEARNING_JOURNEY] Skipped {len(skipped_prerequisites)} skills due to unmet prerequisites:")
-            for skill_id, skill_name, missing in skipped_prerequisites[:5]:  # Log first 5
-                prereq_str = ", ".join([f"{p[0]}({p[1]:.2f})" for p in missing])
-                log_print(f"  - {skill_name} ({skill_id}): Missing prerequisites: {prereq_str}")
-        
-        if skipped_above_threshold:
-            log_print(f"[LEARNING_JOURNEY] Skipped {len(skipped_above_threshold)} skills (already above threshold)")
-        
+        # Only log detailed learning journey once per batch request, not for every question
         result = [skill_id for skill_id, _, _ in recommendations]
-        log_print(f"[LEARNING_JOURNEY] Returning {len(result)} recommended skills in learning journey order")
         return result
     
     def analyze_recent_performance(self, user_profile: UserProfile, lookback_count: int = 5) -> Dict[str, float]:
@@ -536,9 +511,6 @@ class DASHSystem:
         # Get recent attempts (last N questions)
         recent_attempts = user_profile.question_history[-lookback_count:]
         total_history = len(user_profile.question_history)
-        
-        log_print(f"[ADAPTIVE_DIFFICULTY] Student {user_profile.user_id}: Analyzing recent performance "
-              f"(looking at last {len(recent_attempts)} of {total_history} total attempts)")
         
         # Calculate correctness rate
         correct_count = sum(1 for attempt in recent_attempts if attempt.is_correct)
@@ -591,19 +563,7 @@ class DASHSystem:
             difficulty_adjustment = 0.0
             performance_level = "BALANCED"
         
-        # Detailed logging
-        log_print(f"[ADAPTIVE_DIFFICULTY] Performance Metrics:")
-        log_print(f"  - Correctness: {correct_count}/{len(recent_attempts)} = {correctness_rate:.2%} "
-              f"(score: {correctness_score:+.2f}, weight: 60%)")
-        log_print(f"  - Time Efficiency: avg ratio = {avg_time_ratio:.2f}x expected time "
-              f"(score: {time_score:+.2f}, weight: 40%)")
-        if time_details:
-            log_print(f"  - Time Details (last {min(3, len(time_details))} questions):")
-            for qid, actual, expected, ratio in time_details[-3:]:
-                log_print(f"    * Q{qid}: {actual:.1f}s / {expected:.1f}s = {ratio:.2f}x")
-        log_print(f"  - Combined Performance Score: {performance_score:+.3f} ({performance_level})")
-        log_print(f"  - Difficulty Adjustment: {difficulty_adjustment:+.2f} "
-              f"({'EASIER' if difficulty_adjustment < 0 else 'HARDER' if difficulty_adjustment > 0 else 'SAME'})")
+        # Removed verbose logging - only essential info logged elsewhere
         
         return {
             'performance_score': performance_score,
@@ -637,10 +597,6 @@ class DASHSystem:
         performance_analysis = self.analyze_recent_performance(user_profile)
         difficulty_adjustment = performance_analysis['difficulty_adjustment']
         
-        log_print(f"[QUESTION_SELECTION] Student {student_id}: Selecting next question with adaptive difficulty")
-        log_print(f"[QUESTION_SELECTION] Answered questions: {len(answered_question_ids)}, "
-              f"Available questions: {len(self.questions)}")
-        
         # Try to find an unanswered question from the recommended skills with adaptive difficulty
         for skill_idx, skill_id in enumerate(recommended_skills, 1):
             skill = self.skills.get(skill_id)
@@ -655,10 +611,7 @@ class DASHSystem:
             min_difficulty = max(0.0, target_difficulty - 0.2)
             max_difficulty = target_difficulty + 0.2
             
-            log_print(f"[QUESTION_SELECTION] Trying skill {skill_idx}/{len(recommended_skills)}: "
-                  f"{skill.name} (ID: {skill_id})")
-            log_print(f"  - Base difficulty: {base_difficulty:.2f}, "
-                  f"Target after adjustment: {target_difficulty:.2f} (range: {min_difficulty:.2f}-{max_difficulty:.2f})")
+            # Reduced verbosity - only log when selecting a question
             
             # Get all candidate questions for this skill
             all_candidates = [
@@ -667,10 +620,7 @@ class DASHSystem:
             ]
             
             if not all_candidates:
-                log_print(f"  - No unanswered questions available for this skill")
-                continue
-            
-            log_print(f"  - Found {len(all_candidates)} unanswered candidate question(s)")
+                continue  # Skip silently
             
             # Filter by difficulty range (adaptive selection)
             filtered_candidates = [
@@ -683,23 +633,16 @@ class DASHSystem:
                 # Sort by how close they are to target difficulty, then return the best match
                 filtered_candidates.sort(key=lambda q: abs(q.difficulty - target_difficulty))
                 selected = filtered_candidates[0]
-                log_print(f"[QUESTION_SELECTION] [SUCCESS] Selected question {selected.question_id} "
-                      f"(difficulty: {selected.difficulty:.2f}, target: {target_difficulty:.2f}, "
-                      f"adjustment: {difficulty_adjustment:+.2f}, skill: {skill.name})")
-                log_print(f"[QUESTION_SELECTION] Question selected from {len(filtered_candidates)} questions "
-                      f"in target difficulty range")
+                log_print(f"[QUESTION_SELECTED] Q:{selected.question_id} | Skill:{skill.name} | "
+                      f"Difficulty:{selected.difficulty:.2f} (target:{target_difficulty:.2f}, adj:{difficulty_adjustment:+.2f})")
                 return selected
             
             # If no questions in target range, use closest match from all candidates
             # This ensures we always return a question if available
-            log_print(f"  - No questions in target range ({min_difficulty:.2f}-{max_difficulty:.2f}), "
-                  f"using closest match from {len(all_candidates)} candidates")
             all_candidates.sort(key=lambda q: abs(q.difficulty - target_difficulty))
             selected = all_candidates[0]
-            difficulty_diff = abs(selected.difficulty - target_difficulty)
-            log_print(f"[QUESTION_SELECTION] [FALLBACK] Selected question {selected.question_id} "
-                  f"(difficulty: {selected.difficulty:.2f}, target: {target_difficulty:.2f}, "
-                  f"difference: {difficulty_diff:.2f}, skill: {skill.name})")
+            log_print(f"[QUESTION_SELECTED] Q:{selected.question_id} | Skill:{skill.name} | "
+                      f"Difficulty:{selected.difficulty:.2f} (FALLBACK, target:{target_difficulty:.2f})")
             return selected
 
         # If we're here, no unanswered questions were found. Time to generate one.
