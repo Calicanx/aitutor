@@ -1,13 +1,13 @@
 {
-  "user_id": "default_user",
-  "created_at": 1762969843.0092998,
-  "last_updated": 1763123023.243122,
+  "user_id": "integration_test",
+  "created_at": 1763121545.6917663,
+  "last_updated": 1763121545.6917663,
   "skill_states": {
     "counting_1_10": {
-      "memory_strength": 0.15341461174311777,
-      "last_practice_time": 1763123023.2347438,
-      "practice_count": 14,
-      "correct_count": 5
+      "memory_strength": 0.0,
+      "last_practice_time": null,
+      "practice_count": 0,
+      "correct_count": 0
     },
     "number_recognition": {
       "memory_strength": 0.0,
@@ -184,147 +184,6 @@
       "correct_count": 0
     }
   },
-  "question_history": [
-    {
-      "question_id": "q_0",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": true,
-      "response_time_seconds": 115.009,
-      "timestamp": 1763049516.1372523,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_0",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": true,
-      "response_time_seconds": 32.54,
-      "timestamp": 1763049894.3450267,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_1",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 26.874,
-      "timestamp": 1763049941.1875234,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_1",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 33.98,
-      "timestamp": 1763049948.0106087,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_0",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 55.796,
-      "timestamp": 1763051303.4822404,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_1",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 68.385,
-      "timestamp": 1763051387.2955058,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_0",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": true,
-      "response_time_seconds": 40.804,
-      "timestamp": 1763052017.4622507,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_0",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 54.218,
-      "timestamp": 1763052567.2135386,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "q_1",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 16.538,
-      "timestamp": 1763052606.629387,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "k_count_1",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 17.421,
-      "timestamp": 1763122528.28496,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "k_count_1",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 24.628,
-      "timestamp": 1763122535.174208,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "k_count_2",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": true,
-      "response_time_seconds": 23.425,
-      "timestamp": 1763122981.3992453,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "k_count_2_gen_001",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": true,
-      "response_time_seconds": 16.159,
-      "timestamp": 1763123004.8059351,
-      "time_penalty_applied": false
-    },
-    {
-      "question_id": "k_count_2_gen_001_gen_001",
-      "skill_ids": [
-        "counting_1_10"
-      ],
-      "is_correct": false,
-      "response_time_seconds": 12.645,
-      "timestamp": 1763123023.243122,
-      "time_penalty_applied": false
-    }
-  ],
+  "question_history": [],
   "student_notes": {}
 }

@@ -36,6 +36,23 @@ const RendererComponent = () => {
             });
     }, []);
 
+    // Log when question is displayed
+    useEffect(() => {
+        if (perseusItems.length > 0 && !loading) {
+            const currentItem = perseusItems[item];
+            const metadata = (currentItem as any).dash_metadata || {};
+            
+            fetch(`http://localhost:8000/api/question-displayed/${user_id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question_index: item,
+                    metadata: metadata
+                })
+            }).catch(err => console.error('Failed to log question display:', err));
+        }
+    }, [item, perseusItems, loading]);
+
     const handleNext = () => {
         setItem((prev) => {
             const index = prev + 1;
@@ -71,11 +88,12 @@ const RendererComponent = () => {
 
             // Submit answer to DASH API for tracking and adaptive difficulty
             try {
-                // For now, use placeholder values since we don't have direct access to question_id and skill_ids from Perseus items
-                // In a production system, you'd include these in the Perseus item response
+                const currentItem = perseusItems[item];
+                const metadata = (currentItem as any).dash_metadata || {};
+
                 const answerData = {
-                    question_id: `q_${item}`, // Placeholder - ideally from perseusItem metadata
-                    skill_ids: ["counting_1_10"], // Placeholder - ideally from perseusItem metadata
+                    question_id: metadata.dash_question_id || `q_${item}`,
+                    skill_ids: metadata.skill_ids || ["counting_1_10"],
                     is_correct: keScore.correct,
                     response_time_seconds: responseTimeSeconds
                 };

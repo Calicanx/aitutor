@@ -42,14 +42,93 @@ class PerseusQuestion(BaseModel):
     question: dict = Field(description="The question data")
     answerArea: dict = Field(description="The answer area")
     hints: List = Field(description="List of question hints")
+    dash_metadata: Optional[dict] = Field(default=None, description="DASH metadata for tracking")
+    
+    class Config:
+        extra = "allow"  # Allow additional fields that aren't in the model
 
 # Path to CurriculumBuilder with full Perseus items
 CURRICULUM_BUILDER_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', 'SherlockEDApi', 'CurriculumBuilder')
 )
 
+# Skill to Perseus slug prefix mapping
+SKILL_TO_SLUG_PREFIX = {
+    "counting_1_10": "1.1.1.1",
+    "number_recognition": "1.1.1.2",
+    "basic_shapes": "1.1.1.3",
+    "counting_100": "1.1.1.4",
+    "addition_basic": "1.1.2.1",
+    "subtraction_basic": "1.1.2.2",
+    "place_value": "1.1.3.1",
+    "skip_counting": "1.1.4.1",
+    "addition_2digit": "2.1.4.2",
+    "subtraction_2digit": "2.1.5.1",
+    "multiplication_basic": "2.1.6.1",
+    "division_basic": "2.1.8.1",
+}
+
+def extract_slug_from_filename(filepath: str) -> str:
+    """Extract slug like '1.1.1.1.5' from '1.1.1.1.5_xABC.json'"""
+    filename = os.path.basename(filepath)
+    slug = filename.split('_')[0]
+    return slug
+
+def get_perseus_files_for_skill(skill_id: str, curriculum_path: str) -> List[str]:
+    """Get all Perseus files matching a skill's slug prefix"""
+    prefix = SKILL_TO_SLUG_PREFIX.get(skill_id, "1.1.1")
+    pattern = os.path.join(curriculum_path, f"{prefix}*.json")
+    return glob.glob(pattern)
+
+def load_perseus_items_for_dash_questions(
+    dash_questions: List[Question],
+    curriculum_path: str
+) -> List[Dict]:
+    """Load Perseus items matching DASH-selected questions"""
+    perseus_items = []
+    
+    for dash_q in dash_questions:
+        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else "counting_1_10"
+        
+        # Get matching Perseus files
+        matching_files = get_perseus_files_for_skill(skill_id, curriculum_path)
+        
+        if not matching_files:
+            # Fallback to any file if no match
+            matching_files = glob.glob(os.path.join(curriculum_path, "1.1.*.json"))
+            if not matching_files:
+                matching_files = glob.glob(os.path.join(curriculum_path, "*.json"))
+        
+        if not matching_files:
+            logger.warning(f"No Perseus files found for skill {skill_id}")
+            continue
+            
+        # Pick one randomly from matches
+        selected_file = random.choice(matching_files[:min(20, len(matching_files))])
+        
+        try:
+            with open(selected_file, 'r', encoding='utf-8') as f:
+                perseus_data = json.load(f)
+            
+            # Tag with DASH metadata
+            perseus_data['dash_metadata'] = {
+                'dash_question_id': dash_q.question_id,
+                'skill_ids': dash_q.skill_ids,
+                'difficulty': dash_q.difficulty,
+                'expected_time_seconds': dash_q.expected_time_seconds,
+                'slug': extract_slug_from_filename(selected_file),
+                'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids 
+                               if sid in dash_system.skills]
+            }
+            
+            perseus_items.append(perseus_data)
+        except Exception as e:
+            logger.warning(f"Failed to load Perseus file {selected_file}: {e}")
+    
+    return perseus_items
+
 def load_perseus_items_from_dir(directory: str, limit: Optional[int] = None) -> List[Dict]:
-    """Load Perseus items from CurriculumBuilder directory"""
+    """Load Perseus items from CurriculumBuilder directory (legacy function)"""
     all_items = []
     file_pattern = os.path.join(directory, "*.json")
     
@@ -95,24 +174,63 @@ def get_questions_with_dash_intelligence(sample_size: int, user_id: str = "defau
             logger.info(f"[SESSION_END] Selected {len(selected_questions)}/{sample_size} questions")
             break
     
-    # Load Perseus items from CurriculumBuilder
-    perseus_items = load_perseus_items_from_dir(CURRICULUM_BUILDER_PATH, limit=sample_size)
+    # Load Perseus items matching DASH selections
+    perseus_items = load_perseus_items_for_dash_questions(selected_questions, CURRICULUM_BUILDER_PATH)
     
     if not perseus_items:
         logger.error(f"[ERROR] No Perseus questions found in CurriculumBuilder")
         raise HTTPException(status_code=404, detail="No Perseus questions found in CurriculumBuilder")
     
-    # If we have fewer items than requested, repeat some (or return what we have)
-    while len(perseus_items) < sample_size and selected_questions:
-        additional = load_perseus_items_from_dir(CURRICULUM_BUILDER_PATH, limit=sample_size - len(perseus_items))
-        perseus_items.extend(additional)
-        if not additional:
-            break
+    # If we have fewer items than requested, use fallback
+    if len(perseus_items) < sample_size:
+        logger.warning(f"Only {len(perseus_items)} Perseus items found, requested {sample_size}")
+        additional_needed = sample_size - len(perseus_items)
+        fallback_items = load_perseus_items_from_dir(CURRICULUM_BUILDER_PATH, limit=additional_needed)
+        perseus_items.extend(fallback_items)
     
     logger.info(f"[SESSION_READY] Loaded {len(perseus_items[:sample_size])} Perseus questions\n")
     
     # Return the requested number
     return perseus_items[:sample_size]
+
+@app.post("/api/question-displayed/{user_id}")
+def log_question_displayed(user_id: str, display_info: dict):
+    """Log when student views a question (Next button clicked)"""
+    
+    idx = display_info.get('question_index', 0)
+    metadata = display_info.get('metadata', {})
+    
+    logger.info(f"\n{'='*80}")
+    logger.info(f"[QUESTION_DISPLAYED] Question #{idx + 1}")
+    logger.info(f"  Slug: {metadata.get('slug', 'unknown')}")
+    logger.info(f"  DASH ID: {metadata.get('dash_question_id', 'unknown')}")
+    logger.info(f"  Skills: {', '.join(metadata.get('skill_names', []))}")
+    logger.info(f"  Difficulty: {metadata.get('difficulty', 0):.2f} | Expected: {metadata.get('expected_time_seconds', 0)}s")
+    
+    # Show current student state
+    user_profile = dash_system.user_manager.load_user(user_id)
+    if user_profile:
+        current_time = time.time()
+        scores = dash_system.get_skill_scores(user_id, current_time)
+        
+        # Only show practiced skills
+        practiced = {k: v for k, v in scores.items() if v['practice_count'] > 0}
+        
+        if practiced:
+            logger.info(f"\n[STUDENT_STATE]")
+            logger.info(f"  {'Skill':<20} | {'Mem':<6} | {'Prob':<6} | {'Prac':<5} | {'Acc':<6}")
+            logger.info(f"  {'-'*58}")
+            for skill_id, data in list(practiced.items())[:5]:  # Show top 5
+                logger.info(
+                    f"  {data['name'][:20]:<20} | "
+                    f"{data['memory_strength']:<6.2f} | "
+                    f"{data['probability']:<6.2f} | "
+                    f"{data['practice_count']:<5} | "
+                    f"{data['accuracy']:<6.1%}"
+                )
+    
+    logger.info(f"{'='*80}\n")
+    return {"success": True}
 
 @app.get("/next-question/{user_id}", response_model=Question)
 def get_next_question(user_id: str):
@@ -157,12 +275,30 @@ def submit_answer(user_id: str, answer: AnswerSubmission):
         answer.is_correct, answer.response_time_seconds
     )
     
+    # Get updated scores for detailed logging
+    user_profile_refreshed = dash_system.user_manager.load_user(user_id)
+    current_time = time.time()
+    new_scores = dash_system.get_skill_scores(user_id, current_time)
+    
+    # Log detailed skill changes
+    if affected_skills:
+        logger.info(f"\n  [SKILL_UPDATES]")
+        for skill_id in affected_skills[:3]:  # Show top 3 to keep readable
+            if skill_id in new_scores:
+                data = new_scores[skill_id]
+                skill_type = "DIRECT" if skill_id in answer.skill_ids else "PREREQ"
+                logger.info(
+                    f"    {data['name'][:20]:<20} ({skill_type:<6}): "
+                    f"Mem {data['memory_strength']:.3f} | "
+                    f"Prob {data['probability']:.3f}"
+                )
+    
     # Show performance summary after this question
-    total_attempts = len(user_profile.question_history)
-    correct_count = sum(1 for attempt in user_profile.question_history if attempt.is_correct)
+    total_attempts = len(user_profile_refreshed.question_history)
+    correct_count = sum(1 for attempt in user_profile_refreshed.question_history if attempt.is_correct)
     accuracy = (correct_count / total_attempts * 100) if total_attempts > 0 else 0
     
-    logger.info(f"[PROGRESS] Total:{total_attempts} questions | Accuracy:{accuracy:.1f}% ({correct_count}/{total_attempts})")
+    logger.info(f"\n[PROGRESS] Total:{total_attempts} questions | Accuracy:{accuracy:.1f}% ({correct_count}/{total_attempts})")
     logger.info(f"{'-'*80}\n")
     
     return {
