@@ -361,10 +361,15 @@ class DASHSystem:
         
         return unique_affected_skills
     
-    def load_user_or_create(self, user_id: str) -> UserProfile:
-        """Load existing user or create new one with all skills initialized"""
+    def load_user_or_create(self, user_id: str, age: int = 5) -> UserProfile:
+        """Load existing user or create new one with cold-start initialization"""
         all_skill_ids = list(self.skills.keys())
-        user_profile = self.user_manager.get_or_create_user(user_id, all_skill_ids)
+        user_profile = self.user_manager.get_or_create_user(
+            user_id, 
+            all_skill_ids,
+            all_skills=self.skills,  # Pass skills for cold-start
+            age=age
+        )
         
         # Sync user profile with current student_states for backward compatibility
         self.student_states[user_id] = {}
@@ -377,6 +382,10 @@ class DASHSystem:
             )
         
         return user_profile
+    
+    def is_cold_start(self, user_profile: UserProfile) -> bool:
+        """Check if user is in cold-start phase (first 20 questions)"""
+        return len(user_profile.question_history) < 20
     
     def save_user_state(self, user_id: str, user_profile: UserProfile):
         """Save current student states back to user profile"""
@@ -447,16 +456,46 @@ class DASHSystem:
         
         return scores
     
-    def get_recommended_skills(self, student_id: str, current_time: float, threshold: float = 0.7) -> List[str]:
+    def get_recommended_skills(
+        self, 
+        student_id: str, 
+        current_time: float, 
+        threshold: float = 0.7,
+        cold_start_grade_filter: Optional[str] = None,
+        grade_range: int = 1
+    ) -> List[str]:
         """
         Get skills that need practice based on memory strength decay.
         Returns skills sorted by learning journey: grade level -> order -> probability.
+        
+        Args:
+            student_id: Unique student identifier
+            current_time: Current timestamp
+            threshold: Probability threshold for recommendations
+            cold_start_grade_filter: If provided, only recommend skills within ±grade_range
+            grade_range: How many grades above/below to include (default: 1)
         """
         recommendations = []
         skipped_prerequisites = []
         skipped_above_threshold = []
+        skipped_grade_filter = []
+        
+        # Parse grade filter if provided
+        target_grade = None
+        if cold_start_grade_filter:
+            try:
+                target_grade = GradeLevel[cold_start_grade_filter]
+            except KeyError:
+                logger.warning(f"[FILTER] Invalid grade filter: {cold_start_grade_filter}")
         
         for skill_id, skill in self.skills.items():
+            # Apply grade filter if in cold-start mode
+            if target_grade is not None:
+                grade_diff = abs(skill.grade_level.value - target_grade.value)
+                if grade_diff > grade_range:
+                    skipped_grade_filter.append((skill_id, skill.name, skill.grade_level.name))
+                    continue
+            
             probability = self.predict_correctness(student_id, skill_id, current_time)
             
             # Check if prerequisites are met
@@ -475,6 +514,10 @@ class DASHSystem:
                 skipped_prerequisites.append((skill_id, skill.name, missing_prereqs))
             elif probability >= threshold:
                 skipped_above_threshold.append((skill_id, skill.name, probability))
+        
+        # Log grade filtering if applied
+        if skipped_grade_filter and cold_start_grade_filter:
+            logger.info(f"[FILTER] Skipped {len(skipped_grade_filter)} skills outside grade range {cold_start_grade_filter}+-{grade_range}")
         
         # Sort by learning journey: grade level (ascending) -> order (ascending) -> probability (ascending)
         # This ensures students follow a structured learning path
@@ -578,13 +621,26 @@ class DASHSystem:
         Intelligently selects question difficulty based on recent performance.
         If no questions are available, try to generate one.
         """
-        recommended_skills = self.get_recommended_skills(student_id, current_time)
-        
-        if not recommended_skills:
-            return None
-
+        # Load user profile first to check cold-start status
         user_profile = self.user_manager.load_user(student_id)
         if not user_profile:
+            return None
+        
+        # Apply grade filtering during cold-start phase (first 20 questions)
+        # This ensures age-appropriate questions for new students
+        cold_start_filter = None
+        if self.is_cold_start(user_profile):
+            cold_start_filter = user_profile.current_grade
+        
+        # Get recommended skills with optional grade filtering
+        recommended_skills = self.get_recommended_skills(
+            student_id, 
+            current_time,
+            cold_start_grade_filter=cold_start_filter,
+            grade_range=1  # Allow ±1 grade level
+        )
+        
+        if not recommended_skills:
             return None
         
         answered_question_ids = {attempt.question_id for attempt in user_profile.question_history}

@@ -147,17 +147,22 @@ def load_perseus_items_from_dir(directory: str, limit: Optional[int] = None) -> 
     return all_items
 
 @app.get("/api/questions/{sample_size}", response_model=List[PerseusQuestion])
-def get_questions_with_dash_intelligence(sample_size: int, user_id: str = "default_user"):
+def get_questions_with_dash_intelligence(sample_size: int, user_id: str = "default_user", age: int = 5):
     """
     Gets questions using DASH intelligence but returns full Perseus items.
     Uses DASH to intelligently select questions based on learning journey and adaptive difficulty.
+    
+    Args:
+        sample_size: Number of questions to return
+        user_id: Unique identifier for the user
+        age: Student age for cold-start initialization (default: 5)
     """
     logger.info(f"\n{'='*80}")
-    logger.info(f"[NEW_SESSION] Requesting {sample_size} questions for user: {user_id}")
+    logger.info(f"[NEW_SESSION] Requesting {sample_size} questions for user: {user_id} (age: {age})")
     logger.info(f"{'='*80}\n")
     
-    # Ensure the user exists and is loaded
-    dash_system.load_user_or_create(user_id)
+    # Ensure the user exists and is loaded with age
+    user_profile = dash_system.load_user_or_create(user_id, age=age)
     
     # Use DASH intelligence to get recommended questions
     current_time = time.time()

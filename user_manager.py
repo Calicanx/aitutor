@@ -17,6 +17,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def calculate_grade_from_age(age: int) -> str:
+    """
+    Calculate grade level from student age.
+    Intelligent mapping (not hardcoded values):
+    Age 5 → K
+    Age 6 → GRADE_1
+    Age 7 → GRADE_2
+    ...
+    Age 17 → GRADE_12
+    Age 18+ → GRADE_12
+    """
+    if age <= 5:
+        return "K"
+    elif age >= 18:
+        return "GRADE_12"
+    else:
+        return f"GRADE_{age - 5}"
+
 @dataclass
 class QuestionAttempt:
     question_id: str
@@ -58,6 +76,8 @@ class UserProfile:
     skill_states: Dict[str, SkillState]
     question_history: List[QuestionAttempt]
     student_notes: Dict = field(default_factory=dict)
+    age: int = 5  # Default kindergarten age
+    current_grade: str = "K"  # Calculated from age
     
     def to_dict(self):
         return {
@@ -66,7 +86,9 @@ class UserProfile:
             'last_updated': self.last_updated,
             'skill_states': {k: v.to_dict() for k, v in self.skill_states.items()},
             'question_history': [asdict(attempt) for attempt in self.question_history],
-            'student_notes': self.student_notes
+            'student_notes': self.student_notes,
+            'age': self.age,
+            'current_grade': self.current_grade
         }
     
     @classmethod
@@ -80,7 +102,9 @@ class UserProfile:
             last_updated=data['last_updated'],
             skill_states=skill_states,
             question_history=question_history,
-            student_notes=data.get('student_notes', {})
+            student_notes=data.get('student_notes', {}),
+            age=data.get('age', 5),
+            current_grade=data.get('current_grade', 'K')
         )
 
 class UserManager:
@@ -94,6 +118,65 @@ class UserManager:
             os.makedirs(self.users_folder)
             logger.info(f"[FOLDER] Created {self.users_folder} folder for user data")
     
+    def initialize_skills_for_grade(
+        self, 
+        current_grade_str: str, 
+        all_skills: Dict[str, 'Skill']
+    ) -> Dict[str, SkillState]:
+        """
+        Initialize skill states based on student's current grade (cold-start).
+        
+        Logic:
+        - Skills BELOW current grade: memory_strength = 2.0 (probability ~0.88)
+        - Skills AT current grade: memory_strength = 0.0 (probability ~0.50)
+        - Skills ABOVE current grade: memory_strength = -2.0 (probability ~0.12)
+        
+        Using memory_strength values that map to meaningful probabilities via sigmoid.
+        """
+        from DashSystem.dash_system import GradeLevel
+        
+        try:
+            current_grade = GradeLevel[current_grade_str]
+        except KeyError:
+            logger.warning(f"[COLD_START] Invalid grade '{current_grade_str}', defaulting to K")
+            current_grade = GradeLevel.K
+        
+        skill_states = {}
+        below_grade_count = 0
+        at_grade_count = 0
+        above_grade_count = 0
+        
+        for skill_id, skill in all_skills.items():
+            skill_grade_value = skill.grade_level.value
+            current_grade_value = current_grade.value
+            
+            if skill_grade_value < current_grade_value:
+                # Below current grade - assumed mastered
+                memory_strength = 2.0  # sigmoid(2.0) ≈ 0.88
+                below_grade_count += 1
+            elif skill_grade_value == current_grade_value:
+                # At current grade - currently learning
+                memory_strength = 0.0  # sigmoid(0.0) = 0.50
+                at_grade_count += 1
+            else:
+                # Above current grade - not ready yet
+                memory_strength = -2.0  # sigmoid(-2.0) ≈ 0.12
+                above_grade_count += 1
+            
+            skill_states[skill_id] = SkillState(
+                memory_strength=memory_strength,
+                last_practice_time=None,
+                practice_count=0,
+                correct_count=0
+            )
+        
+        logger.info(f"[COLD_START] Initialized skills for grade {current_grade_str}:")
+        logger.info(f"  Below grade ({current_grade_value}): {below_grade_count} skills at memory_strength=2.0")
+        logger.info(f"  At grade ({current_grade_value}): {at_grade_count} skills at memory_strength=0.0")
+        logger.info(f"  Above grade ({current_grade_value}): {above_grade_count} skills at memory_strength=-2.0")
+        
+        return skill_states
+    
     def get_user_file_path(self, user_id: str) -> str:
         """Get the file path for a user's JSON file"""
         return os.path.join(self.users_folder, f"{user_id}.json")
@@ -102,19 +185,41 @@ class UserManager:
         """Check if a user file exists"""
         return os.path.exists(self.get_user_file_path(user_id))
     
-    def create_new_user(self, user_id: str, all_skill_ids: List[str]) -> UserProfile:
-        """Create a new user with empty skill states"""
-        current_time = time.time()
+    def create_new_user(
+        self, 
+        user_id: str, 
+        all_skill_ids: List[str] = None,
+        all_skills: Dict = None,
+        age: int = 5
+    ) -> UserProfile:
+        """
+        Create a new user with cold-start skill initialization based on age.
         
-        # Initialize all skills with default states
-        skill_states = {}
-        for skill_id in all_skill_ids:
-            skill_states[skill_id] = SkillState(
-                memory_strength=0.0,
-                last_practice_time=None,
-                practice_count=0,
-                correct_count=0
-            )
+        Args:
+            user_id: Unique identifier for the user
+            all_skill_ids: List of all skill IDs (for backward compatibility)
+            all_skills: Dictionary of all Skill objects (for cold-start)
+            age: Student's age (default: 5 for kindergarten)
+        """
+        current_time = time.time()
+        current_grade = calculate_grade_from_age(age)
+        
+        # Initialize skills based on grade if all_skills provided
+        if all_skills:
+            skill_states = self.initialize_skills_for_grade(current_grade, all_skills)
+            logger.info(f"[USER] Created new user with cold-start: {user_id} (age {age}, grade {current_grade})")
+        else:
+            # Fallback to old behavior for backward compatibility
+            skill_states = {}
+            skill_ids = all_skill_ids or []
+            for skill_id in skill_ids:
+                skill_states[skill_id] = SkillState(
+                    memory_strength=0.0,
+                    last_practice_time=None,
+                    practice_count=0,
+                    correct_count=0
+                )
+            logger.info(f"[USER] Created new user (legacy mode): {user_id}")
         
         user_profile = UserProfile(
             user_id=user_id,
@@ -122,11 +227,12 @@ class UserManager:
             last_updated=current_time,
             skill_states=skill_states,
             question_history=[],
-            student_notes={}
+            student_notes={},
+            age=age,
+            current_grade=current_grade
         )
         
         self.save_user(user_profile)
-        logger.info(f"[USER] Created new user profile: {user_id}")
         return user_profile
     
     def load_user(self, user_id: str) -> Optional[UserProfile]:
@@ -164,25 +270,32 @@ class UserManager:
         except Exception as e:
             logger.error(f"[ERROR] Error saving user {user_profile.user_id}: {e}")
     
-    def get_or_create_user(self, user_id: str, all_skill_ids: List[str]) -> UserProfile:
-        """Get existing user or create new one if doesn't exist"""
+    def get_or_create_user(
+        self, 
+        user_id: str, 
+        all_skill_ids: List[str] = None,
+        all_skills: Dict = None,
+        age: int = 5
+    ) -> UserProfile:
+        """Get existing user or create new one with cold-start if doesn't exist"""
         user_profile = self.load_user(user_id)
         
         if user_profile is None:
-            user_profile = self.create_new_user(user_id, all_skill_ids)
+            user_profile = self.create_new_user(user_id, all_skill_ids, all_skills, age)
         else:
-            # Check if any new skills need to be added
-            missing_skills = set(all_skill_ids) - set(user_profile.skill_states.keys())
-            if missing_skills:
-                for skill_id in missing_skills:
-                    user_profile.skill_states[skill_id] = SkillState(
-                        memory_strength=0.0,
-                        last_practice_time=None,
-                        practice_count=0,
-                        correct_count=0
-                    )
-                logger.info(f"[ADDED] Added {len(missing_skills)} new skills to user {user_id}")
-                self.save_user(user_profile)
+            # Check if any new skills need to be added (for existing users)
+            if all_skill_ids:
+                missing_skills = set(all_skill_ids) - set(user_profile.skill_states.keys())
+                if missing_skills:
+                    for skill_id in missing_skills:
+                        user_profile.skill_states[skill_id] = SkillState(
+                            memory_strength=0.0,
+                            last_practice_time=None,
+                            practice_count=0,
+                            correct_count=0
+                        )
+                    logger.info(f"[ADDED] Added {len(missing_skills)} new skills to user {user_id}")
+                    self.save_user(user_profile)
         
         return user_profile
     
