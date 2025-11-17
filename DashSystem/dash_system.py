@@ -67,11 +67,12 @@ class Question:
     expected_time_seconds: float = 60.0  # Default expected time for answering
 
 class DASHSystem:
-    def __init__(self, skills_file: Optional[str] = None, curriculum_file: Optional[str] = None):
+    def __init__(self, skills_file: Optional[str] = None, curriculum_file: Optional[str] = None, use_mongodb: bool = True):
         
         # Default file paths relative to the project root
         self.skills_file_path = skills_file if skills_file else "QuestionsBank/skills.json"
         self.curriculum_file_path = curriculum_file if curriculum_file else "QuestionsBank/curriculum.json"
+        self.use_mongodb = use_mongodb
 
         self.skills: Dict[str, Skill] = {}
         self.student_states: Dict[str, Dict[str, StudentSkillState]] = {}
@@ -79,17 +80,80 @@ class DASHSystem:
         self.curriculum: Dict = {}
         self.user_manager = UserManager(users_folder="Users")
         
+        # Initialize MongoDB manager if using MongoDB
+        self.mongo = None
+        if use_mongodb:
+            try:
+                from mongodb_manager import mongo_db
+                self.mongo = mongo_db
+                log_print("[MONGODB] MongoDB manager initialized")
+            except Exception as e:
+                log_print(f"[WARNING] Could not initialize MongoDB: {e}")
+                log_print("[INFO] Falling back to local files")
+                self.use_mongodb = False
+        
         # Initialize the Question Generator Agent
         try:
-            # Convert relative path to absolute path
-            qg_curriculum_path = os.path.abspath("QuestionsBank/curriculum.json")
+            # Convert relative path to absolute path (from project root, not DashSystem dir)
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            qg_curriculum_path = os.path.join(project_root, "QuestionsBank", "curriculum.json")
             self.question_generator = QuestionGeneratorAgent(curriculum_file=qg_curriculum_path)
             log_print("[OK] Question Generator Agent initialized.")
         except Exception as e:
             self.question_generator = None
             log_print(f"[WARNING] Could not initialize Question Generator Agent: {e}")
 
-        self._load_from_files(self.skills_file_path, self.curriculum_file_path)
+        # Load skills and questions (MongoDB or local files)
+        if self.use_mongodb and self.mongo:
+            self._load_from_mongodb()
+        else:
+            self._load_from_files(self.skills_file_path, self.curriculum_file_path)
+    
+    def _load_from_mongodb(self):
+        """Load skills and questions from MongoDB"""
+        try:
+            # Load skills from MongoDB
+            skills_docs = list(self.mongo.skills.find())
+            for skill_doc in skills_docs:
+                try:
+                    skill = Skill(
+                        skill_id=skill_doc['skill_id'],
+                        name=skill_doc['name'],
+                        grade_level=GradeLevel[skill_doc['grade_level']],
+                        prerequisites=skill_doc['prerequisites'],
+                        forgetting_rate=skill_doc['forgetting_rate'],
+                        difficulty=skill_doc['difficulty'],
+                        order=skill_doc.get('order', 0)
+                    )
+                    self.skills[skill.skill_id] = skill
+                except KeyError as e:
+                    log_print(f"[WARNING] Skipping skill {skill_doc.get('skill_id', 'unknown')}: missing field {e}")
+            
+            log_print(f"[MONGODB] Loaded {len(self.skills)} skills from MongoDB")
+            
+            # Load DASH questions from MongoDB
+            questions_docs = list(self.mongo.dash_questions.find())
+            self.questions.clear()
+            for q_doc in questions_docs:
+                try:
+                    question = Question(
+                        question_id=q_doc['question_id'],
+                        skill_ids=[q_doc['skill_id']],
+                        content=q_doc['content'],
+                        difficulty=q_doc['difficulty'],
+                        expected_time_seconds=q_doc.get('expected_time_seconds', 60.0)
+                    )
+                    self.questions[question.question_id] = question
+                except KeyError as e:
+                    log_print(f"[WARNING] Skipping question {q_doc.get('question_id', 'unknown')}: missing field {e}")
+            
+            log_print(f"[MONGODB] Loaded {len(self.questions)} questions from MongoDB")
+            
+        except Exception as e:
+            log_print(f"[ERROR] Error loading from MongoDB: {e}")
+            log_print("[INFO] Falling back to local files")
+            self.use_mongodb = False
+            self._load_from_files(self.skills_file_path, self.curriculum_file_path)
     
     def _reload_questions(self):
         """Reload only the questions from the curriculum file."""
@@ -615,6 +679,101 @@ class DASHSystem:
             'avg_time_ratio': avg_time_ratio
         }
 
+    def get_next_question_flexible(self, student_id: str, current_time: float, exclude_question_ids: Optional[List[str]] = None, force_grade_range: bool = False) -> Optional[Question]:
+        """
+        Flexible question selection that expands search when primary skills exhausted.
+        Maintains full DASH intelligence (adaptive difficulty, learning journey).
+        
+        Args:
+            student_id: Student identifier
+            current_time: Current timestamp
+            exclude_question_ids: Question IDs to exclude
+            force_grade_range: If True, search all grade-appropriate skills (not just recommended)
+        
+        Returns:
+            Question with full DASH intelligence, or None if truly no questions available
+        """
+        # First try normal DASH selection (recommended skills only)
+        if not force_grade_range:
+            question = self.get_next_question(student_id, current_time, is_retry=False, exclude_question_ids=exclude_question_ids)
+            if question:
+                return question
+        
+        # If no question found from recommended skills, expand to all grade-appropriate skills
+        user_profile = self.user_manager.load_user(student_id)
+        if not user_profile:
+            return None
+        
+        # Get grade range (same as cold-start filtering)
+        student_grade = GradeLevel[user_profile.current_grade]
+        grade_min = max(0, student_grade.value - 1)
+        grade_max = student_grade.value + 1
+        
+        # Get all skills in grade range
+        grade_appropriate_skills = [
+            skill for skill in self.skills.values()
+            if grade_min <= skill.grade_level.value <= grade_max
+        ]
+        
+        # Sort by learning journey (grade -> order -> current probability)
+        skill_probabilities = []
+        for skill in grade_appropriate_skills:
+            prob = self.predict_correctness(student_id, skill.skill_id, current_time)
+            skill_probabilities.append((skill.skill_id, skill, prob))
+        
+        # Sort by grade level, order, then probability (lower prob = needs more practice)
+        skill_probabilities.sort(key=lambda x: (x[1].grade_level.value, x[1].order, x[2]))
+        
+        # Get answered questions to exclude
+        answered_question_ids = {attempt.question_id for attempt in user_profile.question_history}
+        if exclude_question_ids:
+            answered_question_ids.update(exclude_question_ids)
+        
+        # Analyze performance for adaptive difficulty
+        performance_analysis = self.analyze_recent_performance(user_profile)
+        difficulty_adjustment = performance_analysis['difficulty_adjustment']
+        
+        # Try each skill in learning journey order with adaptive difficulty
+        for skill_id, skill, probability in skill_probabilities:
+            # Calculate target difficulty (same as normal DASH)
+            base_difficulty = skill.difficulty
+            target_difficulty = base_difficulty + difficulty_adjustment
+            min_difficulty = max(0.0, target_difficulty - 0.2)
+            max_difficulty = target_difficulty + 0.2
+            
+            # Get candidate questions for this skill
+            all_candidates = [
+                q for q in self.questions.values()
+                if skill_id in q.skill_ids and q.question_id not in answered_question_ids
+            ]
+            
+            if not all_candidates:
+                continue
+            
+            # Filter by difficulty range (adaptive selection)
+            filtered_candidates = [
+                q for q in all_candidates
+                if min_difficulty <= q.difficulty <= max_difficulty
+            ]
+            
+            # Select best match
+            if filtered_candidates:
+                filtered_candidates.sort(key=lambda q: abs(q.difficulty - target_difficulty))
+                selected = filtered_candidates[0]
+                log_print(f"[QUESTION_SELECTED] Q:{selected.question_id} | Skill:{skill.name} | "
+                          f"Difficulty:{selected.difficulty:.2f} (FLEXIBLE, target:{target_difficulty:.2f}, adj:{difficulty_adjustment:+.2f})")
+                return selected
+            
+            # Use closest match if no exact difficulty match
+            all_candidates.sort(key=lambda q: abs(q.difficulty - target_difficulty))
+            selected = all_candidates[0]
+            log_print(f"[QUESTION_SELECTED] Q:{selected.question_id} | Skill:{skill.name} | "
+                      f"Difficulty:{selected.difficulty:.2f} (FLEXIBLE_FALLBACK, target:{target_difficulty:.2f})")
+            return selected
+        
+        # Truly no questions available in grade range
+        return None
+    
     def get_next_question(self, student_id: str, current_time: float, is_retry: bool = False, exclude_question_ids: Optional[List[str]] = None) -> Optional[Question]:
         """
         Get the next best question for the student, avoiding repeats.

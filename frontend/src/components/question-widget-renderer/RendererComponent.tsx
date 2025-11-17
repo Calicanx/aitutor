@@ -17,20 +17,20 @@ const RendererComponent = () => {
     const [score, setScore] = useState<KEScore>();
     const [isAnswered, setIsAnswered] = useState(false);
     const [startTime, setStartTime] = useState<number>(Date.now());
-    const [age, setAge] = useState<number>(7); // Student age for cold-start (default: Grade 2)
     const rendererRef = useRef<ServerItemRenderer>(null);
-    // Each age gets unique user ID for independent cold-start initialization
-    const user_id = `student_age${age}`; // e.g., "student_age5", "student_age7", "student_age12"
+    
+    // User ID - age is now fetched from MongoDB, not frontend
+    const user_id = "mongodb_test_user"; // Use the MongoDB test user
 
     useEffect(() => {
         // Use DASH API with intelligent question selection
-        // Include age parameter for cold-start initialization
+        // Age is fetched from MongoDB based on user_id
         setLoading(true);
         setItem(0);
         setEndOfTest(false);
         setIsAnswered(false);
         
-        fetch(`http://localhost:8000/api/questions/16?user_id=${user_id}&age=${age}`)
+        fetch(`http://localhost:8000/api/questions/16?user_id=${user_id}`)
             .then((response) => response.json())
             .then((data) => {
                 console.log("API response:", data);
@@ -42,7 +42,7 @@ const RendererComponent = () => {
                 console.error("Failed to fetch questions:", err);
                 setLoading(false);
             });
-    }, [age]); // Re-fetch when age changes
+    }, []); // No dependencies - user_id is constant
 
     // Log when question is displayed
     useEffect(() => {
@@ -132,38 +132,18 @@ const RendererComponent = () => {
     return (
             <div className="framework-perseus">
                 <div style={{ padding: "20px" }}>
-                    {/* Age Selector for Testing Cold-Start */}
+                    {/* User Info Display (Age from MongoDB) */}
                     <div className="mb-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
                         <div className="flex items-center gap-4">
-                            <label className="font-semibold text-gray-700">
-                                Student Age:
-                            </label>
-                            <select 
-                                value={age} 
-                                onChange={(e) => setAge(Number(e.target.value))}
-                                className="border border-gray-400 p-2 rounded bg-white text-gray-800 cursor-pointer hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                disabled={loading}
-                            >
-                                <option value={5}>5 years (Kindergarten)</option>
-                                <option value={6}>6 years (Grade 1)</option>
-                                <option value={7}>7 years (Grade 2)</option>
-                                <option value={8}>8 years (Grade 3)</option>
-                                <option value={9}>9 years (Grade 4)</option>
-                                <option value={10}>10 years (Grade 5)</option>
-                                <option value={11}>11 years (Grade 6)</option>
-                                <option value={12}>12 years (Grade 7)</option>
-                                <option value={13}>13 years (Grade 8)</option>
-                                <option value={14}>14 years (Grade 9)</option>
-                                <option value={15}>15 years (Grade 10)</option>
-                                <option value={16}>16 years (Grade 11)</option>
-                                <option value={17}>17 years (Grade 12)</option>
-                            </select>
+                            <span className="font-semibold text-gray-700">
+                                User: {user_id}
+                            </span>
                             <span className="text-sm text-gray-600 italic">
                                 {loading ? "Loading questions..." : `${perseusItems.length} questions loaded`}
                             </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-2">
-                            💡 Each age creates a separate student profile with grade-appropriate skills and questions.
+                            💡 Age and grade are loaded from MongoDB based on user profile.
                         </p>
                     </div>
 

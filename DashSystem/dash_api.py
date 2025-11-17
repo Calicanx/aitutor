@@ -54,18 +54,44 @@ CURRICULUM_BUILDER_PATH = os.path.abspath(
 
 # Skill to Perseus slug prefix mapping
 SKILL_TO_SLUG_PREFIX = {
+    # Kindergarten
     "counting_1_10": "1.1.1.1",
     "number_recognition": "1.1.1.2",
     "basic_shapes": "1.1.1.3",
     "counting_100": "1.1.1.4",
+    # Grade 1
     "addition_basic": "1.1.2.1",
     "subtraction_basic": "1.1.2.2",
     "place_value": "1.1.3.1",
     "skip_counting": "1.1.4.1",
+    # Grade 2
     "addition_2digit": "2.1.4.2",
     "subtraction_2digit": "2.1.5.1",
+    "multiplication_intro": "2.1.6.1",  # Introduction to Multiplication
+    # Grade 3
     "multiplication_basic": "2.1.6.1",
+    "multiplication_tables": "2.1.6.1",  # Added missing mapping!
     "division_basic": "2.1.8.1",
+    "fractions_intro": "3.1.1.1",
+    # Grade 4+
+    "fractions_operations": "4.1.1.1",
+    "decimals_intro": "4.1.2.1",
+    "decimals_operations": "5.1.1.1",
+    "percentages": "5.1.2.1",
+    "integers": "6.1.1.1",
+    "ratios_proportions": "6.1.2.1",
+    "algebraic_expressions": "7.1.1.1",
+    "linear_equations_1var": "7.1.2.1",
+    "linear_equations_2var": "8.1.1.1",
+    "quadratic_intro": "8.1.2.1",
+    "quadratic_equations": "9.1.1.1",
+    "polynomial_operations": "9.1.2.1",
+    "geometric_proofs": "10.1.1.1",
+    "trigonometry_basic": "10.1.2.1",
+    "exponentials_logs": "11.1.1.1",
+    "trigonometry_advanced": "11.1.2.1",
+    "limits": "12.1.1.1",
+    "derivatives": "12.1.2.1",
 }
 
 def extract_slug_from_filename(filepath: str) -> str:
@@ -80,11 +106,69 @@ def get_perseus_files_for_skill(skill_id: str, curriculum_path: str) -> List[str
     pattern = os.path.join(curriculum_path, f"{prefix}*.json")
     return glob.glob(pattern)
 
+def load_perseus_items_for_dash_questions_from_mongodb(
+    dash_questions: List[Question]
+) -> List[Dict]:
+    """Load Perseus items from MongoDB matching DASH-selected questions"""
+    from mongodb_manager import mongo_db
+    perseus_items = []
+    
+    for dash_q in dash_questions:
+        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else "counting_1_10"
+        
+        # Map skill to Perseus prefix
+        prefix = SKILL_TO_SLUG_PREFIX.get(skill_id, "1.1.1")
+        
+        # Query MongoDB for matching Perseus questions
+        try:
+            matching_docs = list(mongo_db.perseus_questions.find({
+                "skill_prefix": prefix
+            }).limit(20))
+            
+            if not matching_docs:
+                # Fallback to any question with similar prefix
+                prefix_parts = prefix.split('.')
+                broader_prefix = '.'.join(prefix_parts[:3]) if len(prefix_parts) >= 3 else prefix
+                matching_docs = list(mongo_db.perseus_questions.find({
+                    "skill_prefix": {"$regex": f"^{broader_prefix}"}
+                }).limit(20))
+            
+            if not matching_docs:
+                logger.warning(f"No Perseus questions found in MongoDB for skill {skill_id}")
+                continue
+            
+            # Randomly select one
+            selected_doc = random.choice(matching_docs)
+            
+            # Build Perseus data structure
+            perseus_data = {
+                "question": selected_doc.get("question", {}),
+                "answerArea": selected_doc.get("answerArea", {}),
+                "hints": selected_doc.get("hints", []),
+                "itemDataVersion": selected_doc.get("itemDataVersion", {}),
+                "dash_metadata": {
+                    'dash_question_id': dash_q.question_id,
+                    'skill_ids': dash_q.skill_ids,
+                    'difficulty': dash_q.difficulty,
+                    'expected_time_seconds': dash_q.expected_time_seconds,
+                    'slug': selected_doc.get("slug"),
+                    'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids 
+                                   if sid in dash_system.skills]
+                }
+            }
+            
+            perseus_items.append(perseus_data)
+            
+        except Exception as e:
+            logger.warning(f"Failed to load Perseus from MongoDB for skill {skill_id}: {e}")
+    
+    return perseus_items
+
 def load_perseus_items_for_dash_questions(
     dash_questions: List[Question],
     curriculum_path: str
 ) -> List[Dict]:
-    """Load Perseus items matching DASH-selected questions"""
+    """Load Perseus items matching DASH-selected questions (LOCAL FILES FALLBACK)"""
     perseus_items = []
     
     for dash_q in dash_questions:
@@ -147,56 +231,59 @@ def load_perseus_items_from_dir(directory: str, limit: Optional[int] = None) -> 
     return all_items
 
 @app.get("/api/questions/{sample_size}", response_model=List[PerseusQuestion])
-def get_questions_with_dash_intelligence(sample_size: int, user_id: str = "default_user", age: int = 5):
+def get_questions_with_dash_intelligence(sample_size: int, user_id: str = "default_user"):
     """
     Gets questions using DASH intelligence but returns full Perseus items.
     Uses DASH to intelligently select questions based on learning journey and adaptive difficulty.
     
     Args:
         sample_size: Number of questions to return
-        user_id: Unique identifier for the user
-        age: Student age for cold-start initialization (default: 5)
+        user_id: Unique identifier for the user (age fetched from MongoDB)
     """
     logger.info(f"\n{'='*80}")
-    logger.info(f"[NEW_SESSION] Requesting {sample_size} questions for user: {user_id} (age: {age})")
+    logger.info(f"[NEW_SESSION] Requesting {sample_size} questions for user: {user_id}")
     logger.info(f"{'='*80}\n")
     
-    # Ensure the user exists and is loaded with age
-    user_profile = dash_system.load_user_or_create(user_id, age=age)
+    # Ensure the user exists and is loaded (age comes from MongoDB)
+    user_profile = dash_system.load_user_or_create(user_id)
     
-    # Use DASH intelligence to get recommended questions
+    # Use DASH intelligence with flexible selection to get ALL questions
     current_time = time.time()
     selected_questions = []
     selected_question_ids = []  # Track selected question IDs to avoid duplicates
     
-    # Get multiple questions using DASH intelligence
+    # Get multiple questions using DASH flexible intelligence
     for i in range(sample_size):
-        next_question = dash_system.get_next_question(user_id, current_time, exclude_question_ids=selected_question_ids)
+        # Use flexible selection that expands to grade-appropriate skills when needed
+        next_question = dash_system.get_next_question_flexible(
+            user_id, 
+            current_time, 
+            exclude_question_ids=selected_question_ids
+        )
         if next_question:
             selected_questions.append(next_question)
             selected_question_ids.append(next_question.question_id)  # Track to avoid duplicates
         else:
-            logger.info(f"[SESSION_END] Selected {len(selected_questions)}/{sample_size} questions")
+            logger.info(f"[SESSION_END] Selected {len(selected_questions)}/{sample_size} questions (no more available)")
             break
     
-    # Load Perseus items matching DASH selections
-    perseus_items = load_perseus_items_for_dash_questions(selected_questions, CURRICULUM_BUILDER_PATH)
+    # Load Perseus items from MongoDB for all DASH-selected questions
+    try:
+        perseus_items = load_perseus_items_for_dash_questions_from_mongodb(selected_questions)
+        logger.info(f"[MONGODB] Loaded {len(perseus_items)} Perseus questions from MongoDB with full metadata")
+    except Exception as e:
+        # Fallback to local files only if MongoDB completely fails
+        logger.warning(f"[WARNING] MongoDB Perseus load failed: {e}, using local files")
+        perseus_items = load_perseus_items_for_dash_questions(selected_questions, CURRICULUM_BUILDER_PATH)
     
     if not perseus_items:
-        logger.error(f"[ERROR] No Perseus questions found in CurriculumBuilder")
-        raise HTTPException(status_code=404, detail="No Perseus questions found in CurriculumBuilder")
+        logger.error(f"[ERROR] No Perseus questions found")
+        raise HTTPException(status_code=404, detail="No Perseus questions found")
     
-    # If we have fewer items than requested, use fallback
-    if len(perseus_items) < sample_size:
-        logger.warning(f"Only {len(perseus_items)} Perseus items found, requested {sample_size}")
-        additional_needed = sample_size - len(perseus_items)
-        fallback_items = load_perseus_items_from_dir(CURRICULUM_BUILDER_PATH, limit=additional_needed)
-        perseus_items.extend(fallback_items)
+    logger.info(f"[SESSION_READY] Loaded {len(perseus_items)} Perseus questions (all with DASH intelligence)\n")
     
-    logger.info(f"[SESSION_READY] Loaded {len(perseus_items[:sample_size])} Perseus questions\n")
-    
-    # Return the requested number
-    return perseus_items[:sample_size]
+    # Return all questions (all selected by DASH with full intelligence)
+    return perseus_items
 
 @app.post("/api/question-displayed/{user_id}")
 def log_question_displayed(user_id: str, display_info: dict):

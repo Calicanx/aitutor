@@ -108,8 +108,23 @@ class UserProfile:
         )
 
 class UserManager:
-    def __init__(self, users_folder: str = "Users"):
+    def __init__(self, users_folder: str = "Users", use_mongodb: bool = True):
         self.users_folder = users_folder
+        self.use_mongodb = use_mongodb
+        self.mongo = None
+        
+        # Initialize MongoDB if enabled
+        if use_mongodb:
+            try:
+                from mongodb_manager import mongo_db
+                self.mongo = mongo_db
+                logger.info("[MONGODB] UserManager using MongoDB for user storage")
+            except Exception as e:
+                logger.warning(f"[WARNING] Could not initialize MongoDB for users: {e}")
+                logger.info("[INFO] Falling back to local file storage")
+                self.use_mongodb = False
+        
+        # Ensure local folder exists (for fallback or backup)
         self.ensure_users_folder_exists()
     
     def ensure_users_folder_exists(self):
@@ -236,7 +251,29 @@ class UserManager:
         return user_profile
     
     def load_user(self, user_id: str) -> Optional[UserProfile]:
-        """Load a user profile from JSON file"""
+        """Load a user profile from MongoDB or JSON file (fallback)"""
+        
+        # Try MongoDB first
+        if self.use_mongodb and self.mongo:
+            try:
+                data = self.mongo.users.find_one({"user_id": user_id})
+                
+                if not data:
+                    return None
+                
+                # Remove MongoDB _id field
+                data.pop('_id', None)
+                
+                user_profile = UserProfile.from_dict(data)
+                logger.info(f"[MONGODB] Loaded user: {user_id} (age: {user_profile.age}, grade: {user_profile.current_grade})")
+                return user_profile
+                
+            except Exception as e:
+                logger.error(f"[ERROR] Error loading user {user_id} from MongoDB: {e}")
+                logger.info("[INFO] Trying local file fallback...")
+                # Fall through to local file fallback
+        
+        # Fallback to local JSON files
         file_path = self.get_user_file_path(user_id)
         
         if not os.path.exists(file_path):
@@ -247,42 +284,68 @@ class UserManager:
                 data = json.load(f)
             
             user_profile = UserProfile.from_dict(data)
-            # Reduced verbosity - only log on errors
-            pass  # logger.info(f"[LOADED] Loaded user profile: {user_id}")
+            logger.info(f"[LOCAL_FILE] Loaded user: {user_id} (age: {user_profile.age}, grade: {user_profile.current_grade})")
             return user_profile
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.error(f"[ERROR] Error loading user {user_id}: {e}")
+            logger.error(f"[ERROR] Error loading user {user_id} from file: {e}")
             return None
     
     def save_user(self, user_profile: UserProfile):
-        """Save a user profile to JSON file"""
+        """Save a user profile to MongoDB or JSON file (fallback)"""
         user_profile.last_updated = time.time()
+        
+        # Try MongoDB first
+        if self.use_mongodb and self.mongo:
+            try:
+                # Use upsert to create or update
+                result = self.mongo.users.update_one(
+                    {"user_id": user_profile.user_id},
+                    {"$set": user_profile.to_dict()},
+                    upsert=True
+                )
+                # logger.info(f"[MONGODB] Saved user: {user_profile.user_id}")
+                return
+                
+            except Exception as e:
+                logger.error(f"[ERROR] Error saving user {user_profile.user_id} to MongoDB: {e}")
+                logger.info("[INFO] Trying local file fallback...")
+                # Fall through to local file fallback
+        
+        # Fallback to local JSON files
         file_path = self.get_user_file_path(user_profile.user_id)
         
         try:
             with open(file_path, 'w') as f:
                 json.dump(user_profile.to_dict(), f, indent=2)
             
-            # Reduced verbosity - only log on errors
-            pass  # logger.info(f"[SAVED] Saved user profile: {user_profile.user_id}")
+            # logger.info(f"[LOCAL_FILE] Saved user: {user_profile.user_id}")
             
         except Exception as e:
-            logger.error(f"[ERROR] Error saving user {user_profile.user_id}: {e}")
+            logger.error(f"[ERROR] Error saving user {user_profile.user_id} to file: {e}")
     
     def get_or_create_user(
         self, 
         user_id: str, 
         all_skill_ids: List[str] = None,
         all_skills: Dict = None,
-        age: int = 5
+        age: int = None  # Made optional - will use existing age from MongoDB or default to 7
     ) -> UserProfile:
         """Get existing user or create new one with cold-start if doesn't exist"""
         user_profile = self.load_user(user_id)
         
         if user_profile is None:
+            # User doesn't exist - create new one
+            # Use provided age or default to 7 (Grade 2)
+            if age is None:
+                age = 7
+                logger.info(f"[NEW_USER] Creating user {user_id} with default age: {age}")
+            
             user_profile = self.create_new_user(user_id, all_skill_ids, all_skills, age)
         else:
+            # User exists - use their existing age from MongoDB
+            logger.info(f"[EXISTING_USER] Loaded user {user_id} with age: {user_profile.age}")
+            
             # Check if any new skills need to be added (for existing users)
             if all_skill_ids:
                 missing_skills = set(all_skill_ids) - set(user_profile.skill_states.keys())
