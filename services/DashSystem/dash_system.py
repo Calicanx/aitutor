@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from managers.user_manager import UserManager, UserProfile, SkillState
-from QuestionGeneratorAgent.question_generator_agent import QuestionGeneratorAgent
 
 # Configure logging
 logging.basicConfig(
@@ -91,17 +90,6 @@ class DASHSystem:
                 log_print(f"[ERROR] Could not initialize MongoDB: {e}")
                 raise RuntimeError(f"MongoDB initialization failed: {e}. Please configure MONGODB_URI in .env file.")
         
-        # Initialize the Question Generator Agent
-        try:
-            # Convert relative path to absolute path (from project root, not services/DashSystem/ dir)
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            qg_curriculum_path = os.path.join(project_root, "QuestionsBank", "curriculum.json")
-            self.question_generator = QuestionGeneratorAgent(curriculum_file=qg_curriculum_path)
-            log_print("[OK] Question Generator Agent initialized.")
-        except Exception as e:
-            self.question_generator = None
-            log_print(f"[WARNING] Could not initialize Question Generator Agent: {e}")
-
         # Load skills and questions from MongoDB only
         if self.use_mongodb and self.mongo:
             self._load_from_mongodb()
@@ -152,28 +140,6 @@ class DASHSystem:
             log_print(f"[ERROR] Error loading from MongoDB: {e}")
             raise RuntimeError(f"Failed to load data from MongoDB: {e}. Local fallback disabled.")
     
-    def _reload_questions(self):
-        """Reload only the questions from the curriculum file."""
-        try:
-            with open(self.curriculum_file_path, 'r') as f:
-                self.curriculum = json.load(f)
-            
-            self.questions.clear()
-            for grade_key, grade_data in self.curriculum['grades'].items():
-                for skill_data in grade_data['skills']:
-                    for question_data in skill_data['questions']:
-                        question = Question(
-                            question_id=question_data['question_id'],
-                            skill_ids=[skill_data['skill_id']],
-                            content=question_data['content'],
-                            difficulty=question_data['difficulty'],
-                            expected_time_seconds=question_data.get('expected_time_seconds', 60.0)
-                        )
-                        self.questions[question.question_id] = question
-            log_print(f"[OK] Reloaded {len(self.questions)} questions from curriculum.")
-        except Exception as e:
-            log_print(f"[ERROR] Error reloading questions: {e}")
-
     def _load_from_files(self, skills_file: str, curriculum_file: str):
         """Load skills and curriculum from JSON files"""
         try:
@@ -206,7 +172,21 @@ class DASHSystem:
                 self.skills[skill_id] = skill
             
             # Load curriculum and questions
-            self._reload_questions()
+            with open(curriculum_file, 'r') as f:
+                self.curriculum = json.load(f)
+            
+            self.questions.clear()
+            for grade_key, grade_data in self.curriculum['grades'].items():
+                for skill_data in grade_data['skills']:
+                    for question_data in skill_data['questions']:
+                        question = Question(
+                            question_id=question_data['question_id'],
+                            skill_ids=[skill_data['skill_id']],
+                            content=question_data['content'],
+                            difficulty=question_data['difficulty'],
+                            expected_time_seconds=question_data.get('expected_time_seconds', 60.0)
+                        )
+                        self.questions[question.question_id] = question
             
             log_print(f"[OK] Loaded {len(self.skills)} skills from JSON files")
             
@@ -857,44 +837,5 @@ class DASHSystem:
                       f"Difficulty:{selected.difficulty:.2f} (FALLBACK, target:{target_difficulty:.2f})")
             return selected
 
-        # If we're here, no unanswered questions were found. Time to generate one.
-        if is_retry or self.question_generator is None:
-            log_print("No unanswered questions found and cannot generate new ones.")
-            return None
-
-        log_print("[INFO] No unanswered questions available. Attempting to generate a new one...")
-        
-        top_skill_id = recommended_skills[0]
-        
-        source_question_id = None
-        # Find the most recently answered question for this skill to use as a template
-        for attempt in reversed(user_profile.question_history):
-            if top_skill_id in attempt.skill_ids:
-                source_question_id = attempt.question_id
-                break
-        
-        if not source_question_id:
-            # Fallback: find any question for the skill
-            all_skill_questions = [q.question_id for q in self.questions.values() if top_skill_id in q.skill_ids]
-            if all_skill_questions:
-                source_question_id = all_skill_questions[0]
-
-        if not source_question_id:
-            log_print(f"Could not find any source question for skill {top_skill_id} to generate a variation.")
-            return None
-
-        try:
-            log_print(f"[INFO] Generating variation based on question {source_question_id} for skill {top_skill_id}...")
-            generated_ids = self.question_generator.generate_variations(source_question_id, num_variations=1)
-            
-            if generated_ids:
-                log_print(f"[OK] Successfully generated {len(generated_ids)} new question(s).")
-                self._reload_questions()
-                # Retry finding a question
-                return self.get_next_question(student_id, current_time, is_retry=True)
-            else:
-                log_print("[WARNING] Question generation did not produce any new questions.")
-                return None
-        except Exception as e:
-            log_print(f"[ERROR] Error during question generation: {e}")
-            return None
+        # No unanswered questions found
+        return None
