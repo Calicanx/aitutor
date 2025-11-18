@@ -10,7 +10,11 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pymongo import MongoClient
+from dotenv import load_dotenv
 import json
+
+# Load environment variables
+load_dotenv()
 
 def migrate_dash_questions():
     """Load DASH questions from curriculum.json into MongoDB"""
@@ -19,13 +23,20 @@ def migrate_dash_questions():
     print("MIGRATION SCRIPT 2: DASH Questions → MongoDB")
     print("="*80)
     
-    # Connect to MongoDB
-    uri = "mongodb+srv://imdadshozab_db_user:iuCgDzZJ1n9sKmo7@aitutor.ut0qoxu.mongodb.net/?appName=AiTutor"
+    # Connect to MongoDB using environment variables
+    uri = os.getenv('MONGODB_URI')
+    if not uri:
+        print("\n❌ ERROR: MONGODB_URI not found in environment variables")
+        print("   Please create a .env file with MONGODB_URI")
+        print("   See .env.example for template")
+        return False
+    
+    db_name = os.getenv('MONGODB_DB_NAME', 'aitutor')
     client = MongoClient(uri)
-    db = client['aitutor']
+    db = client[db_name]
     questions_collection = db['dash_questions']
     
-    print("\n✅ Connected to MongoDB")
+    print(f"\n✅ Connected to MongoDB (database: {db_name})")
     
     # Create indexes
     print("\n📊 Creating indexes...")

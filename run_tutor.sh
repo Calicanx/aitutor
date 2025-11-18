@@ -77,17 +77,17 @@ trap cleanup INT
 
 # Start the Python backend in the background
 echo "Starting Python backend... Logs -> logs/mediamixer.log"
-(cd "$SCRIPT_DIR" && "$PYTHON_BIN" MediaMixer/media_mixer.py) > "$SCRIPT_DIR/logs/mediamixer.log" 2>&1 &
+(cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/MediaMixer/media_mixer.py) > "$SCRIPT_DIR/logs/mediamixer.log" 2>&1 &
 pids+=($!)
 
 # Start the FastAPI server in the background
 echo "Starting DASH API server... Logs -> logs/dash_api.log"
-(cd "$SCRIPT_DIR" && "$PYTHON_BIN" DashSystem/dash_api.py) > "$SCRIPT_DIR/logs/dash_api.log" 2>&1 &
+(cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/DashSystem/dash_api.py) > "$SCRIPT_DIR/logs/dash_api.log" 2>&1 &
 pids+=($!)
 
 # Start the SherlockEDExam FastAPI server in the background
 echo "Starting SherlockED Exam API server... Logs -> logs/api.log"
-(cd "$SCRIPT_DIR" && "$PYTHON_BIN" SherlockEDApi/run_backend.py) > "$SCRIPT_DIR/logs/sherlocked_exam.log" 2>&1 &
+(cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/SherlockEDApi/run_backend.py) > "$SCRIPT_DIR/logs/sherlocked_exam.log" 2>&1 &
 pids+=($!)
 
 # Give the backend servers a moment to start
@@ -96,10 +96,10 @@ sleep 2
 
 # Extract ports dynamically from configuration files
 FRONTEND_PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "$SCRIPT_DIR/frontend/vite.config.ts" 2>/dev/null | grep -o '[0-9]*' || echo "3000")
-DASH_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/DashSystem/dash_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8000")
-SHERLOCKED_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/SherlockEDApi/run_backend.py" 2>/dev/null | grep -o '[0-9]*' || echo "8001")
-MEDIAMIXER_COMMAND_PORT=$(grep -o 'localhost",[[:space:]]*[0-9]*' "$SCRIPT_DIR/MediaMixer/media_mixer.py" 2>/dev/null | head -1 | grep -o '[0-9]*' || echo "8765")
-MEDIAMIXER_VIDEO_PORT=$(grep -o 'localhost",[[:space:]]*[0-9]*' "$SCRIPT_DIR/MediaMixer/media_mixer.py" 2>/dev/null | tail -1 | grep -o '[0-9]*' || echo "8766")
+DASH_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/services/DashSystem/dash_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8000")
+SHERLOCKED_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/services/SherlockEDApi/run_backend.py" 2>/dev/null | grep -o '[0-9]*' || echo "8001")
+MEDIAMIXER_COMMAND_PORT=$(grep -o 'localhost",[[:space:]]*[0-9]*' "$SCRIPT_DIR/services/MediaMixer/media_mixer.py" 2>/dev/null | head -1 | grep -o '[0-9]*' || echo "8765")
+MEDIAMIXER_VIDEO_PORT=$(grep -o 'localhost",[[:space:]]*[0-9]*' "$SCRIPT_DIR/services/MediaMixer/media_mixer.py" 2>/dev/null | tail -1 | grep -o '[0-9]*' || echo "8766")
 
 # Start the Node.js frontend in the background
 echo "Starting Node.js frontend... Logs -> logs/frontend.log"

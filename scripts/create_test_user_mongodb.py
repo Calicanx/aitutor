@@ -9,7 +9,7 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from mongodb_manager import mongo_db
+from managers.mongodb_manager import mongo_db
 import time
 
 def create_test_user():
@@ -132,7 +132,7 @@ def create_test_user():
         print("\n❌ Error: Could not retrieve user after creation!")
     
     print("\n📝 Next Steps:")
-    print("   1. Restart backend: python DashSystem/dash_api.py")
+    print("   1. Restart backend: python services/DashSystem/dash_api.py")
     print(f"   2. Test API with: user_id={user_id}")
     print(f"   3. Age ({age}) will be fetched from MongoDB, not frontend!")
     print("\n💡 Tip: To test different ages, edit lines 18-20 in this script")

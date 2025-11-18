@@ -10,7 +10,11 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pymongo import MongoClient
+from dotenv import load_dotenv
 import json
+
+# Load environment variables
+load_dotenv()
 
 def test_mongodb_data():
     """Test that all data is accessible in MongoDB"""
@@ -19,12 +23,19 @@ def test_mongodb_data():
     print("TESTING MONGODB DATA")
     print("="*80 + "\n")
     
-    # Connect to MongoDB
-    uri = "mongodb+srv://imdadshozab_db_user:iuCgDzZJ1n9sKmo7@aitutor.ut0qoxu.mongodb.net/?appName=AiTutor"
-    client = MongoClient(uri)
-    db = client['aitutor']
+    # Connect to MongoDB using environment variables
+    uri = os.getenv('MONGODB_URI')
+    if not uri:
+        print("❌ ERROR: MONGODB_URI not found in environment variables")
+        print("   Please create a .env file with MONGODB_URI")
+        print("   See .env.example for template")
+        return False
     
-    print("✅ Connected to MongoDB\n")
+    db_name = os.getenv('MONGODB_DB_NAME', 'aitutor')
+    client = MongoClient(uri)
+    db = client[db_name]
+    
+    print(f"✅ Connected to MongoDB (database: {db_name})\n")
     
     all_tests_passed = True
     

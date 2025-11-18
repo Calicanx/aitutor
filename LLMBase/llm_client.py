@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config_manager import ConfigManager
+from managers.config_manager import ConfigManager
 
 class OpenRouterClient:
     def __init__(self, config_path: Optional[str] = None):
