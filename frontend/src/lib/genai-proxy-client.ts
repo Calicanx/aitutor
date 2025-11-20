@@ -51,7 +51,6 @@ export interface LiveClientEventTypes {
 export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
   private ws: WebSocket | null = null;
   private _status: "connected" | "disconnected" | "connecting" = "disconnected";
-  private _model: string | null = null;
   private config: LiveConnectConfig | null = null;
 
   public get status() {
@@ -61,10 +60,6 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
   public get session() {
     // Return a proxy session object for compatibility
     return this.ws ? {} : null;
-  }
-
-  public get model() {
-    return this._model;
   }
 
   public getConfig() {
@@ -85,25 +80,23 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     this.emit("log", log);
   }
 
-  async connect(model: string, config: LiveConnectConfig): Promise<boolean> {
+  async connect(config: LiveConnectConfig): Promise<boolean> {
     if (this._status === "connected" || this._status === "connecting") {
       return false;
     }
 
     this._status = "connecting";
     this.config = config;
-    this._model = model;
 
     // Connect to local backend
     this.ws = new WebSocket("ws://localhost:8767");
 
     this.ws.onopen = () => {
       console.log("Connected to Tutor backend");
-      // Send connection request to backend
+      // Send connection request to backend (model is determined by backend)
       this.ws!.send(
         JSON.stringify({
           type: "connect",
-          model,
           config,
         })
       );

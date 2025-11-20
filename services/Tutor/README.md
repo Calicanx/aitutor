@@ -24,9 +24,13 @@ Frontend (React) <--WebSocket--> Tutor Service (Node.js) <--WebSocket--> Gemini 
    npm install
    ```
 
-2. **Configure API Key:**
-   - Add `GEMINI_API_KEY` to root `.env` file
-   - The service automatically loads from root `.env`
+2. **Configure Environment Variables:**
+   Add to root `.env` file:
+   ```bash
+   GEMINI_API_KEY=your_api_key_here
+   GEMINI_MODEL=models/gemini-2.5-flash-native-audio-preview-09-2025
+   ```
+   The service automatically loads from root `.env`
 
 3. **Run standalone (for testing):**
    ```bash
@@ -56,13 +60,13 @@ The service uses JSON messages over WebSocket:
 ```json
 {
   "type": "connect",
-  "model": "models/gemini-2.5-flash-native-audio-preview-09-2025",
   "config": {
     "responseModalities": ["AUDIO"],
     "speechConfig": {...}
   }
 }
 ```
+Note: Model is configured in backend via `GEMINI_MODEL` environment variable
 
 **Disconnect:**
 ```json
@@ -154,6 +158,8 @@ All logs are written to `../../logs/tutor.log` with emoji prefixes:
 ## Security
 
 - API key is stored in root `.env` (not exposed to frontend)
+- Model selection is controlled by backend (via environment variable)
 - System prompt is loaded server-side
 - All Gemini communication happens through backend
+- Frontend has zero knowledge of API credentials or model configuration
 

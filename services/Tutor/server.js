@@ -13,6 +13,7 @@ dotenv.config({ path: join(rootDir, '.env') });
 
 const PORT = 8767;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.5-flash-native-audio-preview-09-2025';
 
 if (!GEMINI_API_KEY) {
   console.error('❌ ERROR: GEMINI_API_KEY not found in root .env file');
@@ -30,6 +31,7 @@ const wss = new WebSocketServer({ port: PORT });
 
 console.log(`🎓 Adam Tutor Service started on ws://localhost:${PORT}`);
 console.log(`📝 System prompt loaded (${SYSTEM_PROMPT.length} characters)`);
+console.log(`🤖 Using model: ${GEMINI_MODEL}`);
 
 wss.on('connection', (clientWs) => {
   console.log('✅ Frontend client connected');
@@ -44,7 +46,7 @@ wss.on('connection', (clientWs) => {
       
       // Handle connection request
       if (message.type === 'connect') {
-        const { model, config } = message;
+        const { config } = message;
         
         // Initialize Gemini client
         geminiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
@@ -55,13 +57,13 @@ wss.on('connection', (clientWs) => {
           systemInstruction: config.systemInstruction || SYSTEM_PROMPT,
         };
         
-        console.log(`🔗 Connecting to Gemini model: ${model}`);
+        console.log(`🔗 Connecting to Gemini model: ${GEMINI_MODEL}`);
         console.log(`🎤 Voice: ${fullConfig.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName || 'default'}`);
         
         // Connect to Gemini Live API
         try {
           geminiSession = await geminiClient.live.connect({
-            model,
+            model: GEMINI_MODEL,
             config: fullConfig,
             callbacks: {
               onopen: () => {

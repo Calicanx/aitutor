@@ -25,8 +25,6 @@ export type UseLiveAPIResults = {
   client: GenAIProxyClient;
   setConfig: (config: LiveConnectConfig) => void;
   config: LiveConnectConfig;
-  model: string;
-  setModel: (model: string) => void;
   connected: boolean;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -37,7 +35,6 @@ export function useLiveAPI(): UseLiveAPIResults {
   const client = useMemo(() => new GenAIProxyClient(), []);
   const audioStreamerRef = useRef<AudioStreamer | null>(null);
 
-  const [model, setModel] = useState<string>("models/gemini-2.5-flash-native-audio-preview-09-2025");
   const [config, setConfig] = useState<LiveConnectConfig>({});
   const [connected, setConnected] = useState(false);
   const [volume, setVolume] = useState(0);
@@ -99,8 +96,8 @@ export function useLiveAPI(): UseLiveAPIResults {
       throw new Error("config has not been set");
     }
     client.disconnect();
-    await client.connect(model, config);
-  }, [client, config, model]);
+    await client.connect(config);
+  }, [client, config]);
 
   const disconnect = useCallback(async () => {
     client.disconnect();
@@ -111,8 +108,6 @@ export function useLiveAPI(): UseLiveAPIResults {
     client,
     config,
     setConfig,
-    model,
-    setModel,
     connected,
     connect,
     disconnect,
