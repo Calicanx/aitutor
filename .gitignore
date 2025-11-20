@@ -37,3 +37,6 @@ ehthumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+
+.cursor/

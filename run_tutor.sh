@@ -86,13 +86,18 @@ echo "Starting DASH API server... Logs -> logs/dash_api.log"
 pids+=($!)
 
 # Start the SherlockEDExam FastAPI server in the background
-echo "Starting SherlockED Exam API server... Logs -> logs/api.log"
+echo "Starting SherlockED Exam API server... Logs -> logs/sherlocked_exam.log"
 (cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/SherlockEDApi/run_backend.py) > "$SCRIPT_DIR/logs/sherlocked_exam.log" 2>&1 &
+pids+=($!)
+
+# Start the Tutor service (Node.js backend for Gemini Live API)
+echo "Starting Tutor service (Adam)... Logs -> logs/tutor.log"
+(cd "$SCRIPT_DIR/services/Tutor" && node server.js) > "$SCRIPT_DIR/logs/tutor.log" 2>&1 &
 pids+=($!)
 
 # Give the backend servers a moment to start
 echo "Waiting for backend services to initialize..."
-sleep 2
+sleep 3
 
 # Extract ports dynamically from configuration files
 FRONTEND_PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "$SCRIPT_DIR/frontend/vite.config.ts" 2>/dev/null | grep -o '[0-9]*' || echo "3000")
@@ -112,6 +117,7 @@ echo "📡 Service URLs:"
 echo "  🌐 Frontend:           http://localhost:$FRONTEND_PORT"
 echo "  🔧 DASH API:           http://localhost:$DASH_API_PORT"
 echo "  🕵️  SherlockED API:     http://localhost:$SHERLOCKED_API_PORT"
+echo "  🎓 Tutor Service:      ws://localhost:8767"
 echo "  📹 MediaMixer Command: ws://localhost:$MEDIAMIXER_COMMAND_PORT"
 echo "  📺 MediaMixer Video:   ws://localhost:$MEDIAMIXER_VIDEO_PORT"
 echo ""
