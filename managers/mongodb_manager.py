@@ -42,7 +42,7 @@ class MongoDBManager:
                     "See .env.example for template."
                 )
             
-            db_name = os.getenv('MONGODB_DB_NAME', 'aitutor')
+            db_name = os.getenv('MONGODB_DB_NAME', 'ai_tutor')
             
             self._client = MongoClient(mongo_uri)
             self._db = self._client[db_name]

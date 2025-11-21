@@ -31,7 +31,7 @@ def migrate_dash_questions():
         print("   See .env.example for template")
         return False
     
-    db_name = os.getenv('MONGODB_DB_NAME', 'aitutor')
+    db_name = os.getenv('MONGODB_DB_NAME', 'ai_tutor')
     client = MongoClient(uri)
     db = client[db_name]
     questions_collection = db['dash_questions']
