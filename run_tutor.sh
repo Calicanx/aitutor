@@ -95,6 +95,11 @@ echo "Starting Tutor service (Adam)... Logs -> logs/tutor.log"
 (cd "$SCRIPT_DIR/services/Tutor" && node server.js) > "$SCRIPT_DIR/logs/tutor.log" 2>&1 &
 pids+=($!)
 
+# Start the TeachingAssistant API server in the background
+echo "Starting TeachingAssistant API server... Logs -> logs/teaching_assistant.log"
+(cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/TeachingAssistant/api.py) > "$SCRIPT_DIR/logs/teaching_assistant.log" 2>&1 &
+pids+=($!)
+
 # Give the backend servers a moment to start
 echo "Waiting for backend services to initialize..."
 sleep 3
@@ -103,6 +108,7 @@ sleep 3
 FRONTEND_PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "$SCRIPT_DIR/frontend/vite.config.ts" 2>/dev/null | grep -o '[0-9]*' || echo "3000")
 DASH_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/services/DashSystem/dash_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8000")
 SHERLOCKED_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/services/SherlockEDApi/run_backend.py" 2>/dev/null | grep -o '[0-9]*' || echo "8001")
+TEACHING_ASSISTANT_PORT=$(grep -o 'port.*[0-9]*' "$SCRIPT_DIR/services/TeachingAssistant/api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8002")
 # MediaMixer now uses single port with path-based routing
 MEDIAMIXER_PORT=$(grep -o "PORT',[[:space:]]*[0-9]*" "$SCRIPT_DIR/services/MediaMixer/media_mixer.py" 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "8765")
 MEDIAMIXER_COMMAND_PORT=$MEDIAMIXER_PORT
@@ -119,6 +125,7 @@ echo "📡 Service URLs:"
 echo "  🌐 Frontend:           http://localhost:$FRONTEND_PORT"
 echo "  🔧 DASH API:           http://localhost:$DASH_API_PORT"
 echo "  🕵️  SherlockED API:     http://localhost:$SHERLOCKED_API_PORT"
+echo "  👨‍🏫 TeachingAssistant:  http://localhost:$TEACHING_ASSISTANT_PORT"
 echo "  🎓 Tutor Service:      ws://localhost:8767"
 echo "  📹 MediaMixer Command: ws://localhost:$MEDIAMIXER_COMMAND_PORT/command"
 echo "  📺 MediaMixer Video:   ws://localhost:$MEDIAMIXER_VIDEO_PORT/video"

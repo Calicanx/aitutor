@@ -18,7 +18,6 @@ type FunctionDeclarationsTool = Tool & {
 export default function SettingsDialog() {
   const [open, setOpen] = useState(false);
   const { config, setConfig, connected } = useLiveAPIContext();
-  const [basePrompt, setBasePrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
 
   const functionDeclarations: FunctionDeclaration[] = useMemo(() => {

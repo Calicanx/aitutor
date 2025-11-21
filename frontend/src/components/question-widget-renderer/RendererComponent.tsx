@@ -9,6 +9,8 @@ import { PerseusI18nContextProvider } from "../../package/perseus/src/components
 import { mockStrings } from "../../package/perseus/src/strings";
 import { KEScore } from "@khanacademy/perseus-core";
 
+const TEACHING_ASSISTANT_API_URL = 'http://localhost:8002';
+
 const RendererComponent = () => {
     const [perseusItems, setPerseusItems] = useState<PerseusItem[]>([]);
     const [item, setItem] = useState(0);
@@ -124,6 +126,25 @@ const RendererComponent = () => {
             setIsAnswered(true);
             setScore(keScore);
             console.log("Score:", keScore);
+
+            // Record question answer with TeachingAssistant
+            try {
+                const questionId = metadata.dash_question_id || `q_${item}_${Date.now()}`;
+                fetch(`${TEACHING_ASSISTANT_API_URL}/question/answered`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question_id: questionId,
+                        is_correct: keScore.correct || false,
+                    }),
+                }).catch((error) => {
+                    console.error('Failed to record question answer to TeachingAssistant:', error);
+                });
+            } catch (error) {
+                console.error('Error recording question answer:', error);
+            }
         }
     };
 
