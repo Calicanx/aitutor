@@ -6,26 +6,33 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 
-// Load environment variables from root .env
+// Load environment variables from root .env (optional - Cloud Run uses env vars directly)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '../..');
-dotenv.config({ path: join(rootDir, '.env') });
+try {
+  dotenv.config({ path: join(rootDir, '.env') });
+} catch (error) {
+  // .env file is optional - Cloud Run provides env vars directly
+  // This is fine for local development too if .env doesn't exist
+}
 
 const PORT = process.env.PORT || 8767;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.5-flash-native-audio-preview-09-2025';
 
-if (!GEMINI_API_KEY) {
-  console.error('❌ ERROR: GEMINI_API_KEY not found in root .env file');
-  process.exit(1);
+// Load system prompt (with error handling)
+let SYSTEM_PROMPT = '';
+try {
+  SYSTEM_PROMPT = readFileSync(
+    join(__dirname, 'system_prompts/adam_tutor.md'),
+    'utf-8'
+  );
+  console.log(`📝 System prompt loaded (${SYSTEM_PROMPT.length} characters)`);
+} catch (error) {
+  console.error('⚠️  Warning: Could not load system prompt file:', error.message);
+  console.log('📝 Using empty system prompt (will use default from config)');
 }
-
-// Load system prompt
-const SYSTEM_PROMPT = readFileSync(
-  join(__dirname, 'system_prompts/adam_tutor.md'),
-  'utf-8'
-);
 
 // Create HTTP server for health checks (required by Cloud Run)
 const server = http.createServer((req, res) => {
@@ -51,11 +58,22 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 // Start the HTTP server (which also handles WebSocket upgrades)
+// IMPORTANT: Server must start listening immediately for Cloud Run health checks
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🎓 Adam Tutor Service started on ws://localhost:${PORT}`);
-  console.log(`📝 System prompt loaded (${SYSTEM_PROMPT.length} characters)`);
+  console.log(`🎓 Adam Tutor Service started on port ${PORT}`);
+  console.log(`🌐 HTTP server listening on http://0.0.0.0:${PORT}`);
+  console.log(`💚 Health check available at http://0.0.0.0:${PORT}/health`);
+  console.log(`🔌 WebSocket server ready on ws://0.0.0.0:${PORT}`);
   console.log(`🤖 Using model: ${GEMINI_MODEL}`);
-  console.log(`💚 Health check available at http://localhost:${PORT}/health`);
+  if (!GEMINI_API_KEY) {
+    console.warn('⚠️  WARNING: GEMINI_API_KEY not set. WebSocket connections will fail.');
+  }
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('❌ Server error:', error);
+  process.exit(1);
 });
 
 wss.on('connection', (clientWs) => {
@@ -71,6 +89,14 @@ wss.on('connection', (clientWs) => {
       
       // Handle connection request
       if (message.type === 'connect') {
+        if (!GEMINI_API_KEY) {
+          clientWs.send(JSON.stringify({
+            type: 'error',
+            error: 'GEMINI_API_KEY not configured'
+          }));
+          return;
+        }
+        
         const { config } = message;
         
         // Initialize Gemini client
@@ -184,8 +210,8 @@ wss.on('connection', (clientWs) => {
   });
 });
 
-// Graceful shutdown
-process.on('SIGINT', () => {
+// Graceful shutdown handler
+const shutdown = () => {
   console.log('\n🛑 Shutting down Adam Tutor Service...');
   wss.close(() => {
     server.close(() => {
@@ -193,5 +219,9 @@ process.on('SIGINT', () => {
       process.exit(0);
     });
   });
-});
+};
+
+// Handle both SIGINT (local dev) and SIGTERM (Cloud Run)
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
