@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - staging
-  pull_request:
-    branches:
-      - staging
-    types: [opened, synchronize, reopened]
 
 jobs:
   deploy:
@@ -36,23 +32,9 @@ jobs:
           echo "GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}" >> $GITHUB_ENV
 
       - name: Deploy to staging
-        if: github.event_name == 'push'
-        run: ./deploy.sh staging
-      
-      - name: Validate deployment configuration (PR)
-        if: github.event_name == 'pull_request'
         run: |
-          echo "🔍 Validating deployment configuration..."
-          echo "✅ Cloud Build config exists"
-          test -f cloudbuild-staging.yaml
-          echo "✅ Deploy script exists"
-          test -f deploy.sh
-          echo "✅ All Dockerfiles exist"
-          test -f services/DashSystem/Dockerfile
-          test -f services/SherlockEDApi/Dockerfile
-          test -f services/TeachingAssistant/Dockerfile
-          test -f services/MediaMixer/Dockerfile
-          test -f services/Tutor/Dockerfile
-          test -f frontend/Dockerfile
-          echo "✅ Configuration validation passed!"
+          set -e  # Exit on error
+          echo "🚀 Starting deployment..."
+          ./deploy.sh staging
+        continue-on-error: false
 
