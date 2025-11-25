@@ -1,14 +1,17 @@
-import React, { useEffect, useState, RefObject } from 'react';
-import cn from 'classnames';
+import React, { useEffect, useState, RefObject } from "react";
+import cn from "classnames";
 import { RiSidebarFoldLine, RiSidebarUnfoldLine } from "react-icons/ri";
-import './media-mixer-display.scss';
+import "./media-mixer-display.scss";
 
 interface MediaMixerDisplayProps {
   socket: WebSocket | null;
   renderCanvasRef: RefObject<HTMLCanvasElement>;
 }
 
-const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({ socket, renderCanvasRef }) => {
+const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
+  socket,
+  renderCanvasRef,
+}) => {
   const [imageData, setImageData] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,13 +20,13 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({ socket, renderCan
   useEffect(() => {
     if (!socket) return;
 
-    console.log('MediaMixerDisplay: Setting up video WebSocket connection');
+    console.log("MediaMixerDisplay: Setting up video WebSocket connection");
 
     const image = new Image();
     image.onload = () => {
       const canvas = renderCanvasRef.current;
       if (canvas) {
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (ctx) {
           canvas.width = image.width;
           canvas.height = image.height;
@@ -33,7 +36,7 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({ socket, renderCan
     };
 
     socket.onopen = () => {
-      console.log('MediaMixerDisplay: Connected to video WebSocket');
+      console.log("MediaMixerDisplay: Connected to video WebSocket");
       setIsConnected(true);
       setError(null);
     };
@@ -46,38 +49,60 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({ socket, renderCan
     };
 
     socket.onerror = (err) => {
-      console.error('MediaMixerDisplay: WebSocket error:', err);
-      setError('Failed to connect to MediaMixer video stream. Is it running?');
+      console.error("MediaMixerDisplay: WebSocket error:", err);
+      setError("Failed to connect to MediaMixer video stream. Is it running?");
       setIsConnected(false);
     };
 
     socket.onclose = () => {
-      console.log('MediaMixerDisplay: Disconnected from video WebSocket');
+      console.log("MediaMixerDisplay: Disconnected from video WebSocket");
       setIsConnected(false);
     };
 
     return () => {
-      console.log('MediaMixerDisplay: Cleaning up video WebSocket');
+      console.log("MediaMixerDisplay: Cleaning up video WebSocket");
     };
   }, [socket, renderCanvasRef]);
 
   return (
-    <div className={cn("media-mixer-display", { "collapsed": isCollapsed })}>
+    <div
+      className={cn("media-mixer-display", {
+        collapsed: isCollapsed,
+      })}
+    >
       <header className="top">
-        <button onClick={() => setIsCollapsed(!isCollapsed)} className="collapse-button">
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="collapse-button"
+          type="button"
+        >
           {isCollapsed ? (
             <RiSidebarUnfoldLine color="#b4b8bb" />
           ) : (
             <RiSidebarFoldLine color="#b4b8bb" />
           )}
         </button>
+        <div className="header-text">
         <h2>Media Mixer Display</h2>
+          <span
+            className={cn("status-pill", {
+              connected: isConnected && !error,
+              error: !!error,
+            })}
+          >
+            {error ? "Offline" : isConnected ? "Live" : "Connecting"}
+          </span>
+        </div>
       </header>
       <div className="media-mixer-content">
         {error && <div className="error-message">{error}</div>}
-        {!isConnected && !error && <div>Connecting to MediaMixer...</div>}
+        {!isConnected && !error && (
+          <div className="placeholder-message">Connecting to MediaMixer...</div>
+        )}
         {isConnected && imageData && (
-          <img src={imageData} alt="MediaMixer Stream" style={{ width: '100%', height: 'auto' }} />
+          <div className="video-frame">
+            <img src={imageData} alt="MediaMixer Stream" />
+          </div>
         )}
       </div>
     </div>

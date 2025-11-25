@@ -1,5 +1,14 @@
 import React, { useEffect, useState, useRef } from "react";
-import {ServerItemRenderer} from "../../package/perseus/src/server-item-renderer";
+import { Button } from "@/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
+import { ServerItemRenderer } from "../../package/perseus/src/server-item-renderer";
 import type { PerseusItem } from "@khanacademy/perseus-core";
 import { storybookDependenciesV2 } from "../../package/perseus/testing/test-dependencies";
 import { scorePerseusItem } from "@khanacademy/perseus-score";
@@ -8,60 +17,72 @@ import { RenderStateRoot } from "@khanacademy/wonder-blocks-core";
 import { PerseusI18nContextProvider } from "../../package/perseus/src/components/i18n-context";
 import { mockStrings } from "../../package/perseus/src/strings";
 import { KEScore } from "@khanacademy/perseus-core";
+import { toast } from "sonner";
+import { useDashQuestions } from "@/hooks/query-hooks/useDashQuestions";
+import {
+  useDashAnswerMutations,
+  useTeachingAssistantQuestionAnswered,
+} from "@/hooks/query-hooks/useDashAnswerMutations";
 
-const TEACHING_ASSISTANT_API_URL = 'http://localhost:8002';
+const TEACHING_ASSISTANT_API_URL = "http://localhost:8002";
 
 const RendererComponent = () => {
     const [perseusItems, setPerseusItems] = useState<PerseusItem[]>([]);
     const [item, setItem] = useState(0);
-    const [loading, setLoading] = useState(true);
     const [endOfTest, setEndOfTest] = useState(false);
     const [score, setScore] = useState<KEScore>();
     const [isAnswered, setIsAnswered] = useState(false);
     const [startTime, setStartTime] = useState<number>(Date.now());
     const rendererRef = useRef<ServerItemRenderer>(null);
-    
+
     // User ID - age is now fetched from MongoDB, not frontend
     const user_id = "mongodb_test_user"; // Use the MongoDB test user
 
-    useEffect(() => {
-        // Use DASH API with intelligent question selection
-        // Age is fetched from MongoDB based on user_id
-        setLoading(true);
-        setItem(0);
-        setEndOfTest(false);
-        setIsAnswered(false);
-        
-        fetch(`http://localhost:8000/api/questions/16?user_id=${user_id}`)
-            .then((response) => response.json())
-            .then((data) => {
-                console.log("API response:", data);
-                setPerseusItems(data);
-                setLoading(false);
-                setStartTime(Date.now()); // Reset timer for first question
-            })
-            .catch((err) => {
-                console.error("Failed to fetch questions:", err);
-                setLoading(false);
-            });
-    }, []); // No dependencies - user_id is constant
+    const {
+        data: questions,
+        isLoading,
+        isError,
+        error,
+    } = useDashQuestions({ userId: user_id, count: 16 });
 
-    // Log when question is displayed
+    const { submitDashAnswer, logQuestionDisplayed } = useDashAnswerMutations();
+    const teachingAssistantQuestionAnswered =
+        useTeachingAssistantQuestionAnswered();
+
     useEffect(() => {
-        if (perseusItems.length > 0 && !loading) {
+        if (isError) {
+            const message =
+                error instanceof Error ? error.message : "Unknown error fetching questions";
+            toast.error("Unable to load questions", {
+                description: message,
+            });
+        }
+    }, [isError, error]);
+
+    useEffect(() => {
+        if (questions && questions.length > 0) {
+            setPerseusItems(questions);
+            setItem(0);
+            setEndOfTest(false);
+            setIsAnswered(false);
+            setStartTime(Date.now());
+        }
+    }, [questions]);
+
+    // Log when question is displayed (once per item change)
+    useEffect(() => {
+        if (perseusItems.length > 0 && !isLoading) {
             const currentItem = perseusItems[item];
             const metadata = (currentItem as any).dash_metadata || {};
-            
-            fetch(`http://localhost:8000/api/question-displayed/${user_id}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    question_index: item,
-                    metadata: metadata
-                })
-            }).catch(err => console.error('Failed to log question display:', err));
+
+            logQuestionDisplayed.mutate({
+                userId: user_id,
+                index: item,
+                metadata,
+            });
         }
-    }, [item, perseusItems, loading]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [item, perseusItems, isLoading, user_id]);
 
     const handleNext = () => {
         setItem((prev) => {
@@ -82,7 +103,6 @@ const RendererComponent = () => {
         });
     };
 
-
     const handleSubmit = async () => {
         if (rendererRef.current) {
             const userInput = rendererRef.current.getUserInput();
@@ -91,7 +111,11 @@ const RendererComponent = () => {
 
             // Continue to include an empty guess for the now defunct answer area.
             const maxCompatGuess = [rendererRef.current.getUserInputLegacy(), []];
-            const keScore = keScoreFromPerseusScore(score, maxCompatGuess, rendererRef.current.getSerializedState().question);
+            const keScore = keScoreFromPerseusScore(
+                score,
+                maxCompatGuess,
+                rendererRef.current.getSerializedState().question,
+            );
 
             // Calculate response time
             const responseTimeSeconds = (Date.now() - startTime) / 1000;
@@ -101,23 +125,13 @@ const RendererComponent = () => {
                 const currentItem = perseusItems[item];
                 const metadata = (currentItem as any).dash_metadata || {};
 
-                const answerData = {
-                    question_id: metadata.dash_question_id || `q_${item}`,
-                    skill_ids: metadata.skill_ids || ["counting_1_10"],
-                    is_correct: keScore.correct,
-                    response_time_seconds: responseTimeSeconds
-                };
-
-                const response = await fetch(`http://localhost:8000/api/submit-answer/${user_id}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(answerData),
+                submitDashAnswer.mutate({
+                    userId: user_id,
+                    questionId: metadata.dash_question_id || `q_${item}`,
+                    skillIds: metadata.skill_ids || ["counting_1_10"],
+                    isCorrect: keScore.correct,
+                    responseTimeSeconds,
                 });
-
-                const result = await response.json();
-                console.log("Answer submitted to DASH:", result);
             } catch (error) {
                 console.error("Failed to submit answer to DASH:", error);
             }
@@ -129,21 +143,16 @@ const RendererComponent = () => {
 
             // Record question answer with TeachingAssistant
             try {
-                const questionId = metadata.dash_question_id || `q_${item}_${Date.now()}`;
-                fetch(`${TEACHING_ASSISTANT_API_URL}/question/answered`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        question_id: questionId,
-                        is_correct: keScore.correct || false,
-                    }),
-                }).catch((error) => {
-                    console.error('Failed to record question answer to TeachingAssistant:', error);
+                const currentItem = perseusItems[item];
+                const metadata = (currentItem as any).dash_metadata || {};
+                const questionId =
+                    metadata.dash_question_id || `q_${item}_${Date.now()}`;
+                teachingAssistantQuestionAnswered.mutate({
+                    questionId,
+                    isCorrect: keScore.correct || false,
                 });
             } catch (error) {
-                console.error('Error recording question answer:', error);
+                console.error("Error recording question answer:", error);
             }
         }
     };
@@ -151,71 +160,113 @@ const RendererComponent = () => {
     const perseusItem = perseusItems[item] || {};
 
     return (
-            <div className="framework-perseus">
-                <div style={{ padding: "20px" }}>
-                    {/* User Info Display (Age from MongoDB) */}
-                    <div className="mb-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
-                        <div className="flex items-center gap-4">
-                            <span className="font-semibold text-gray-700">
-                                User: {user_id}
-                            </span>
-                            <span className="text-sm text-gray-600 italic">
-                                {loading ? "Loading questions..." : `${perseusItems.length} questions loaded`}
-                            </span>
+        <div className="framework-perseus flex justify-center py-8">
+            <Card className="flex w-full max-w-6xl h-[560px] md:h-[600px] flex-col shadow-lg border border-border/60 mb-28">
+                <CardHeader className="space-y-2">
+                    <div className="flex items-center max-w-fit justify-between gap-4">
+                        <div className="space-y-1">
+                            <CardTitle className="text-xl font-semibold">
+                                Adaptive Practice Session
+                            </CardTitle>
+                            <CardDescription>
+                                Age and grade are loaded from MongoDB based on the user profile.
+                            </CardDescription>
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">
-                            💡 Age and grade are loaded from MongoDB based on user profile.
-                        </p>
+                        <div className="text-right text-sm text-muted-foreground">
+                            <div className="font-medium">User: {user_id}</div>
+                            <div className="text-xs">
+                                    {isLoading
+                                    ? "Loading questions..."
+                                    : `${perseusItems.length} questions loaded`}
+                            </div>
+                        </div>
                     </div>
+                </CardHeader>
 
-                    <button
-                        onClick={handleNext}
-                        className="absolute top-19 right-8 bg-black rounded 
-                            text-white p-2">Next</button>
-                            
-                    {endOfTest ? (
-                        <p>You've successfully completed your test!</p>
-                    ): (
-                        perseusItems.length > 0 ? (
-                        <div>
-                            <PerseusI18nContextProvider locale="en" strings={mockStrings}>
-                                <RenderStateRoot>
-                                    <ServerItemRenderer
-                                        ref={rendererRef}
-                                        problemNum={0}
-                                        item={perseusItem}
-                                        dependencies={storybookDependenciesV2}
-                                        apiOptions={{}}
-                                        linterContext={{
-                                            contentType: "",
-                                            highlightLint: true,
-                                            paths: [],
-                                            stack: [],
-                                        }}
-                                        showSolutions="none"
-                                        hintsVisible={0}
-                                        reviewMode={false}
+                <CardContent className="flex-1 space-y-4 overflow-hidden">
+                    <div className="relative h-full w-full overflow-auto">
+                        {endOfTest ? (
+                            <div className="flex h-full items-center justify-center px-4 py-6 text-center">
+                                <div className="max-w-md rounded-md border border-border/70 bg-muted/40 px-4 py-6">
+                                    <p className="text-lg font-medium">
+                                        🎉 You&apos;ve successfully completed your test!
+                                    </p>
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                        You can review questions above or restart the session from
+                                        the main controls.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : isLoading ? (
+                            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                                Loading questions...
+                            </div>
+                        ) : perseusItems.length > 0 ? (
+                            <div className="space-y-4 px-2">
+                                <PerseusI18nContextProvider locale="en" strings={mockStrings}>
+                                    <RenderStateRoot>
+                                        <ServerItemRenderer
+                                            ref={rendererRef}
+                                            problemNum={0}
+                                            item={perseusItem}
+                                            dependencies={storybookDependenciesV2}
+                                            apiOptions={{}}
+                                            linterContext={{
+                                                contentType: "",
+                                                highlightLint: true,
+                                                paths: [],
+                                                stack: [],
+                                            }}
+                                            showSolutions="none"
+                                            hintsVisible={0}
+                                            reviewMode={false}
                                         />
-                                </RenderStateRoot>
-                            </PerseusI18nContextProvider>
-                            {isAnswered && <div 
-                                className="flex justify-between mt-9">
-                                    <span className={score?.correct ? "text-green-400 italic" : "text-red-400 italic"}>
-                                        {score?.correct ?(<p>Correct Answer!</p>):(<p>Wrong Answer.</p>)}
-                                    </span>
-                            </div>}
-                        </div>
+                                    </RenderStateRoot>
+                                </PerseusI18nContextProvider>
+
+                                {isAnswered && (
+                                    <div className="mt-4 flex items-center justify-between rounded-md border border-border/70 bg-muted/40 px-4 py-3">
+                                        <span
+                                            className={
+                                                score?.correct
+                                                    ? "text-sm font-medium text-emerald-500"
+                                                    : "text-sm font-medium text-red-400"
+                                            }
+                                        >
+                                            {score?.correct ? "Correct answer!" : "Wrong answer."}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
                         ) : (
-                            <p>Loading...</p>
-                        )
-                    )}
-                    <button 
-                        className="bg-blue-500 absolute rounded text-white p-2 right-8 mt-8"
-                        onClick={handleSubmit}>
+                            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                                No questions available.
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+
+                <CardFooter className="flex justify-end gap-3">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleNext}
+                        disabled={isLoading || endOfTest || perseusItems.length === 0}
+                    >
+                        Next
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleSubmit}
+                        disabled={isLoading || endOfTest || perseusItems.length === 0}
+                    >
                         Submit
-                    </button>
-                </div>
-            </div>
+                    </Button>
+                </CardFooter>
+            </Card>
+        </div>
     );
 };
 

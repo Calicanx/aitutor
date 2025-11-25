@@ -23,6 +23,8 @@ import ScratchpadCapture from "./components/scratchpad-capture/ScratchpadCapture
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
 import ControlTray from "./components/control-tray/ControlTray";
 import Scratchpad from "./components/scratchpad/Scratchpad";
+import { ThemeProvider } from "./components/theme/theme-provier";
+import { Toaster } from "@/components/ui/sonner";
 
 function App() {
   // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
@@ -39,11 +41,11 @@ function App() {
 
   useEffect(() => {
     // Command WebSocket for sending frames/commands TO MediaMixer
-    const commandWs = new WebSocket('ws://localhost:8765/command');
+    const commandWs = new WebSocket("ws://localhost:8765/command");
     setCommandSocket(commandWs);
 
     // Video WebSocket for receiving video FROM MediaMixer
-    const videoWs = new WebSocket('ws://localhost:8765/video');
+    const videoWs = new WebSocket("ws://localhost:8765/video");
     setVideoSocket(videoWs);
 
     return () => {
@@ -59,44 +61,53 @@ function App() {
   }, [mixerStream]);
 
   return (
-    <div className="App">
-      <LiveAPIProvider>
-        <div className="streaming-console">
-          <SidePanel />
-          <main>
-            <div className="main-app-area">
-              <div className="question-panel" style={{border: '2px solid red'}}>
-                <ScratchpadCapture socket={commandSocket}>
-                  <QuestionDisplay />
-                  {isScratchpadOpen && (
-                    <div className="scratchpad-container">
-                      <Scratchpad />
-                    </div>
-                  )}
-                </ScratchpadCapture>
+    <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
+      <Toaster richColors closeButton />
+      <div className="App">
+        <LiveAPIProvider>
+          <div className="streaming-console">
+            <SidePanel />
+            <main>
+              <div className="main-app-area">
+                <div
+                  className="question-panel"
+                  style={{ border: "2px solid red" }}
+                >
+                  <ScratchpadCapture socket={commandSocket}>
+                    <QuestionDisplay />
+                    {isScratchpadOpen && (
+                      <div className="scratchpad-container">
+                        <Scratchpad />
+                      </div>
+                    )}
+                  </ScratchpadCapture>
+                </div>
+                <MediaMixerDisplay
+                  socket={videoSocket}
+                  renderCanvasRef={renderCanvasRef}
+                />
               </div>
-              <MediaMixerDisplay socket={videoSocket} renderCanvasRef={renderCanvasRef} />
-            </div>
 
-            <ControlTray
-              socket={commandSocket}
-              renderCanvasRef={renderCanvasRef}
-              videoRef={videoRef}
-              supportsVideo={true}
-              onVideoStreamChange={setVideoStream}
-              onMixerStreamChange={setMixerStream}
-              enableEditingSettings={true}
-            >
-              <button onClick={() => setScratchpadOpen(!isScratchpadOpen)}>
-                <span className="material-symbols-outlined">
-                  {isScratchpadOpen ? "close" : "edit"}
-                </span>
-              </button>
-            </ControlTray>
-          </main>
-        </div>
-      </LiveAPIProvider>
-    </div>
+              <ControlTray
+                socket={commandSocket}
+                renderCanvasRef={renderCanvasRef}
+                videoRef={videoRef}
+                supportsVideo={true}
+                onVideoStreamChange={setVideoStream}
+                onMixerStreamChange={setMixerStream}
+                enableEditingSettings={true}
+              >
+                <button onClick={() => setScratchpadOpen(!isScratchpadOpen)}>
+                  <span className="material-symbols-outlined">
+                    {isScratchpadOpen ? "close" : "edit"}
+                  </span>
+                </button>
+              </ControlTray>
+            </main>
+          </div>
+        </LiveAPIProvider>
+      </div>
+    </ThemeProvider>
   );
 }
 

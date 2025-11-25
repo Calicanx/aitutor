@@ -1,14 +1,21 @@
-import cn from 'classnames';
-import { memo, ReactNode, RefObject, useEffect, useRef, useState } from 'react';
-import { useLiveAPIContext } from '../../contexts/LiveAPIContext';
-import { useMediaCapture } from '../../hooks/useMediaCapture';
-import { AudioRecorder } from '../../lib/audio-recorder';
-import AudioPulse from '../audio-pulse/AudioPulse';
-import './control-tray.scss';
-import SettingsDialog from '../settings-dialog/SettingsDialog';
+import cn from "classnames";
+import { memo, ReactNode, RefObject, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useMediaCapture } from "../../hooks/useMediaCapture";
+import { AudioRecorder } from "../../lib/audio-recorder";
+import AudioPulse from "../audio-pulse/AudioPulse";
+import "./control-tray.scss";
+import SettingsDialog from "../settings-dialog/SettingsDialog";
+import {
+  useRecordConversationTurn,
+  useStartTeachingSession,
+  useEndTeachingSession,
+  useTeachingSessionInfo,
+  useTeachingInactivityCheck,
+} from "@/hooks/query-hooks/useTeachingAssistantSession";
 
-const TEACHING_ASSISTANT_API_URL = 'http://localhost:8002';
-const USER_ID = 'mongodb_test_user';
+const USER_ID = "mongodb_test_user";
 
 export type ControlTrayProps = {
   socket: WebSocket | null;
@@ -32,14 +39,26 @@ type MediaStreamButtonProps = {
 const MediaStreamButton = memo(
   ({ isStreaming, onIcon, offIcon, start, stop }: MediaStreamButtonProps) =>
     isStreaming ? (
-      <button className="action-button" onClick={stop}>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="action-button"
+        onClick={stop}
+      >
         <span className="material-symbols-outlined">{onIcon}</span>
-      </button>
+      </Button>
     ) : (
-      <button className="action-button" onClick={start}>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="action-button"
+        onClick={start}
+      >
         <span className="material-symbols-outlined">{offIcon}</span>
-      </button>
-    )
+      </Button>
+    ),
 );
 
 function ControlTray({
@@ -47,19 +66,28 @@ function ControlTray({
   videoRef,
   renderCanvasRef,
   children,
-  onVideoStreamChange = () => {},
-  onMixerStreamChange = () => {},
+  onVideoStreamChange = () => { },
+  onMixerStreamChange = () => { },
   supportsVideo,
   enableEditingSettings,
 }: ControlTrayProps) {
-  const { client, connected, connect, disconnect, interruptAudio, volume } = useLiveAPIContext();
-  const { cameraEnabled, screenEnabled, toggleCamera, toggleScreen } = useMediaCapture({ socket });
-  const [activeVideoStream, setActiveVideoStream] = useState<MediaStream | null>(null);
+  const { client, connected, connect, disconnect, interruptAudio, volume } =
+    useLiveAPIContext();
+  const { cameraEnabled, screenEnabled, toggleCamera, toggleScreen } =
+    useMediaCapture({ socket });
+  const [activeVideoStream, setActiveVideoStream] =
+    useState<MediaStream | null>(null);
   const [inVolume, setInVolume] = useState(0);
   const [audioRecorder] = useState(() => new AudioRecorder());
   const [muted, setMuted] = useState(false);
   const connectButtonRef = useRef<HTMLButtonElement>(null);
   const turnCompleteRef = useRef(false);
+
+  const recordConversationTurn = useRecordConversationTurn();
+  const startTeachingSession = useStartTeachingSession(USER_ID);
+  const endTeachingSession = useEndTeachingSession();
+  const teachingSessionInfo = useTeachingSessionInfo();
+  const teachingInactivityCheck = useTeachingInactivityCheck();
 
   useEffect(() => {
     if (!connected && connectButtonRef.current) {
@@ -69,8 +97,8 @@ function ControlTray({
 
   useEffect(() => {
     document.documentElement.style.setProperty(
-      '--volume',
-      `${Math.max(5, Math.min(inVolume * 200, 8))}px`
+      "--volume",
+      `${Math.max(5, Math.min(inVolume * 200, 8))}px`,
     );
   }, [inVolume]);
 
@@ -78,60 +106,46 @@ function ControlTray({
     const onData = (base64: string) => {
       client.sendRealtimeInput([
         {
-          mimeType: 'audio/pcm;rate=16000',
+          mimeType: "audio/pcm;rate=16000",
           data: base64,
         },
       ]);
     };
     if (connected && !muted && audioRecorder) {
-      audioRecorder.on('data', onData).on('volume', setInVolume).start();
+      audioRecorder.on("data", onData).on("volume", setInVolume).start();
     } else {
       audioRecorder.stop();
     }
     return () => {
-      audioRecorder.off('data', onData).off('volume', setInVolume);
+      audioRecorder.off("data", onData).off("volume", setInVolume);
     };
   }, [connected, client, muted, audioRecorder]);
 
   useEffect(() => {
     const onTurnComplete = () => {
       turnCompleteRef.current = true;
-      
+
       if (connected) {
-        fetch(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }).catch((error) => {
-          console.error('Failed to record conversation turn:', error);
-        });
+        recordConversationTurn.mutate();
       }
     };
 
     const onInterrupted = () => {
       turnCompleteRef.current = true;
-      
+
       if (connected) {
-        fetch(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }).catch((error) => {
-          console.error('Failed to record conversation turn:', error);
-        });
+        recordConversationTurn.mutate();
       }
     };
 
-    client.on('turncomplete', onTurnComplete);
-    client.on('interrupted', onInterrupted);
+    client.on("turncomplete", onTurnComplete);
+    client.on("interrupted", onInterrupted);
 
     return () => {
-      client.off('turncomplete', onTurnComplete);
-      client.off('interrupted', onInterrupted);
+      client.off("turncomplete", onTurnComplete);
+      client.off("interrupted", onInterrupted);
     };
-  }, [client, connected]);
+  }, [client, connected, recordConversationTurn]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -148,9 +162,9 @@ function ControlTray({
       }
 
       if (canvas.width + canvas.height > 0) {
-        const base64 = canvas.toDataURL('image/jpeg', 1.0);
-        const data = base64.slice(base64.indexOf(',') + 1, Infinity);
-        client.sendRealtimeInput([{ mimeType: 'image/jpeg', data }]);
+        const base64 = canvas.toDataURL("image/jpeg", 1.0);
+        const data = base64.slice(base64.indexOf(",") + 1, Infinity);
+        client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
       }
       if (connected) {
         timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
@@ -172,15 +186,12 @@ function ControlTray({
     let sessionStarted = false;
     const checkSessionStart = async () => {
       try {
-        const response = await fetch(`${TEACHING_ASSISTANT_API_URL}/session/info`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.session_active) {
-            sessionStarted = true;
-          }
+        const data = await teachingSessionInfo.mutateAsync();
+        if (data.session_active) {
+          sessionStarted = true;
         }
       } catch (error) {
-        console.error('Failed to check session info:', error);
+        console.error("Failed to check session info:", error);
       }
     };
 
@@ -193,15 +204,12 @@ function ControlTray({
       }
 
       try {
-        const response = await fetch(`${TEACHING_ASSISTANT_API_URL}/inactivity/check`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.prompt && client.status === 'connected') {
-            client.send({ text: data.prompt });
-          }
+        const data = await teachingInactivityCheck.mutateAsync();
+        if (data.prompt && client.status === "connected") {
+          client.send({ text: data.prompt });
         }
       } catch (error) {
-        console.error('Failed to check inactivity:', error);
+        console.error("Failed to check inactivity:", error);
       }
     };
 
@@ -215,7 +223,7 @@ function ControlTray({
       clearTimeout(initialDelay);
       clearInterval(intervalId);
     };
-  }, [connected, client]);
+  }, [connected, client, teachingSessionInfo, teachingInactivityCheck]);
 
   const handleToggleWebcam = async () => {
     await toggleCamera(!cameraEnabled);
@@ -229,33 +237,33 @@ function ControlTray({
     // Set up setupComplete listener BEFORE connecting to avoid race condition
     let setupCompleteReceived = false;
     let setupCompleteResolver: (() => void) | null = null;
-    
+
     const onSetupComplete = () => {
       setupCompleteReceived = true;
       if (setupCompleteResolver) {
         setupCompleteResolver();
         setupCompleteResolver = null;
       }
-      client.off('setupcomplete', onSetupComplete);
+      client.off("setupcomplete", onSetupComplete);
     };
-    client.on('setupcomplete', onSetupComplete);
-    
+    client.on("setupcomplete", onSetupComplete);
+
     await connect();
-    
+
     // Wait for connection to be established
     const waitForConnection = () => {
       return new Promise<void>((resolve) => {
-        if (client.status === 'connected') {
+        if (client.status === "connected") {
           resolve();
           return;
         }
         const checkConnection = () => {
-          if (client.status === 'connected') {
-            client.off('open', checkConnection);
+          if (client.status === "connected") {
+            client.off("open", checkConnection);
             resolve();
           }
         };
-        client.on('open', checkConnection);
+        client.on("open", checkConnection);
       });
     };
 
@@ -267,10 +275,10 @@ function ControlTray({
           resolve();
           return;
         }
-        
+
         // Store resolver for early event handler
         setupCompleteResolver = resolve;
-        
+
         // Timeout fallback: if setupComplete doesn't arrive in 2 seconds, proceed anyway
         setTimeout(() => {
           if (setupCompleteResolver === resolve) {
@@ -284,32 +292,22 @@ function ControlTray({
     try {
       // Wait for connection
       await waitForConnection();
-      
+
       // Wait for audio pipeline to be ready (with timeout fallback)
       await waitForSetupComplete();
-      
+
       // Small delay like variant uses (500ms) to ensure audio pipeline is fully ready
       await new Promise((resolve) => setTimeout(resolve, 500));
-      
-      const response = await fetch(`${TEACHING_ASSISTANT_API_URL}/session/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ user_id: USER_ID }),
-      });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.prompt && client.status === 'connected') {
-          client.send({ text: data.prompt });
-        }
+      const data = await startTeachingSession.mutateAsync();
+      if (data.prompt && client.status === "connected") {
+        client.send({ text: data.prompt });
       }
     } catch (error) {
-      console.error('Failed to get greeting from TeachingAssistant:', error);
+      console.error("Failed to get greeting from TeachingAssistant:", error);
     } finally {
       // Clean up listener if still attached
-      client.off('setupcomplete', onSetupComplete);
+      client.off("setupcomplete", onSetupComplete);
       setupCompleteResolver = null;
     }
   };
@@ -319,65 +317,61 @@ function ControlTray({
 
     try {
       interruptAudio();
-      
+
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      const response = await fetch(`${TEACHING_ASSISTANT_API_URL}/session/end`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ interrupt_audio: true }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.prompt && client.status === 'connected') {
+      const data = await endTeachingSession.mutateAsync();
+      if (data.prompt && client.status === "connected") {
           const goodbyeTurnComplete = { current: false };
           const goodbyeAudioReceived = { current: false };
           let lastAudioTime = 0;
-          
+
           const onAudio = () => {
             goodbyeAudioReceived.current = true;
             lastAudioTime = Date.now();
           };
-          
+
           const onTurnComplete = () => {
             if (goodbyeAudioReceived.current) {
               goodbyeTurnComplete.current = true;
             }
           };
-          
-          client.on('audio', onAudio);
-          client.on('turncomplete', onTurnComplete);
-          
+
+          client.on("audio", onAudio);
+          client.on("turncomplete", onTurnComplete);
+
           client.send({ text: data.prompt }, true);
-          
+
           const maxWaitTime = 30000;
           const startTime = Date.now();
           const audioSilenceTimeout = 5000;
-          
-          while (!goodbyeTurnComplete.current && (Date.now() - startTime) < maxWaitTime) {
+
+          while (
+            !goodbyeTurnComplete.current &&
+            Date.now() - startTime < maxWaitTime
+          ) {
             await new Promise((resolve) => setTimeout(resolve, 100));
-            
+
             if (goodbyeAudioReceived.current && lastAudioTime > 0) {
               const timeSinceLastAudio = Date.now() - lastAudioTime;
-              if (timeSinceLastAudio > audioSilenceTimeout && goodbyeTurnComplete.current) {
+              if (
+                timeSinceLastAudio > audioSilenceTimeout &&
+                goodbyeTurnComplete.current
+              ) {
                 break;
               }
             }
           }
-          
+
           if (goodbyeAudioReceived.current) {
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }
-          
-          client.off('audio', onAudio);
-          client.off('turncomplete', onTurnComplete);
-        }
+
+          client.off("audio", onAudio);
+          client.off("turncomplete", onTurnComplete);
       }
     } catch (error) {
-      console.error('Failed to get goodbye from TeachingAssistant:', error);
+      console.error("Failed to get goodbye from TeachingAssistant:", error);
     }
 
     disconnect();
@@ -385,20 +379,25 @@ function ControlTray({
 
   return (
     <section className="control-tray">
-      <canvas style={{ display: 'none' }} ref={renderCanvasRef} />
+      <canvas style={{ display: "none" }} ref={renderCanvasRef} />
       <nav className="actions-nav">
         {connected && (
           <>
-            <button
-              className={cn('action-button mic-button')}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className={cn("action-button mic-button")}
               onClick={() => setMuted(!muted)}
             >
               {!muted ? (
                 <span className="material-symbols-outlined filled">mic</span>
               ) : (
-                <span className="material-symbols-outlined filled">mic_off</span>
+                <span className="material-symbols-outlined filled">
+                  mic_off
+                </span>
               )}
-            </button>
+            </Button>
 
             <div className="action-button no-action outlined">
               <AudioPulse volume={volume} active={connected} hover={false} />
@@ -427,21 +426,24 @@ function ControlTray({
         {children}
       </nav>
 
-      <div className={cn('connection-container', { connected })}>
+      <div className={cn("connection-container", { connected })}>
         <div className="connection-button-container">
-          <button
+          <Button
             ref={connectButtonRef}
-            className={cn('action-button connect-toggle', { connected })}
+            type="button"
+            size="icon"
+            variant={connected ? "secondary" : "default"}
+            className={cn("action-button connect-toggle", { connected })}
             onClick={connected ? handleDisconnect : handleConnect}
           >
             <span className="material-symbols-outlined filled">
-              {connected ? 'pause' : 'play_arrow'}
+              {connected ? "pause" : "play_arrow"}
             </span>
-          </button>
+          </Button>
         </div>
         <span className="text-indicator">Streaming</span>
       </div>
-      {enableEditingSettings ? <SettingsDialog /> : ''}
+      {enableEditingSettings ? <SettingsDialog /> : ""}
     </section>
   );
 }

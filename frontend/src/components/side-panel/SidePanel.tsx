@@ -14,11 +14,18 @@
  * limitations under the License.
  */
 
-import "./react-select.scss";
 import cn from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { RiSidebarFoldLine, RiSidebarUnfoldLine } from "react-icons/ri";
-import Select from "react-select";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { useLoggerStore } from "../../lib/store-logger";
 import Logger, { LoggerFilterType } from "../logger/Logger";
@@ -38,11 +45,8 @@ export default function SidePanel() {
   const { log, logs } = useLoggerStore();
 
   const [textInput, setTextInput] = useState("");
-  const [selectedOption, setSelectedOption] = useState<{
-    value: string;
-    label: string;
-  } | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [filter, setFilter] = useState<LoggerFilterType>("none");
+  
 
   //scroll the log to the bottom when new logs come in
   useEffect(() => {
@@ -66,11 +70,7 @@ export default function SidePanel() {
 
   const handleSubmit = () => {
     client.send([{ text: textInput }]);
-
     setTextInput("");
-    if (inputRef.current) {
-      inputRef.current.innerText = "";
-    }
   };
 
   return (
@@ -78,43 +78,43 @@ export default function SidePanel() {
       <header className="top">
         <h2>Console</h2>
         {open ? (
-          <button className="opener" onClick={() => setOpen(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="opener"
+            onClick={() => setOpen(false)}
+          >
             <RiSidebarFoldLine color="#b4b8bb" />
-          </button>
+          </Button>
         ) : (
-          <button className="opener" onClick={() => setOpen(true)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="opener"
+            onClick={() => setOpen(true)}
+          >
             <RiSidebarUnfoldLine color="#b4b8bb" />
-          </button>
+          </Button>
         )}
       </header>
       <section className="indicators">
         <Select
-          className="react-select"
-          classNamePrefix="react-select"
-          styles={{
-            control: (baseStyles) => ({
-              ...baseStyles,
-              background: "var(--Neutral-15)",
-              color: "var(--Neutral-90)",
-              minHeight: "33px",
-              maxHeight: "33px",
-              border: 0,
-            }),
-            option: (styles, { isFocused, isSelected }) => ({
-              ...styles,
-              backgroundColor: isFocused
-                ? "var(--Neutral-30)"
-                : isSelected
-                  ? "var(--Neutral-20)"
-                  : undefined,
-            }),
-          }}
-          defaultValue={selectedOption}
-          options={filterOptions}
-          onChange={(e) => {
-            setSelectedOption(e);
-          }}
-        />
+          value={filter}
+          onValueChange={(value) => setFilter(value as LoggerFilterType)}
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Filter logs" />
+          </SelectTrigger>
+          <SelectContent>
+            {filterOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className={cn("streaming-indicator", { connected })}>
           {connected
             ? `🔵${open ? " Streaming" : ""}`
@@ -123,14 +123,14 @@ export default function SidePanel() {
       </section>
       <div className="side-panel-container" ref={loggerRef}>
         <Logger
-          filter={(selectedOption?.value as LoggerFilterType) || "none"}
+          filter={filter}
         />
       </div>
       <div className={cn("input-container", { disabled: !connected })}>
         <div className="input-content">
-          <textarea
-            className="input-area"
-            ref={inputRef}
+          <Textarea
+            className="w-full text-xs bg-transparent border-0 shadow-none resize-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            placeholder="Type something..."
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -140,21 +140,16 @@ export default function SidePanel() {
             }}
             onChange={(e) => setTextInput(e.target.value)}
             value={textInput}
-          ></textarea>
-          <span
-            className={cn("input-content-placeholder", {
-              hidden: textInput.length,
-            })}
-          >
-            Type&nbsp;something...
-          </span>
-
-          <button
+          />
+          <Button
+            type="button"
             className="send-button material-symbols-outlined filled"
+            size="icon"
+            variant="secondary"
             onClick={handleSubmit}
           >
             send
-          </button>
+          </Button>
         </div>
       </div>
     </div>
