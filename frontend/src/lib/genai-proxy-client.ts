@@ -89,18 +89,35 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     this.config = config;
 
     // Connect to backend (use environment variable with fallback for local dev)
-    const tutorWsUrl = import.meta.env.VITE_TUTOR_WS || "ws://localhost:8767";
+    let tutorWsUrl = import.meta.env.VITE_TUTOR_WS || "ws://localhost:8767";
+    // Remove trailing slash if present (WebSocket URLs shouldn't have trailing slashes)
+    tutorWsUrl = tutorWsUrl.replace(/\/$/, '');
+    console.log("Connecting to Tutor WebSocket:", tutorWsUrl);
     this.ws = new WebSocket(tutorWsUrl);
 
+    // Connection timeout (10 seconds)
+    const connectionTimeout = setTimeout(() => {
+      if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+        console.error("WebSocket connection timeout after 10 seconds");
+        this.ws.close();
+        this.ws = null;
+        this._status = "disconnected";
+        this.emit("error", new ErrorEvent("error", { message: "Connection timeout" }));
+      }
+    }, 10000);
+
     this.ws.onopen = () => {
+      clearTimeout(connectionTimeout);
       console.log("Connected to Tutor backend");
       // Send connection request to backend (model is determined by backend)
-      this.ws!.send(
-        JSON.stringify({
-          type: "connect",
-          config,
-        })
-      );
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(
+          JSON.stringify({
+            type: "connect",
+            config,
+          })
+        );
+      }
     };
 
     this.ws.onmessage = (event) => {
@@ -133,14 +150,35 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     };
 
     this.ws.onerror = (error) => {
+      clearTimeout(connectionTimeout);
       console.error("WebSocket error:", error);
+      console.error("WebSocket URL:", tutorWsUrl);
+      console.error("WebSocket readyState:", this.ws?.readyState);
       this._status = "disconnected";
+      // Clean up WebSocket on error
+      if (this.ws) {
+        try {
+          this.ws.close();
+        } catch (e) {
+          // Ignore errors when closing
+        }
+        this.ws = null;
+      }
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
+      clearTimeout(connectionTimeout);
+      console.log("WebSocket closed:", {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+        url: tutorWsUrl
+      });
+      // Clean up WebSocket reference
+      this.ws = null;
       if (this._status !== "disconnected") {
         this._status = "disconnected";
-        this.emit("close", new CloseEvent("close"));
+        this.emit("close", new CloseEvent("close", { reason: event.reason || `Code: ${event.code}` }));
       }
     };
 
@@ -213,8 +251,28 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
       return false;
     }
 
-    this.ws.send(JSON.stringify({ type: "disconnect" }));
-    this.ws.close();
+    // Check WebSocket readyState before attempting operations
+    // WebSocket.OPEN === 1, WebSocket.CONNECTING === 0, WebSocket.CLOSING === 2, WebSocket.CLOSED === 3
+    const readyState = this.ws.readyState;
+    
+    // Only send disconnect message if WebSocket is OPEN
+    if (readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({ type: "disconnect" }));
+      } catch (error) {
+        console.warn("Failed to send disconnect message:", error);
+      }
+    }
+    
+    // Only close if WebSocket is OPEN or CONNECTING
+    if (readyState === WebSocket.OPEN || readyState === WebSocket.CONNECTING) {
+      try {
+        this.ws.close();
+      } catch (error) {
+        console.warn("Failed to close WebSocket:", error);
+      }
+    }
+    
     this.ws = null;
     this._status = "disconnected";
     this.log("client.close", "Disconnected");
@@ -222,7 +280,7 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
   }
 
   sendRealtimeInput(chunks: Array<{ mimeType: string; data: string }>) {
-    if (!this.ws || this._status !== "connected") {
+    if (!this.ws || this._status !== "connected" || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
 
@@ -230,6 +288,11 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     let hasVideo = false;
 
     for (const ch of chunks) {
+      // Check readyState before each send in case connection closes during loop
+      if (this.ws.readyState !== WebSocket.OPEN) {
+        console.warn("WebSocket not OPEN, stopping sendRealtimeInput");
+        break;
+      }
       this.ws.send(
         JSON.stringify({
           type: "realtimeInput",
@@ -260,7 +323,7 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
   }
 
   sendToolResponse(toolResponse: LiveClientToolResponse) {
-    if (!this.ws || this._status !== "connected") {
+    if (!this.ws || this._status !== "connected" || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
 
@@ -279,7 +342,7 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
   }
 
   send(parts: Part | Part[], turnComplete: boolean = true) {
-    if (!this.ws || this._status !== "connected") {
+    if (!this.ws || this._status !== "connected" || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
 

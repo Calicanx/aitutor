@@ -15,7 +15,10 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({ socket, renderCan
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      setIsConnected(false);
+      return;
+    }
 
     console.log('MediaMixerDisplay: Setting up video WebSocket connection');
 
@@ -32,32 +35,48 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({ socket, renderCan
       }
     };
 
-    socket.onopen = () => {
+    const handleOpen = () => {
       console.log('MediaMixerDisplay: Connected to video WebSocket');
       setIsConnected(true);
       setError(null);
     };
 
-    socket.onmessage = (event) => {
+    const handleMessage = (event: MessageEvent) => {
       const frame = event.data;
       const imageUrl = `data:image/jpeg;base64,${frame}`;
       setImageData(imageUrl);
       image.src = imageUrl;
     };
 
-    socket.onerror = (err) => {
+    const handleError = (err: Event) => {
       console.error('MediaMixerDisplay: WebSocket error:', err);
       setError('Failed to connect to MediaMixer video stream. Is it running?');
       setIsConnected(false);
     };
 
-    socket.onclose = () => {
+    const handleClose = () => {
       console.log('MediaMixerDisplay: Disconnected from video WebSocket');
       setIsConnected(false);
     };
 
+    // Set up event handlers
+    socket.addEventListener('open', handleOpen);
+    socket.addEventListener('message', handleMessage);
+    socket.addEventListener('error', handleError);
+    socket.addEventListener('close', handleClose);
+
+    // If socket is already open, set connected state immediately
+    if (socket.readyState === WebSocket.OPEN) {
+      setIsConnected(true);
+      setError(null);
+    }
+
     return () => {
-      console.log('MediaMixerDisplay: Cleaning up video WebSocket');
+      console.log('MediaMixerDisplay: Cleaning up video WebSocket handlers');
+      socket.removeEventListener('open', handleOpen);
+      socket.removeEventListener('message', handleMessage);
+      socket.removeEventListener('error', handleError);
+      socket.removeEventListener('close', handleClose);
     };
   }, [socket, renderCanvasRef]);
 
