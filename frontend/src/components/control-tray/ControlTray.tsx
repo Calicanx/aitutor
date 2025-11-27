@@ -190,36 +190,37 @@ function ControlTray({
       }
     };
 
-    const checkInactivity = async () => {
-      if (!sessionStarted) {
-        await checkSessionStart();
-        if (!sessionStarted) {
-          return;
-        }
-      }
+    // Inactivity check disabled to prevent performance issues
+    // const checkInactivity = async () => {
+    //   if (!sessionStarted) {
+    //     await checkSessionStart();
+    //     if (!sessionStarted) {
+    //       return;
+    //     }
+    //   }
 
-      try {
-        const response = await fetch(`${TEACHING_ASSISTANT_API_URL}/inactivity/check`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.prompt && client.status === 'connected') {
-            client.send({ text: data.prompt });
-          }
-        }
-      } catch (error) {
-        console.error('Failed to check inactivity:', error);
-      }
-    };
+    //   try {
+    //     const response = await fetch(`${TEACHING_ASSISTANT_API_URL}/inactivity/check`);
+    //     if (response.ok) {
+    //       const data = await response.json();
+    //       if (data.prompt && client.status === 'connected') {
+    //         client.send({ text: data.prompt });
+    //       }
+    //     }
+    //   } catch (error) {
+    //     console.error('Failed to check inactivity:', error);
+    //   }
+    // };
 
-    const initialDelay = setTimeout(() => {
-      checkInactivity();
-    }, 2000);
+    // const initialDelay = setTimeout(() => {
+    //   checkInactivity();
+    // }, 2000);
 
-    const intervalId = setInterval(checkInactivity, 5000);
+    // const intervalId = setInterval(checkInactivity, 5000);
 
     return () => {
-      clearTimeout(initialDelay);
-      clearInterval(intervalId);
+      // clearTimeout(initialDelay);
+      // clearInterval(intervalId);
     };
   }, [connected, client]);
 
