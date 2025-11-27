@@ -11,7 +11,6 @@ const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_U
 const USER_ID = 'mongodb_test_user';
 
 export type ControlTrayProps = {
-  socket: WebSocket | null;
   videoRef: RefObject<HTMLVideoElement>;
   renderCanvasRef: RefObject<HTMLCanvasElement>;
   children?: ReactNode;
@@ -19,6 +18,11 @@ export type ControlTrayProps = {
   onVideoStreamChange?: (stream: MediaStream | null) => void;
   onMixerStreamChange?: (stream: MediaStream | null) => void;
   enableEditingSettings?: boolean;
+  // Add camera/screen control props
+  cameraEnabled: boolean;
+  screenEnabled: boolean;
+  onToggleCamera: (enabled: boolean) => void;
+  onToggleScreen: (enabled: boolean) => void;
 };
 
 type MediaStreamButtonProps = {
@@ -43,7 +47,6 @@ const MediaStreamButton = memo(
 );
 
 function ControlTray({
-  socket,
   videoRef,
   renderCanvasRef,
   children,
@@ -51,9 +54,12 @@ function ControlTray({
   onMixerStreamChange = () => {},
   supportsVideo,
   enableEditingSettings,
+  cameraEnabled,
+  screenEnabled,
+  onToggleCamera,
+  onToggleScreen,
 }: ControlTrayProps) {
   const { client, connected, connect, disconnect, interruptAudio, volume } = useLiveAPIContext();
-  const { cameraEnabled, screenEnabled, toggleCamera, toggleScreen } = useMediaCapture({ socket });
   const [activeVideoStream, setActiveVideoStream] = useState<MediaStream | null>(null);
   const [inVolume, setInVolume] = useState(0);
   const [audioRecorder] = useState(() => new AudioRecorder());
@@ -218,11 +224,11 @@ function ControlTray({
   }, [connected, client]);
 
   const handleToggleWebcam = async () => {
-    await toggleCamera(!cameraEnabled);
+    await onToggleCamera(!cameraEnabled);
   };
 
   const handleToggleScreenShare = async () => {
-    await toggleScreen(!screenEnabled);
+    await onToggleScreen(!screenEnabled);
   };
 
   const handleConnect = async () => {

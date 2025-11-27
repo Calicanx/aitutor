@@ -32,16 +32,6 @@ steps:
       - '.'
     id: 'build-teaching-assistant'
 
-  # Build MediaMixer
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/mediamixer-staging'
-      - '-f'
-      - 'services/MediaMixer/Dockerfile'
-      - '.'
-    id: 'build-mediamixer'
 
   # Build Tutor Service
   - name: 'gcr.io/cloud-builders/docker'
@@ -69,14 +59,10 @@ steps:
       - --build-arg
       - VITE_TEACHING_ASSISTANT_API_URL=${_TEACHING_ASSISTANT_API_URL}
       - --build-arg
-      - VITE_MEDIAMIXER_COMMAND_WS=${_MEDIAMIXER_COMMAND_WS}
-      - --build-arg
-      - VITE_MEDIAMIXER_VIDEO_WS=${_MEDIAMIXER_VIDEO_WS}
-      - --build-arg
       - VITE_TUTOR_WS=${_TUTOR_WS}
       - '.'
     id: 'build-frontend'
-    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant', 'build-mediamixer', 'build-tutor']
+    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant', 'build-tutor']
 
   # Push all images
   - name: 'gcr.io/cloud-builders/docker'
@@ -93,11 +79,6 @@ steps:
     args: ['push', 'gcr.io/$PROJECT_ID/teaching-assistant-staging']
     id: 'push-teaching-assistant'
     waitFor: ['build-teaching-assistant']
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/mediamixer-staging']
-    id: 'push-mediamixer'
-    waitFor: ['build-mediamixer']
 
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/tutor-staging']
@@ -172,35 +153,6 @@ steps:
     id: 'deploy-teaching-assistant'
     waitFor: ['push-teaching-assistant']
 
-  # Deploy MediaMixer to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'mediamixer-staging'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/mediamixer-staging'
-      - '--region'
-      - 'us-central1'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--port'
-      - '8080'
-      - '--timeout'
-      - '3600'
-      - '--cpu'
-      - '2'
-      - '--memory'
-      - '2Gi'
-      - '--min-instances'
-      - '1'
-      - '--max-instances'
-      - '10'
-    id: 'deploy-mediamixer'
-    waitFor: ['push-mediamixer']
-
   # Deploy Tutor Service to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -251,7 +203,6 @@ images:
   - 'gcr.io/$PROJECT_ID/dash-api-staging'
   - 'gcr.io/$PROJECT_ID/sherlocked-api-staging'
   - 'gcr.io/$PROJECT_ID/teaching-assistant-staging'
-  - 'gcr.io/$PROJECT_ID/mediamixer-staging'
   - 'gcr.io/$PROJECT_ID/tutor-staging'
   - 'gcr.io/$PROJECT_ID/tutor-frontend-staging'
 
@@ -264,8 +215,6 @@ substitutions:
   _DASH_API_URL: 'REPLACE_IN_COMMAND'
   _SHERLOCKED_API_URL: 'REPLACE_IN_COMMAND'
   _TEACHING_ASSISTANT_API_URL: 'REPLACE_IN_COMMAND'
-  _MEDIAMIXER_COMMAND_WS: 'REPLACE_IN_COMMAND'
-  _MEDIAMIXER_VIDEO_WS: 'REPLACE_IN_COMMAND'
   _TUTOR_WS: 'REPLACE_IN_COMMAND'
 
 options:
