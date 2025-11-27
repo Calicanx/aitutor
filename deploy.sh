@@ -61,7 +61,6 @@ if [ "$ENV" = "staging" ]; then
     DASH_API_URL=$(gcloud run services describe dash-api-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     SHERLOCKED_API_URL=$(gcloud run services describe sherlocked-api-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     TEACHING_ASSISTANT_API_URL=$(gcloud run services describe teaching-assistant-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
-    MEDIAMIXER_URL=$(gcloud run services describe mediamixer-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     TUTOR_URL=$(gcloud run services describe tutor-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     
     # Use placeholders if services don't exist yet (first deployment)
@@ -76,10 +75,6 @@ if [ "$ENV" = "staging" ]; then
     if [ -z "$TEACHING_ASSISTANT_API_URL" ]; then
         echo "⚠️  TeachingAssistant API not found. Using existing URL"
         TEACHING_ASSISTANT_API_URL="https://teaching-assistant-staging-utmfhquz6a-uc.a.run.app"
-    fi
-    if [ -z "$MEDIAMIXER_URL" ]; then
-        echo "⚠️  MediaMixer not found. Using existing URL"
-        MEDIAMIXER_URL="https://mediamixer-staging-utmfhquz6a-uc.a.run.app"
     fi
     if [ -z "$TUTOR_URL" ]; then
         echo "⚠️  Tutor service not found. Using existing URL"
@@ -99,14 +94,12 @@ else
 fi
 
 # Convert HTTPS to WSS for WebSocket URLs
-MEDIAMIXER_WS_URL=$(echo $MEDIAMIXER_URL | sed 's/https/wss/')
 TUTOR_WS_URL=$(echo $TUTOR_URL | sed 's/https/wss/')
 
 echo "🔗 Using URLs:"
 echo "  DASH API: $DASH_API_URL"
 echo "  SherlockED: $SHERLOCKED_API_URL"
 echo "  TeachingAssistant: $TEACHING_ASSISTANT_API_URL"
-echo "  MediaMixer: $MEDIAMIXER_URL"
 echo "  Tutor: $TUTOR_URL"
 echo ""
 
@@ -114,7 +107,7 @@ echo ""
 echo "📤 Submitting Cloud Build job..."
 gcloud builds submit \
   --config=$CONFIG_FILE \
-  --substitutions=_MONGODB_URI="$MONGODB_URI",_MONGODB_DB_NAME="$MONGODB_DB_NAME",_OPENROUTER_API_KEY="$OPENROUTER_API_KEY",_GEMINI_API_KEY="$GEMINI_API_KEY",_GEMINI_MODEL="$GEMINI_MODEL",_DASH_API_URL="$DASH_API_URL",_SHERLOCKED_API_URL="$SHERLOCKED_API_URL",_TEACHING_ASSISTANT_API_URL="$TEACHING_ASSISTANT_API_URL",_MEDIAMIXER_COMMAND_WS="${MEDIAMIXER_WS_URL}/command",_MEDIAMIXER_VIDEO_WS="${MEDIAMIXER_WS_URL}/video",_TUTOR_WS="$TUTOR_WS_URL" \
+  --substitutions=_MONGODB_URI="$MONGODB_URI",_MONGODB_DB_NAME="$MONGODB_DB_NAME",_OPENROUTER_API_KEY="$OPENROUTER_API_KEY",_GEMINI_API_KEY="$GEMINI_API_KEY",_GEMINI_MODEL="$GEMINI_MODEL",_DASH_API_URL="$DASH_API_URL",_SHERLOCKED_API_URL="$SHERLOCKED_API_URL",_TEACHING_ASSISTANT_API_URL="$TEACHING_ASSISTANT_API_URL",_TUTOR_WS="$TUTOR_WS_URL" \
   .
 
 # Get actual deployed URLs
@@ -124,12 +117,10 @@ echo "🔍 Retrieving service URLs..."
 DASH_URL=$(gcloud run services describe dash-api$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 SHERLOCKED_URL=$(gcloud run services describe sherlocked-api$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 TEACHING_ASSISTANT_URL=$(gcloud run services describe teaching-assistant$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
-MEDIAMIXER_URL=$(gcloud run services describe mediamixer$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 TUTOR_URL=$(gcloud run services describe tutor$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 FRONTEND_URL=$(gcloud run services describe tutor-frontend$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 
 # Convert to WSS
-MEDIAMIXER_WS_URL=$(echo $MEDIAMIXER_URL | sed 's/https/wss/')
 TUTOR_WS_URL=$(echo $TUTOR_URL | sed 's/https/wss/')
 
 echo ""
@@ -140,12 +131,9 @@ echo "  🌐 Frontend:           $FRONTEND_URL"
 echo "  🔧 DASH API:           $DASH_URL"
 echo "  🕵️  SherlockED:         $SHERLOCKED_URL"
 echo "  👨‍🏫 TeachingAssistant:  $TEACHING_ASSISTANT_URL"
-echo "  📹 MediaMixer:         $MEDIAMIXER_URL"
 echo "  🎓 Tutor Service:      $TUTOR_URL"
 echo ""
 echo "🔗 WebSocket URLs:"
-echo "  MediaMixer Command: ${MEDIAMIXER_WS_URL}/command"
-echo "  MediaMixer Video:   ${MEDIAMIXER_WS_URL}/video"
 echo "  Tutor:              $TUTOR_WS_URL"
 echo ""
 
@@ -157,7 +145,6 @@ if [ "$ENV" = "staging" ]; then
     echo "   DASH_API_URL=\"$DASH_URL\""
     echo "   SHERLOCKED_API_URL=\"$SHERLOCKED_URL\""
     echo "   TEACHING_ASSISTANT_API_URL=\"$TEACHING_ASSISTANT_URL\""
-    echo "   MEDIAMIXER_URL=\"$MEDIAMIXER_URL\""
     echo "   TUTOR_URL=\"$TUTOR_URL\""
 fi
 
