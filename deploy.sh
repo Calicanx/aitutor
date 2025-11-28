@@ -52,8 +52,9 @@ MONGODB_DB_NAME=${MONGODB_DB_NAME:-"ai_tutor"}
 # Set environment-specific variables
 if [ "$ENV" = "staging" ]; then
     echo "📦 Deploying STAGING environment..."
-    CONFIG_FILE="cloudbuild-staging.yaml"
+    CONFIG_FILE="cloudbuild.yaml"
     SERVICE_SUFFIX="-staging"
+    ENV_SUFFIX_SUB="-staging"
     
     # Try to retrieve existing service URLs, or use placeholders for first deployment
     echo "🔍 Retrieving existing service URLs (if any)..."
@@ -82,15 +83,35 @@ if [ "$ENV" = "staging" ]; then
     fi
 else
     echo "📦 Deploying PRODUCTION environment..."
-    CONFIG_FILE="cloudbuild-staging.yaml"  # Use same config for now
+    CONFIG_FILE="cloudbuild.yaml"
     SERVICE_SUFFIX=""
+    ENV_SUFFIX_SUB=""
     
-    # Production URLs (update these after first deployment)
-    DASH_API_URL="https://dash-api-PLACEHOLDER.us-central1.run.app"
-    SHERLOCKED_API_URL="https://sherlocked-api-PLACEHOLDER.us-central1.run.app"
-    TEACHING_ASSISTANT_API_URL="https://teaching-assistant-PLACEHOLDER.us-central1.run.app"
-    MEDIAMIXER_URL="https://mediamixer-PLACEHOLDER.us-central1.run.app"
-    TUTOR_URL="https://tutor-PLACEHOLDER.us-central1.run.app"
+    # Try to retrieve existing service URLs, or use placeholders for first deployment
+    echo "🔍 Retrieving existing service URLs (if any)..."
+    
+    DASH_API_URL=$(gcloud run services describe dash-api --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
+    SHERLOCKED_API_URL=$(gcloud run services describe sherlocked-api --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
+    TEACHING_ASSISTANT_API_URL=$(gcloud run services describe teaching-assistant --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
+    TUTOR_URL=$(gcloud run services describe tutor --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
+    
+    # Use placeholders if services don't exist yet (first deployment)
+    if [ -z "$DASH_API_URL" ]; then
+        echo "⚠️  DASH API not found. Will be created on first deployment"
+        DASH_API_URL="https://dash-api-PLACEHOLDER.us-central1.run.app"
+    fi
+    if [ -z "$SHERLOCKED_API_URL" ]; then
+        echo "⚠️  SherlockED API not found. Will be created on first deployment"
+        SHERLOCKED_API_URL="https://sherlocked-api-PLACEHOLDER.us-central1.run.app"
+    fi
+    if [ -z "$TEACHING_ASSISTANT_API_URL" ]; then
+        echo "⚠️  TeachingAssistant API not found. Will be created on first deployment"
+        TEACHING_ASSISTANT_API_URL="https://teaching-assistant-PLACEHOLDER.us-central1.run.app"
+    fi
+    if [ -z "$TUTOR_URL" ]; then
+        echo "⚠️  Tutor service not found. Will be created on first deployment"
+        TUTOR_URL="https://tutor-PLACEHOLDER.us-central1.run.app"
+    fi
 fi
 
 # Convert HTTPS to WSS for WebSocket URLs
@@ -107,7 +128,7 @@ echo ""
 echo "📤 Submitting Cloud Build job..."
 gcloud builds submit \
   --config=$CONFIG_FILE \
-  --substitutions=_MONGODB_URI="$MONGODB_URI",_MONGODB_DB_NAME="$MONGODB_DB_NAME",_OPENROUTER_API_KEY="$OPENROUTER_API_KEY",_GEMINI_API_KEY="$GEMINI_API_KEY",_GEMINI_MODEL="$GEMINI_MODEL",_DASH_API_URL="$DASH_API_URL",_SHERLOCKED_API_URL="$SHERLOCKED_API_URL",_TEACHING_ASSISTANT_API_URL="$TEACHING_ASSISTANT_API_URL",_TUTOR_WS="$TUTOR_WS_URL" \
+  --substitutions=_ENV_SUFFIX="$ENV_SUFFIX_SUB",_MONGODB_URI="$MONGODB_URI",_MONGODB_DB_NAME="$MONGODB_DB_NAME",_OPENROUTER_API_KEY="$OPENROUTER_API_KEY",_GEMINI_API_KEY="$GEMINI_API_KEY",_GEMINI_MODEL="$GEMINI_MODEL",_DASH_API_URL="$DASH_API_URL",_SHERLOCKED_API_URL="$SHERLOCKED_API_URL",_TEACHING_ASSISTANT_API_URL="$TEACHING_ASSISTANT_API_URL",_TUTOR_WS="$TUTOR_WS_URL" \
   .
 
 # Get actual deployed URLs
@@ -141,7 +162,16 @@ if [ "$ENV" = "staging" ]; then
     echo "💡 Note: If this is your first staging deployment, update this script with the actual URLs above"
     echo "    and redeploy to use correct frontend URLs."
     echo ""
-    echo "   Update these variables in deploy.sh:"
+    echo "   Update these variables in deploy.sh (staging section):"
+    echo "   DASH_API_URL=\"$DASH_URL\""
+    echo "   SHERLOCKED_API_URL=\"$SHERLOCKED_URL\""
+    echo "   TEACHING_ASSISTANT_API_URL=\"$TEACHING_ASSISTANT_URL\""
+    echo "   TUTOR_URL=\"$TUTOR_URL\""
+else
+    echo "💡 Note: If this is your first production deployment, update this script with the actual URLs above"
+    echo "    and redeploy to use correct frontend URLs."
+    echo ""
+    echo "   Update these variables in deploy.sh (production section):"
     echo "   DASH_API_URL=\"$DASH_URL\""
     echo "   SHERLOCKED_API_URL=\"$SHERLOCKED_URL\""
     echo "   TEACHING_ASSISTANT_API_URL=\"$TEACHING_ASSISTANT_URL\""
