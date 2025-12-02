@@ -66,6 +66,7 @@ function FloatingControlPanel({
   const [muted, setMuted] = useState(false);
   const [activeVideoStream] = useState<MediaStream | null>(null);
   const [sharedMediaOpen, setSharedMediaOpen] = useState(false);
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [sessionTime, setSessionTime] = useState(0);
@@ -271,9 +272,18 @@ function FloatingControlPanel({
 
   const toggleSharedMedia = useCallback(() => {
     if (!sharedMediaOpen) {
+      // Opening
       updatePopoverPosition();
+      setSharedMediaOpen(true);
+      setIsAnimatingOut(false);
+    } else {
+      // Closing
+      setIsAnimatingOut(true);
+      setTimeout(() => {
+        setSharedMediaOpen(false);
+        setIsAnimatingOut(false);
+      }, 200); // Match CSS animation duration
     }
-    setSharedMediaOpen(!sharedMediaOpen);
   }, [sharedMediaOpen, updatePopoverPosition]);
 
   const handleCollapse = useCallback(() => {
@@ -835,10 +845,11 @@ function FloatingControlPanel({
         {sharedMediaOpen && (
           <div
             className={cn(
-              "absolute w-[360px] h-auto flex flex-col bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden z-[1001] animate-in fade-in duration-200",
+              "absolute w-[360px] h-auto flex flex-col bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden z-[1001]",
+              isAnimatingOut ? "animate-popover-out" : "animate-popover-in",
               popoverPosition === "right"
-                ? "left-full ml-4 slide-in-from-left-4"
-                : "right-full mr-4 slide-in-from-right-4",
+                ? "left-full ml-4"
+                : "right-full mr-4",
               verticalAlign === "bottom" ? "bottom-0" : "top-0",
             )}
           >
