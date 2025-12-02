@@ -95,7 +95,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     useEffect(() => {
         if (onSkillChange) {
             // Mock variable as requested
-            const mockSkill = "decimals_intro";
+            const mockSkill = "counting_100";
             onSkillChange(mockSkill);
         }
     }, [onSkillChange]);

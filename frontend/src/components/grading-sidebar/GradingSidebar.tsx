@@ -181,9 +181,11 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                             {Object.entries(skillStates).map(([skillName, stats]) => {
                                 const strength = Math.max(-2, Math.min(2, stats.memory_strength ?? 0));
                                 const normalizedStrength = ((strength + 2) / 4) * 100; // 0-100%
+                                const isPracticed = stats.practice_count > 0;
 
                                 // Determine strength level for color
                                 const getStrengthColor = () => {
+                                    if (!isPracticed) return "gray";
                                     if (strength >= 1.5) return "emerald";
                                     if (strength >= 0.5) return "green";
                                     if (strength >= -0.5) return "yellow";
@@ -205,19 +207,24 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                     >
                                         <div className={cn(
                                             "rounded-xl border transition-all duration-200",
-                                            "bg-white/50 dark:bg-neutral-800/50",
+                                            isPracticed ? "bg-white/50 dark:bg-neutral-800/50" : "bg-gray-100/50 dark:bg-neutral-900/50",
                                             "border-gray-200/50 dark:border-neutral-700/50",
-                                            "hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/50",
-                                            "backdrop-blur-sm"
+                                            isPracticed && "hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/50",
+                                            "backdrop-blur-sm",
+                                            !isPracticed && "opacity-60"
                                         )}>
                                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:hidden cursor-pointer group">
                                                 <div className="flex flex-col gap-2 w-full">
                                                     <div className="flex items-center justify-between w-full">
-                                                        <span className="font-semibold text-base text-gray-900 dark:text-white text-left">
+                                                        <span className={cn(
+                                                            "font-semibold text-base text-left",
+                                                            isPracticed ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-500"
+                                                        )}>
                                                             {formatSkillName(skillName)}
                                                         </span>
                                                         <div className={cn(
                                                             "px-2.5 py-0.5 rounded-full text-xs font-medium",
+                                                            strengthColor === "gray" && "bg-gray-200 dark:bg-gray-800/50 text-gray-600 dark:text-gray-500",
                                                             strengthColor === "emerald" && "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
                                                             strengthColor === "green" && "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400",
                                                             strengthColor === "yellow" && "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400",
@@ -233,6 +240,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                         <div
                                                             className={cn(
                                                                 "h-full transition-all duration-300 rounded-full",
+                                                                strengthColor === "gray" && "bg-gray-400 dark:bg-gray-600",
                                                                 strengthColor === "emerald" && "bg-gradient-to-r from-emerald-500 to-emerald-400",
                                                                 strengthColor === "green" && "bg-gradient-to-r from-green-500 to-green-400",
                                                                 strengthColor === "yellow" && "bg-gradient-to-r from-yellow-500 to-yellow-400",
@@ -248,29 +256,63 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                 <div className="px-4 pb-4 pt-2">
                                                     <div className="grid grid-cols-2 gap-3">
                                                         {/* Accuracy Card */}
-                                                        <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-900/20 dark:to-purple-800/10 rounded-lg p-3 border border-purple-200/50 dark:border-purple-800/30">
+                                                        <div className={cn(
+                                                            "rounded-lg p-3 border",
+                                                            isPracticed
+                                                                ? "bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-900/20 dark:to-purple-800/10 border-purple-200/50 dark:border-purple-800/30"
+                                                                : "bg-gray-100 dark:bg-gray-800/30 border-gray-300/50 dark:border-gray-700/50"
+                                                        )}>
                                                             <div className="flex items-center gap-2 mb-2">
-                                                                <Target className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                                                                <span className="text-xs font-medium text-purple-900 dark:text-purple-300">Accuracy</span>
+                                                                <Target className={cn(
+                                                                    "w-3.5 h-3.5",
+                                                                    isPracticed ? "text-purple-600 dark:text-purple-400" : "text-gray-500 dark:text-gray-600"
+                                                                )} />
+                                                                <span className={cn(
+                                                                    "text-xs font-medium",
+                                                                    isPracticed ? "text-purple-900 dark:text-purple-300" : "text-gray-600 dark:text-gray-500"
+                                                                )}>Accuracy</span>
                                                             </div>
-                                                            <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                                                            <div className={cn(
+                                                                "text-2xl font-bold",
+                                                                isPracticed ? "text-purple-700 dark:text-purple-400" : "text-gray-600 dark:text-gray-500"
+                                                            )}>
                                                                 {accuracyPercent}%
                                                             </div>
-                                                            <div className="text-xs text-purple-600/70 dark:text-purple-400/70 mt-1">
+                                                            <div className={cn(
+                                                                "text-xs mt-1",
+                                                                isPracticed ? "text-purple-600/70 dark:text-purple-400/70" : "text-gray-500 dark:text-gray-600"
+                                                            )}>
                                                                 {stats.correct_count}/{stats.practice_count} correct
                                                             </div>
                                                         </div>
 
                                                         {/* Practice Count Card */}
-                                                        <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-800/10 rounded-lg p-3 border border-blue-200/50 dark:border-blue-800/30">
+                                                        <div className={cn(
+                                                            "rounded-lg p-3 border",
+                                                            isPracticed
+                                                                ? "bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-800/10 border-blue-200/50 dark:border-blue-800/30"
+                                                                : "bg-gray-100 dark:bg-gray-800/30 border-gray-300/50 dark:border-gray-700/50"
+                                                        )}>
                                                             <div className="flex items-center gap-2 mb-2">
-                                                                <TrendingUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                                                                <span className="text-xs font-medium text-blue-900 dark:text-blue-300">Practice</span>
+                                                                <TrendingUp className={cn(
+                                                                    "w-3.5 h-3.5",
+                                                                    isPracticed ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-600"
+                                                                )} />
+                                                                <span className={cn(
+                                                                    "text-xs font-medium",
+                                                                    isPracticed ? "text-blue-900 dark:text-blue-300" : "text-gray-600 dark:text-gray-500"
+                                                                )}>Practice</span>
                                                             </div>
-                                                            <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                                                            <div className={cn(
+                                                                "text-2xl font-bold",
+                                                                isPracticed ? "text-blue-700 dark:text-blue-400" : "text-gray-600 dark:text-gray-500"
+                                                            )}>
                                                                 {stats.practice_count}
                                                             </div>
-                                                            <div className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-1">
+                                                            <div className={cn(
+                                                                "text-xs mt-1",
+                                                                isPracticed ? "text-blue-600/70 dark:text-blue-400/70" : "text-gray-500 dark:text-gray-600"
+                                                            )}>
                                                                 total attempts
                                                             </div>
                                                         </div>
@@ -278,7 +320,10 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
 
                                                     {/* Last Practice */}
                                                     <div className="mt-3 bg-gray-50 dark:bg-neutral-800/50 rounded-lg p-3 border border-gray-200/50 dark:border-neutral-700/50">
-                                                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                        <div className={cn(
+                                                            "flex items-center gap-2 text-xs",
+                                                            isPracticed ? "text-gray-600 dark:text-gray-400" : "text-gray-500 dark:text-gray-600"
+                                                        )}>
                                                             <Clock className="w-3.5 h-3.5" />
                                                             <span className="font-medium">Last practiced:</span>
                                                             <span className="ml-auto">{formatTime(stats.last_practice_time)}</span>
