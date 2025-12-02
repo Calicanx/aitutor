@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import cn from "classnames";
-import { GraduationCap, ChevronRight, ChevronLeft } from "lucide-react";
+import { GraduationCap, ChevronRight, ChevronLeft, TrendingUp, Clock, Target } from "lucide-react";
 import data from "../../../data.json";
 import { Button } from "@/components/ui/button";
 import {
@@ -175,52 +175,118 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                 {open ? (
                     <div
                         ref={scrollContainerRef}
-                        className="h-full overflow-y-auto overflow-x-hidden animate-in fade-in duration-500"
+                        className="h-full overflow-y-auto overflow-x-hidden animate-in fade-in duration-500 px-4 py-4"
                     >
-                        <Accordion type="single" collapsible className="w-full">
+                        <Accordion type="single" collapsible className="w-full space-y-3">
                             {Object.entries(skillStates).map(([skillName, stats]) => {
                                 const strength = Math.max(-2, Math.min(2, stats.memory_strength ?? 0));
-                                const hue = (strength + 2) * 30; // Maps -2..2 to 0..120 (Red..Green)
+                                const normalizedStrength = ((strength + 2) / 4) * 100; // 0-100%
+
+                                // Determine strength level for color
+                                const getStrengthColor = () => {
+                                    if (strength >= 1.5) return "emerald";
+                                    if (strength >= 0.5) return "green";
+                                    if (strength >= -0.5) return "yellow";
+                                    if (strength >= -1.5) return "orange";
+                                    return "red";
+                                };
+
+                                const strengthColor = getStrengthColor();
+                                const accuracyPercent = stats.practice_count > 0
+                                    ? Math.round((stats.correct_count / stats.practice_count) * 100)
+                                    : 0;
 
                                 return (
                                     <AccordionItem
                                         key={skillName}
                                         value={skillName}
                                         id={`skill-${skillName}`}
-                                        style={{ "--grade-hue": hue } as React.CSSProperties}
-                                        className={cn(
-                                            "border-b border-gray-200 dark:border-white/10 px-6",
-                                            "bg-[hsl(var(--grade-hue),85%,90%)] dark:bg-[hsl(var(--grade-hue),85%,20%,0.3)]",
-                                            "text-[hsl(var(--grade-hue),90%,20%)] dark:text-[hsl(var(--grade-hue),90%,90%)]"
-                                        )}
+                                        className="border-none"
                                     >
-                                        <AccordionTrigger className="hover:no-underline py-4 [&>svg]:hidden cursor-pointer">
-                                            <span className="font-semibold text-lg text-left">
-                                                {formatSkillName(skillName)}
-                                            </span>
-                                        </AccordionTrigger>
-                                        <AccordionContent>
-                                            <div className="flex flex-col gap-2 text-sm opacity-90 pb-2">
-                                                <div className="flex justify-between">
-                                                    <span>Correctness</span>
-                                                    <span className="font-medium">
-                                                        {stats.correct_count}/{stats.practice_count}
-                                                    </span>
+                                        <div className={cn(
+                                            "rounded-xl border transition-all duration-200",
+                                            "bg-white/50 dark:bg-neutral-800/50",
+                                            "border-gray-200/50 dark:border-neutral-700/50",
+                                            "hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/50",
+                                            "backdrop-blur-sm"
+                                        )}>
+                                            <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:hidden cursor-pointer group">
+                                                <div className="flex flex-col gap-2 w-full">
+                                                    <div className="flex items-center justify-between w-full">
+                                                        <span className="font-semibold text-base text-gray-900 dark:text-white text-left">
+                                                            {formatSkillName(skillName)}
+                                                        </span>
+                                                        <div className={cn(
+                                                            "px-2.5 py-0.5 rounded-full text-xs font-medium",
+                                                            strengthColor === "emerald" && "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
+                                                            strengthColor === "green" && "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400",
+                                                            strengthColor === "yellow" && "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400",
+                                                            strengthColor === "orange" && "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400",
+                                                            strengthColor === "red" && "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                                        )}>
+                                                            {strength.toFixed(1)}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Progress bar */}
+                                                    <div className="w-full bg-gray-200 dark:bg-neutral-700 rounded-full h-1.5 overflow-hidden">
+                                                        <div
+                                                            className={cn(
+                                                                "h-full transition-all duration-300 rounded-full",
+                                                                strengthColor === "emerald" && "bg-gradient-to-r from-emerald-500 to-emerald-400",
+                                                                strengthColor === "green" && "bg-gradient-to-r from-green-500 to-green-400",
+                                                                strengthColor === "yellow" && "bg-gradient-to-r from-yellow-500 to-yellow-400",
+                                                                strengthColor === "orange" && "bg-gradient-to-r from-orange-500 to-orange-400",
+                                                                strengthColor === "red" && "bg-gradient-to-r from-red-500 to-red-400"
+                                                            )}
+                                                            style={{ width: `${normalizedStrength}%` }}
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between">
-                                                    <span>Last Practice</span>
-                                                    <span className="font-medium">
-                                                        {formatTime(stats.last_practice_time)}
-                                                    </span>
+                                            </AccordionTrigger>
+                                            <AccordionContent>
+                                                <div className="px-4 pb-4 pt-2">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {/* Accuracy Card */}
+                                                        <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-900/20 dark:to-purple-800/10 rounded-lg p-3 border border-purple-200/50 dark:border-purple-800/30">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <Target className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                                                                <span className="text-xs font-medium text-purple-900 dark:text-purple-300">Accuracy</span>
+                                                            </div>
+                                                            <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                                                                {accuracyPercent}%
+                                                            </div>
+                                                            <div className="text-xs text-purple-600/70 dark:text-purple-400/70 mt-1">
+                                                                {stats.correct_count}/{stats.practice_count} correct
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Practice Count Card */}
+                                                        <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-800/10 rounded-lg p-3 border border-blue-200/50 dark:border-blue-800/30">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <TrendingUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                                                <span className="text-xs font-medium text-blue-900 dark:text-blue-300">Practice</span>
+                                                            </div>
+                                                            <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                                                                {stats.practice_count}
+                                                            </div>
+                                                            <div className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-1">
+                                                                total attempts
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Last Practice */}
+                                                    <div className="mt-3 bg-gray-50 dark:bg-neutral-800/50 rounded-lg p-3 border border-gray-200/50 dark:border-neutral-700/50">
+                                                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                            <Clock className="w-3.5 h-3.5" />
+                                                            <span className="font-medium">Last practiced:</span>
+                                                            <span className="ml-auto">{formatTime(stats.last_practice_time)}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between">
-                                                    <span>Memory Strength</span>
-                                                    <span className="font-medium">
-                                                        {stats.memory_strength?.toFixed(2) ?? "N/A"}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </AccordionContent>
+                                            </AccordionContent>
+                                        </div>
                                     </AccordionItem>
                                 );
                             })}
