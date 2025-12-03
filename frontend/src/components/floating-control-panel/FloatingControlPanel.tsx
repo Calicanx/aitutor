@@ -374,20 +374,20 @@ function FloatingControlPanel({
   const panelClasses = useMemo(
     () =>
       cn(
-        "fixed z-[1000] bg-white/90 dark:bg-neutral-900/90 backdrop-blur-xl border border-neutral-200 dark:border-white/10 shadow-2xl",
+        "fixed z-[1000] bg-white border-[3px] md:border-[4px] border-black rounded-xl md:rounded-2xl",
         // GPU acceleration hints
         "will-change-transform transform-gpu",
         // Only apply transitions when NOT dragging to prevent layout thrashing
         !isDragging &&
-        "transition-all duration-300 cubic-bezier(0.16, 1, 0.3, 1)",
+        "transition-all duration-200 ease-out",
         isCollapsed
-          ? "w-[64px] rounded-full py-4 px-2"
-          : "w-[340px] rounded-3xl p-5",
+          ? "w-[60px] md:w-[70px] py-3 md:py-4 px-1.5 md:px-2 shadow-[4px_4px_0_0_rgba(0,0,0,1)] md:shadow-[6px_6px_0_0_rgba(0,0,0,1)]"
+          : "w-[280px] md:w-[320px] p-4 md:p-5 shadow-[6px_6px_0_0_rgba(0,0,0,1)] md:shadow-[8px_8px_0_0_rgba(0,0,0,1)]",
         // Ensure origin is top-left for controlled positioning
         "top-0 left-0",
         // Hover effect
         !isDragging &&
-        "hover:border-neutral-300 dark:hover:border-white/20 hover:shadow-3xl",
+        "hover:shadow-[8px_8px_0_0_rgba(0,0,0,1)] md:hover:shadow-[10px_10px_0_0_rgba(0,0,0,1)]",
       ),
     [isCollapsed, isDragging],
   );
@@ -420,30 +420,30 @@ function FloatingControlPanel({
           )}
         >
           {!isCollapsed && (
-            <div className="flex items-center gap-2.5">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <span className="material-symbols-outlined text-lg text-blue-500 dark:text-blue-400">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 border-[3px] border-black bg-[#FFE500]">
+                <span className="material-symbols-outlined text-xl text-black font-black">
                   smart_toy
                 </span>
               </div>
               <div>
-                <div className="font-semibold text-sm text-neutral-900 dark:text-white leading-none mb-0.5">
-                  AI Tutor
+                <div className="font-black text-sm text-black leading-none mb-1 uppercase">
+                  AI TUTOR
                 </div>
-                <div className="text-[10px] text-neutral-500 dark:text-neutral-400 font-medium uppercase tracking-wider">
-                  Control Center
+                <div className="text-[9px] text-black font-bold uppercase tracking-wider bg-[#00F0FF] px-2 py-0.5 border-2 border-black inline-block">
+                  CONTROL CENTER
                 </div>
               </div>
             </div>
           )}
           <button
             onClick={handleCollapse}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
+            className="w-8 h-8 flex items-center justify-center border-[3px] border-black bg-white hover:bg-[#ADFF2F] text-black hover:translate-x-0.5 hover:translate-y-0.5 transition-all duration-100"
           >
             {isCollapsed ? (
-              <ChevronDown className="w-5 h-5" />
+              <ChevronDown className="w-5 h-5 font-black" />
             ) : (
-              <ChevronUp className="w-5 h-5" />
+              <ChevronUp className="w-5 h-5 font-black" />
             )}
           </button>
         </div>
@@ -453,49 +453,49 @@ function FloatingControlPanel({
           <div className="flex flex-col items-center gap-3">
             <button
               onClick={handleCollapse}
-              className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-white/5 hover:bg-neutral-200 dark:hover:bg-white/10 flex items-center justify-center text-neutral-900 dark:text-white transition-colors"
+              className="w-12 h-12 border-[3px] border-black bg-white hover:bg-[#FFE500] flex items-center justify-center text-black transition-all hover:translate-x-1 hover:translate-y-1 duration-100 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none"
               title="Expand"
             >
-              <Home className="w-5 h-5" />
+              <Home className="w-6 h-6 font-bold" />
             </button>
 
             {/* Start/End Session Button */}
             <button
               onClick={handleConnect}
               className={cn(
-                "w-12 h-12 rounded-full flex items-center justify-center transition-all transform active:scale-95 shadow-lg relative group",
+                "w-14 h-14 border-[4px] border-black flex items-center justify-center transition-all transform active:translate-x-2 active:translate-y-2 relative group font-black",
                 connected
-                  ? "bg-red-500 hover:bg-red-600 text-white shadow-red-500/30"
-                  : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/30",
+                  ? "bg-[#FF006E] hover:bg-[#FF006E] text-white shadow-[6px_6px_0_0_rgba(0,0,0,1)] hover:shadow-[8px_8px_0_0_rgba(0,0,0,1)]"
+                  : "bg-[#00F0FF] hover:bg-[#00F0FF] text-black shadow-[6px_6px_0_0_rgba(0,0,0,1)] hover:shadow-[8px_8px_0_0_rgba(0,0,0,1)]",
               )}
               title={connected ? "End Session" : "Start Session"}
             >
               {connected ? (
-                <div className="w-4 h-4 rounded-sm bg-white" />
+                <div className="w-5 h-5 bg-white border-2 border-black" />
               ) : (
-                <PlayCircle className="w-7 h-7" />
+                <PlayCircle className="w-8 h-8" />
               )}
               {connected && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white dark:border-neutral-900 rounded-full animate-pulse" />
+                <span className="absolute -top-2 -right-2 w-4 h-4 bg-[#ADFF2F] border-3 border-black animate-pulse" />
               )}
             </button>
 
-            <div className="w-8 h-[1px] bg-neutral-200 dark:bg-white/10 my-1" />
+            <div className="w-10 h-[3px] bg-black my-1" />
 
             <button
               onClick={handleMute}
               className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                "w-12 h-12 border-[3px] border-black flex items-center justify-center transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 duration-100",
                 muted
-                  ? "bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400"
-                  : "bg-neutral-100 dark:bg-white/5 text-neutral-700 dark:text-white hover:bg-neutral-200 dark:hover:bg-white/10",
+                  ? "bg-[#FF006E] text-white"
+                  : "bg-white text-black hover:bg-[#ADFF2F]",
               )}
               title={muted ? "Unmute" : "Mute"}
             >
               {muted ? (
-                <MicOff className="w-5 h-5" />
+                <MicOff className="w-5 h-5 font-bold" />
               ) : (
-                <Mic className="w-5 h-5" />
+                <Mic className="w-5 h-5 font-bold" />
               )}
             </button>
 
@@ -503,17 +503,17 @@ function FloatingControlPanel({
               <button
                 onClick={() => toggleCamera(!cameraEnabled)}
                 className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                  "w-12 h-12 border-[3px] border-black flex items-center justify-center transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 duration-100",
                   cameraEnabled
-                    ? "bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400"
-                    : "bg-neutral-100 dark:bg-white/5 text-neutral-700 dark:text-white hover:bg-neutral-200 dark:hover:bg-white/10",
+                    ? "bg-[#00F0FF] text-black"
+                    : "bg-white text-black hover:bg-[#FFE500]",
                 )}
                 title="Toggle Camera"
               >
                 {cameraEnabled ? (
-                  <Video className="w-5 h-5" />
+                  <Video className="w-5 h-5 font-bold" />
                 ) : (
-                  <VideoOff className="w-5 h-5" />
+                  <VideoOff className="w-5 h-5 font-bold" />
                 )}
               </button>
             )}
@@ -522,29 +522,29 @@ function FloatingControlPanel({
               <button
                 onClick={() => toggleScreen(!screenEnabled)}
                 className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                  "w-12 h-12 border-[3px] border-black flex items-center justify-center transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 duration-100",
                   screenEnabled
-                    ? "bg-green-500/10 text-green-500 dark:bg-green-500/20 dark:text-green-400"
-                    : "bg-neutral-100 dark:bg-white/5 text-neutral-700 dark:text-white hover:bg-neutral-200 dark:hover:bg-white/10",
+                    ? "bg-[#ADFF2F] text-black"
+                    : "bg-white text-black hover:bg-[#FFE500]",
                 )}
                 title="Share Screen"
               >
                 {screenEnabled ? (
-                  <Monitor className="w-5 h-5" />
+                  <Monitor className="w-5 h-5 font-bold" />
                 ) : (
-                  <MonitorOff className="w-5 h-5" />
+                  <MonitorOff className="w-5 h-5 font-bold" />
                 )}
               </button>
             )}
 
-            <div className="w-8 h-[1px] bg-neutral-200 dark:bg-white/10 my-1" />
+            <div className="w-10 h-[3px] bg-black my-1" />
 
             {enableEditingSettings && (
               <SettingsDialog
                 className="!h-auto !block"
                 trigger={
-                  <button className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-white/5 hover:bg-neutral-200 dark:hover:bg-white/10 flex items-center justify-center text-neutral-700 dark:text-white transition-colors">
-                    <Settings className="w-5 h-5" />
+                  <button className="w-12 h-12 border-[3px] border-black bg-white hover:bg-[#FF006E] flex items-center justify-center text-black hover:text-white transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 duration-100">
+                    <Settings className="w-5 h-5 font-bold" />
                   </button>
                 }
               />
@@ -553,35 +553,35 @@ function FloatingControlPanel({
             <button
               onClick={onPaintClick}
               className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                "w-12 h-12 border-[3px] border-black flex items-center justify-center transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 duration-100",
                 isPaintActive
-                  ? "bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400"
-                  : "bg-neutral-100 dark:bg-white/5 text-neutral-700 dark:text-white hover:bg-neutral-200 dark:hover:bg-white/10",
+                  ? "bg-[#FFE500] text-black"
+                  : "bg-white text-black hover:bg-[#FFE500]",
               )}
               title="Canvas"
             >
-              <PenTool className="w-5 h-5" />
+              <PenTool className="w-5 h-5 font-bold" />
             </button>
 
             <button
               onClick={toggleSharedMedia}
               className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                "w-12 h-12 border-[3px] border-black flex items-center justify-center transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 duration-100",
                 sharedMediaOpen
-                  ? "bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400"
-                  : "bg-neutral-100 dark:bg-white/5 text-neutral-700 dark:text-white hover:bg-neutral-200 dark:hover:bg-white/10",
+                  ? "bg-[#00F0FF] text-black"
+                  : "bg-white text-black hover:bg-[#00F0FF]",
               )}
               title="View"
             >
-              <Eye className="w-5 h-5" />
+              <Eye className="w-5 h-5 font-bold" />
             </button>
 
             <div
               className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center text-[10px] font-mono font-bold mt-2 transition-colors border",
+                "w-14 h-12 flex items-center justify-center text-[11px] font-mono font-black mt-2 transition-colors border-[3px] border-black",
                 connected
-                  ? "bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400"
-                  : "bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-white/5 text-neutral-500",
+                  ? "bg-[#ADFF2F] text-black"
+                  : "bg-white text-black",
               )}
             >
               {connected ? formatTime(sessionTime) : "--:--"}
@@ -589,38 +589,38 @@ function FloatingControlPanel({
           </div>
         ) : (
           // EXPANDED VIEW
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {/* Audio Control */}
             <div
               onClick={handleMute}
               className={cn(
-                "flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-200 group cursor-pointer",
+                "flex items-center justify-between p-4 border-[4px] border-black transition-all duration-100 group cursor-pointer shadow-[6px_6px_0_0_rgba(0,0,0,1)] hover:shadow-[8px_8px_0_0_rgba(0,0,0,1)]",
                 !muted
-                  ? "bg-gradient-to-r from-blue-500/5 to-blue-600/5 border-blue-500/20 hover:border-blue-500/30"
-                  : "bg-neutral-50 dark:bg-neutral-800/50 border-neutral-200 dark:border-white/5 hover:border-neutral-300 dark:hover:border-white/10",
+                  ? "bg-white"
+                  : "bg-[#FF006E]",
               )}
             >
               <div className="flex items-center gap-3 overflow-hidden">
                 <div
                   className={cn(
-                    "flex items-center justify-center w-8 h-8 rounded-full transition-colors",
+                    "flex items-center justify-center w-10 h-10 border-[3px] border-black transition-colors",
                     !muted
-                      ? "bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400"
-                      : "bg-neutral-200 dark:bg-white/5 text-neutral-500 dark:text-neutral-400",
+                      ? "bg-[#00F0FF] text-black"
+                      : "bg-white text-black",
                   )}
                 >
                   {muted ? (
-                    <MicOff className="w-4 h-4" />
+                    <MicOff className="w-5 h-5 font-bold" />
                   ) : (
-                    <Mic className="w-4 h-4" />
+                    <Mic className="w-5 h-5 font-bold" />
                   )}
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  <span className={cn("text-[10px] font-bold uppercase tracking-wide", muted ? "text-white" : "text-black")}>
                     Microphone
                   </span>
                   <select
-                    className="bg-transparent border-none text-sm text-neutral-900 dark:text-white outline-none cursor-pointer w-[140px] truncate p-0 font-medium"
+                    className={cn("bg-transparent border-none text-sm outline-none cursor-pointer w-[140px] truncate p-0 font-black", muted ? "text-white" : "text-black")}
                     value={selectedAudioDevice}
                     onChange={(e) => {
                       e.stopPropagation();
@@ -633,7 +633,7 @@ function FloatingControlPanel({
                       <option
                         key={device.deviceId}
                         value={device.deviceId}
-                        className="bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                        className="bg-white text-black font-bold"
                       >
                         {device.label || `Mic ${device.deviceId.slice(0, 4)}`}
                       </option>
@@ -647,10 +647,10 @@ function FloatingControlPanel({
                   handleMute();
                 }}
                 className={cn(
-                  "text-xs font-semibold px-3 py-1.5 rounded-full transition-all",
+                  "text-xs font-black px-4 py-2 transition-all border-[3px] border-black uppercase tracking-wide",
                   !muted
-                    ? "bg-blue-500 text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20"
-                    : "bg-neutral-200 dark:bg-white/10 text-neutral-700 dark:text-white hover:bg-neutral-300 dark:hover:bg-white/20",
+                    ? "bg-[#ADFF2F] text-black hover:translate-x-1 hover:translate-y-1 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none"
+                    : "bg-white text-black hover:translate-x-1 hover:translate-y-1 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none",
                 )}
               >
                 {muted ? "Unmute" : "Mute"}
@@ -662,28 +662,28 @@ function FloatingControlPanel({
               <div
                 onClick={() => toggleCamera(!cameraEnabled)}
                 className={cn(
-                  "flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-200 cursor-pointer",
+                  "flex items-center justify-between p-4 border-[4px] border-black transition-all duration-100 cursor-pointer shadow-[6px_6px_0_0_rgba(0,0,0,1)] hover:shadow-[8px_8px_0_0_rgba(0,0,0,1)]",
                   cameraEnabled
-                    ? "bg-gradient-to-r from-purple-500/5 to-purple-600/5 border-purple-500/20 hover:border-purple-500/30"
-                    : "bg-neutral-50 dark:bg-neutral-800/50 border-neutral-200 dark:border-white/5 hover:border-neutral-300 dark:hover:border-white/10",
+                    ? "bg-[#FFE500]"
+                    : "bg-white",
                 )}
               >
                 <div className="flex items-center gap-3">
                   <div
                     className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-full transition-colors",
+                      "flex items-center justify-center w-10 h-10 border-[3px] border-black transition-colors",
                       cameraEnabled
-                        ? "bg-purple-500/10 text-purple-500 dark:bg-purple-500/20 dark:text-purple-400"
-                        : "bg-neutral-200 dark:bg-white/5 text-neutral-500 dark:text-neutral-400",
+                        ? "bg-white text-black"
+                        : "bg-[#00F0FF] text-black",
                     )}
                   >
                     {cameraEnabled ? (
-                      <Video className="w-4 h-4" />
+                      <Video className="w-5 h-5 font-bold" />
                     ) : (
-                      <VideoOff className="w-4 h-4" />
+                      <VideoOff className="w-5 h-5 font-bold" />
                     )}
                   </div>
-                  <span className="text-sm font-medium text-neutral-900 dark:text-white">
+                  <span className="text-sm font-black text-black uppercase tracking-wide">
                     Camera
                   </span>
                 </div>
@@ -693,10 +693,10 @@ function FloatingControlPanel({
                     toggleCamera(!cameraEnabled);
                   }}
                   className={cn(
-                    "text-xs font-semibold px-3 py-1.5 rounded-full transition-all",
+                    "text-xs font-black px-4 py-2 transition-all border-[3px] border-black uppercase tracking-wide",
                     cameraEnabled
-                      ? "bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/20"
-                      : "bg-neutral-200 dark:bg-white/10 text-neutral-700 dark:text-white hover:bg-neutral-300 dark:hover:bg-white/20",
+                      ? "bg-[#FF006E] text-white hover:translate-x-1 hover:translate-y-1 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none"
+                      : "bg-[#ADFF2F] text-black hover:translate-x-1 hover:translate-y-1 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none",
                   )}
                 >
                   {cameraEnabled ? "Off" : "On"}
@@ -709,28 +709,28 @@ function FloatingControlPanel({
               <div
                 onClick={() => toggleScreen(!screenEnabled)}
                 className={cn(
-                  "flex items-center justify-between p-3.5 rounded-2xl border transition-all duration-200 cursor-pointer",
+                  "flex items-center justify-between p-4 border-[4px] border-black transition-all duration-100 cursor-pointer shadow-[6px_6px_0_0_rgba(0,0,0,1)] hover:shadow-[8px_8px_0_0_rgba(0,0,0,1)]",
                   screenEnabled
-                    ? "bg-gradient-to-r from-green-500/5 to-green-600/5 border-green-500/20 hover:border-green-500/30"
-                    : "bg-neutral-50 dark:bg-neutral-800/50 border-neutral-200 dark:border-white/5 hover:border-neutral-300 dark:hover:border-white/10",
+                    ? "bg-[#ADFF2F]"
+                    : "bg-white",
                 )}
               >
                 <div className="flex items-center gap-3">
                   <div
                     className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-full transition-colors",
+                      "flex items-center justify-center w-10 h-10 border-[3px] border-black transition-colors",
                       screenEnabled
-                        ? "bg-green-500/10 text-green-500 dark:bg-green-500/20 dark:text-green-400"
-                        : "bg-neutral-200 dark:bg-white/5 text-neutral-500 dark:text-neutral-400",
+                        ? "bg-white text-black"
+                        : "bg-[#FFE500] text-black",
                     )}
                   >
                     {screenEnabled ? (
-                      <Monitor className="w-4 h-4" />
+                      <Monitor className="w-5 h-5 font-bold" />
                     ) : (
-                      <MonitorOff className="w-4 h-4" />
+                      <MonitorOff className="w-5 h-5 font-bold" />
                     )}
                   </div>
-                  <span className="text-sm font-medium text-neutral-900 dark:text-white">
+                  <span className="text-sm font-black text-black uppercase tracking-wide">
                     Screen Share
                   </span>
                 </div>
@@ -740,10 +740,10 @@ function FloatingControlPanel({
                     toggleScreen(!screenEnabled);
                   }}
                   className={cn(
-                    "text-xs font-semibold px-3 py-1.5 rounded-full transition-all",
+                    "text-xs font-black px-4 py-2 transition-all border-[3px] border-black uppercase tracking-wide",
                     screenEnabled
-                      ? "bg-green-500 text-white hover:bg-green-600 shadow-lg shadow-green-500/20"
-                      : "bg-neutral-200 dark:bg-white/10 text-neutral-700 dark:text-white hover:bg-neutral-300 dark:hover:bg-white/20",
+                      ? "bg-[#FF006E] text-white hover:translate-x-1 hover:translate-y-1 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none"
+                      : "bg-[#00F0FF] text-black hover:translate-x-1 hover:translate-y-1 shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none",
                   )}
                 >
                   {screenEnabled ? "Stop" : "Share"}
@@ -755,36 +755,36 @@ function FloatingControlPanel({
             <button
               onClick={handleConnect}
               className={cn(
-                "w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 mt-1",
+                "w-full py-4 font-black border-[5px] border-black dark:border-white transition-all transform active:translate-x-2 active:translate-y-2 active:shadow-none flex items-center justify-center gap-2 mt-2 uppercase tracking-wider text-sm",
                 connected
-                  ? "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-red-500/25"
-                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/25",
+                  ? "bg-[#FF006E] text-white hover:bg-[#FF006E] shadow-[8px_8px_0_0_rgba(0,0,0,1)] dark:shadow-[8px_8px_0_0_rgba(255,255,255,0.3)] hover:shadow-[10px_10px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[10px_10px_0_0_rgba(255,255,255,0.3)]"
+                  : "bg-[#00F0FF] text-black hover:bg-[#00F0FF] shadow-[8px_8px_0_0_rgba(0,0,0,1)] dark:shadow-[8px_8px_0_0_rgba(255,255,255,0.3)] hover:shadow-[10px_10px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[10px_10px_0_0_rgba(255,255,255,0.3)]",
               )}
             >
               {connected ? (
                 <>
-                  <div className="w-3 h-3 rounded-sm bg-white" />
+                  <div className="w-4 h-4 bg-white border-2 border-black" />
                   End Session
                 </>
               ) : (
                 <>
-                  <PlayCircle className="w-5 h-5" />
+                  <PlayCircle className="w-6 h-6" />
                   Start Session
                 </>
               )}
             </button>
 
             {/* Bottom Actions */}
-            <div className="grid grid-cols-4 gap-2 pt-3 border-t border-neutral-200 dark:border-white/10">
+            <div className="grid grid-cols-4 gap-3 pt-4 border-t-[3px] border-black">
               {enableEditingSettings && (
                 <SettingsDialog
                   className="!h-auto !block"
                   trigger={
-                    <button className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors group">
-                      <div className="p-1.5 rounded-lg bg-neutral-100 dark:bg-white/5 group-hover:bg-neutral-200 dark:group-hover:bg-white/10 transition-colors">
-                        <Settings className="w-4 h-4" />
+                    <button className="flex flex-col items-center gap-2 p-2 transition-all group hover:translate-y-0.5">
+                      <div className="p-2 border-[3px] border-black bg-white group-hover:bg-[#FF006E] transition-colors shadow-[3px_3px_0_0_rgba(0,0,0,1)] group-hover:shadow-none">
+                        <Settings className="w-5 h-5 text-black group-hover:text-white font-bold" />
                       </div>
-                      <span className="text-[10px] font-medium">Settings</span>
+                      <span className="text-[9px] font-black uppercase">Set</span>
                     </button>
                   }
                 />
@@ -792,50 +792,44 @@ function FloatingControlPanel({
               <button
                 onClick={onPaintClick}
                 className={cn(
-                  "flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors group",
-                  isPaintActive
-                    ? "text-blue-500 dark:text-blue-400"
-                    : "hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white",
+                  "flex flex-col items-center gap-2 p-2 transition-all group hover:translate-y-0.5",
                 )}
               >
                 <div
                   className={cn(
-                    "p-1.5 rounded-lg transition-colors",
+                    "p-2 border-[3px] border-black transition-all shadow-[3px_3px_0_0_rgba(0,0,0,1)] group-hover:shadow-none",
                     isPaintActive
-                      ? "bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400"
-                      : "bg-neutral-100 dark:bg-white/5 group-hover:bg-neutral-200 dark:group-hover:bg-white/10",
+                      ? "bg-[#FFE500] text-black"
+                      : "bg-white text-black group-hover:bg-[#FFE500]",
                   )}
                 >
-                  <PenTool className="w-4 h-4" />
+                  <PenTool className="w-5 h-5 font-bold" />
                 </div>
-                <span className="text-[10px] font-medium">Canvas</span>
+                <span className="text-[9px] font-black text-black uppercase">Draw</span>
               </button>
               <button
                 onClick={toggleSharedMedia}
                 className={cn(
-                  "flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors group",
-                  sharedMediaOpen
-                    ? "text-blue-500 dark:text-blue-400"
-                    : "hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white",
+                  "flex flex-col items-center gap-2 p-2 transition-all group hover:translate-y-0.5",
                 )}
               >
                 <div
                   className={cn(
-                    "p-1.5 rounded-lg transition-colors",
+                    "p-2 border-[3px] border-black transition-all shadow-[3px_3px_0_0_rgba(0,0,0,1)] group-hover:shadow-none",
                     sharedMediaOpen
-                      ? "bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400"
-                      : "bg-neutral-100 dark:bg-white/5 group-hover:bg-neutral-200 dark:group-hover:bg-white/10",
+                      ? "bg-[#00F0FF] text-black"
+                      : "bg-white text-black group-hover:bg-[#00F0FF]",
                   )}
                 >
-                  <Eye className="w-4 h-4" />
+                  <Eye className="w-5 h-5 font-bold" />
                 </div>
-                <span className="text-[10px] font-medium">View</span>
+                <span className="text-[9px] font-black text-black uppercase">View</span>
               </button>
-              <button className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors group">
-                <div className="p-1.5 rounded-lg bg-neutral-100 dark:bg-white/5 group-hover:bg-neutral-200 dark:group-hover:bg-white/10 transition-colors">
-                  <MoreHorizontal className="w-4 h-4" />
+              <button className="flex flex-col items-center gap-2 p-2 transition-all group hover:translate-y-0.5">
+                <div className="p-2 border-[3px] border-black bg-white group-hover:bg-[#ADFF2F] transition-colors shadow-[3px_3px_0_0_rgba(0,0,0,1)] group-hover:shadow-none">
+                  <MoreHorizontal className="w-5 h-5 text-black font-bold" />
                 </div>
-                <span className="text-[10px] font-medium">More</span>
+                <span className="text-[9px] font-black text-black uppercase">More</span>
               </button>
             </div>
           </div>
@@ -845,46 +839,48 @@ function FloatingControlPanel({
         {sharedMediaOpen && (
           <div
             className={cn(
-              "absolute w-[360px] h-auto flex flex-col bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden z-[1001]",
+              "absolute w-[400px] h-auto flex flex-col bg-white border-[5px] border-black rounded-2xl shadow-[8px_8px_0_0_rgba(0,0,0,1)] overflow-hidden z-[1001]",
               isAnimatingOut ? "animate-popover-out" : "animate-popover-in",
               popoverPosition === "right"
-                ? "left-full ml-4"
-                : "right-full mr-4",
+                ? "left-full ml-6"
+                : "right-full mr-6",
               verticalAlign === "bottom" ? "bottom-0" : "top-0",
             )}
           >
-            <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-white/10 bg-neutral-50/50 dark:bg-white/5">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-5 h-5 text-blue-500 dark:text-blue-400" />
-                <h3 className="font-semibold text-neutral-900 dark:text-white">
-                  What Adam Can See
+            <div className="flex items-center justify-between p-4 border-b-[4px] border-black bg-[#FFE500]">
+              <div className="flex items-center gap-3">
+                <div className="p-2 border-[3px] border-black bg-white">
+                  <ImageIcon className="w-5 h-5 text-black font-bold" />
+                </div>
+                <h3 className="font-black text-black uppercase text-sm">
+                  ADAM'S VIEW
                 </h3>
                 <span
                   className={cn(
-                    "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ml-2",
+                    "px-3 py-1 text-[10px] font-black uppercase tracking-wider border-[3px] border-black",
                     {
-                      "bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/20 dark:border-green-500/30":
+                      "bg-[#ADFF2F] text-black":
                         mediaMixerStatus.isConnected && !mediaMixerStatus.error,
-                      "bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/20 dark:border-red-500/30":
+                      "bg-[#FF006E] text-white":
                         !!mediaMixerStatus.error,
-                      "bg-yellow-500/10 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/20 dark:border-yellow-500/30":
+                      "bg-white text-black":
                         !mediaMixerStatus.isConnected &&
                         !mediaMixerStatus.error,
                     },
                   )}
                 >
                   {mediaMixerStatus.error
-                    ? "Offline"
+                    ? "OFF"
                     : mediaMixerStatus.isConnected
-                      ? "Live"
-                      : "Connecting"}
+                      ? "LIVE"
+                      : "..."}
                 </span>
               </div>
               <button
                 onClick={toggleSharedMedia}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
+                className="w-10 h-10 flex items-center justify-center border-[3px] border-black bg-white hover:bg-[#FF006E] text-black hover:text-white transition-all shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 font-bold" />
               </button>
             </div>
             <div className="flex-1 h-auto w-full">

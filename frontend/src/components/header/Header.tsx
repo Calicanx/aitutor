@@ -43,49 +43,50 @@ export default function Header({ sidebarOpen, onToggleSidebar }: HeaderProps) {
     const { theme, setTheme } = useTheme();
 
     return (
-        <header className="fixed top-0 left-0 right-0 h-[70px] bg-white/70 dark:bg-neutral-900/70 backdrop-blur-xl border-b border-white/20 dark:border-white/5 z-40 flex items-center justify-between px-6 transition-all duration-300">
+        <header className="fixed top-0 left-0 right-0 h-[56px] md:h-[56px] bg-white dark:bg-neutral-900 border-b-[4px] md:border-b-[5px] border-black dark:border-white z-40 flex items-center justify-between px-3 md:px-6 shadow-[0_6px_0_0_rgba(0,0,0,1)] dark:shadow-[0_6px_0_0_rgba(255,255,255,0.3)]">
             {/* Left side - AI Tutor Logo */}
-            <div className="flex items-center gap-3 group cursor-pointer">
-                <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 group-hover:border-blue-500/40 transition-all duration-300 group-hover:scale-105">
-                    <span className="material-symbols-outlined text-2xl text-blue-500 dark:text-blue-400 group-hover:rotate-12 transition-transform duration-300">
+            <div className="flex items-center gap-2 md:gap-3 group cursor-pointer">
+                <div className="relative flex items-center justify-center w-9 h-9 md:w-10 md:h-10 border-[3px] border-black dark:border-white bg-[#FFE500] group-hover:translate-x-1 group-hover:translate-y-1 transition-transform duration-100">
+                    <span className="material-symbols-outlined text-lg md:text-xl text-black group-hover:rotate-12 transition-transform duration-300 font-black">
                         smart_toy
                     </span>
                 </div>
                 <div className="flex flex-col">
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text text-transparent">
-                        AI Tutor
+                    <h1 className="text-base md:text-lg font-black text-black dark:text-white uppercase tracking-tight leading-none">
+                        AI TUTOR
                     </h1>
-                    <span className="text-[10px] font-medium text-blue-500 dark:text-blue-400 tracking-wider uppercase flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" />
-                        Interactive
+                    <span className="text-[8px] md:text-[9px] font-bold text-black tracking-wider uppercase flex items-center gap-1 bg-[#00F0FF] px-1.5 md:px-2 py-0.5 border-[1.5px] md:border-2 border-black dark:border-white -ml-1">
+                        <Sparkles className="w-2 h-2 md:w-2.5 md:h-2.5" />
+                        <span className="hidden sm:inline">INTERACTIVE</span>
+                        <span className="sm:hidden">AI</span>
                     </span>
                 </div>
             </div>
 
             {/* Right side - Actions */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 md:gap-3">
                 <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="text-gray-500 dark:text-neutral-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/50 dark:hover:bg-white/10 transition-all duration-200 hover:scale-105"
+                    className="w-8 h-8 md:w-9 md:h-9 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#ADFF2F] dark:hover:bg-[#ADFF2F] hover:translate-x-1 hover:translate-y-1 hover:shadow-none shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] transition-all duration-100 text-black dark:text-white dark:hover:text-black"
                     onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 >
-                    <Sun className="h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <Sun className="h-[1rem] w-[1rem] md:h-[1.1rem] md:w-[1.1rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    <Moon className="absolute h-[1rem] w-[1rem] md:h-[1.1rem] md:w-[1.1rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                     <span className="sr-only">Toggle theme</span>
                 </Button>
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                            <Avatar className="h-8 w-8 border border-gray-200 dark:border-white/10">
+                        <Button variant="ghost" className="relative h-8 w-8 md:h-9 md:w-9 p-0 border-[2px] md:border-[3px] border-black dark:border-white bg-[#FF006E] hover:bg-[#FF006E] hover:translate-x-1 hover:translate-y-1 hover:shadow-none shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] transition-all duration-100">
+                            <Avatar className="h-full w-full border-none">
                                 <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                                <AvatarFallback>CN</AvatarFallback>
+                                <AvatarFallback className="bg-transparent text-white font-black text-xs">CN</AvatarFallback>
                             </Avatar>
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuContent className="w-48 md:w-56" align="end" forceMount>
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex flex-col space-y-1">
                                 <p className="text-sm font-medium leading-none">User</p>
@@ -117,13 +118,13 @@ export default function Header({ sidebarOpen, onToggleSidebar }: HeaderProps) {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="text-gray-500 dark:text-neutral-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/50 dark:hover:bg-white/10 transition-all duration-200 hover:scale-105"
+                    className="w-8 h-8 md:w-9 md:h-9 border-[2px] md:border-[3px] border-black dark:border-white bg-[#FFE500] hover:bg-[#FFE500] hover:translate-x-1 hover:translate-y-1 hover:shadow-none shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] transition-all duration-100 text-black"
                     onClick={onToggleSidebar}
                 >
                     {sidebarOpen ? (
-                        <RiSidebarFoldLine className="w-5 h-5" />
+                        <RiSidebarFoldLine className="w-4 h-4 md:w-5 md:h-5 font-black" />
                     ) : (
-                        <RiSidebarUnfoldLine className="w-5 h-5" />
+                        <RiSidebarUnfoldLine className="w-4 h-4 md:w-5 md:h-5 font-black" />
                     )}
                 </Button>
             </div>

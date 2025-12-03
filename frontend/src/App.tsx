@@ -127,8 +127,8 @@ function App() {
               currentSkill={currentSkill}
             />
             <main style={{
-              marginRight: isSidebarOpen ? "420px" : "0",
-              marginLeft: isGradingSidebarOpen ? "420px" : "60px",
+              marginRight: isSidebarOpen ? "320px" : "0",
+              marginLeft: isGradingSidebarOpen ? "320px" : "48px",
               transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
             }}>
               <div className="main-app-area">

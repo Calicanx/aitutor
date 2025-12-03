@@ -78,15 +78,18 @@ export default function SidePanel({ open }: SidePanelProps) {
   return (
     <div
       className={cn(
-        "fixed top-[70px] right-0 flex flex-col border-l border-white/20 dark:border-white/5 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) z-50 will-change-transform shadow-2xl",
-        "h-[calc(100vh-70px)] w-[420px]",
-        open ? "translate-x-0" : "translate-x-full"
+        "fixed top-[56px] right-0 flex flex-col border-l-[4px] md:border-l-[5px] border-black dark:border-white bg-white dark:bg-neutral-900 transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) z-50 will-change-transform shadow-[-6px_0_0_0_rgba(0,0,0,1)] dark:shadow-[-6px_0_0_0_rgba(255,255,255,0.3)]",
+        "h-[calc(100vh-56px)] w-[280px] md:w-[320px]",
+        open ? "translate-x-0" : "translate-x-full",
+        "max-md:hidden" // Hide on mobile
       )}
     >
-      <header className="flex items-center justify-between h-[70px] px-6 border-b border-white/20 dark:border-white/5 shrink-0 overflow-hidden transition-all duration-300">
-        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-4 duration-300">
-          <Terminal className="w-5 h-5 text-blue-500" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+      <header className="flex items-center justify-between h-[56px] px-4 md:px-6 border-b-[3px] md:border-b-[4px] border-black dark:border-white shrink-0 overflow-hidden transition-all duration-300 bg-[#00F0FF]">
+        <div className="flex items-center gap-3 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="p-2 border-[3px] border-black dark:border-white bg-white dark:bg-neutral-900">
+            <Terminal className="w-5 h-5 text-black dark:text-white font-bold" />
+          </div>
+          <h2 className="text-lg font-black text-black uppercase tracking-tight whitespace-nowrap">
             Console
           </h2>
         </div>
@@ -95,21 +98,21 @@ export default function SidePanel({ open }: SidePanelProps) {
         {/* The toggle button in the Header will handle opening it */}
       </header>
 
-      <div className="flex flex-col flex-grow overflow-hidden transition-all duration-300 opacity-100 translate-y-0">
-        <section className="flex items-center justify-between px-6 py-4 gap-3 shrink-0">
+      <div className="flex flex-col flex-grow overflow-hidden transition-all duration-300 opacity-100 translate-y-0 bg-white dark:bg-neutral-900">
+        <section className="flex items-center justify-between px-6 py-4 gap-3 shrink-0 border-b-[3px] border-black dark:border-white">
           <Select
             value={filter}
             onValueChange={(value) => setFilter(value as LoggerFilterType)}
           >
-            <SelectTrigger className="w-[160px] bg-white/50 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-900 dark:text-neutral-200 h-8 text-xs focus:ring-blue-500/20">
+            <SelectTrigger className="w-[160px] bg-white dark:bg-neutral-800 border-[3px] border-black dark:border-white text-black dark:text-white h-9 text-xs font-black uppercase tracking-wide shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)]">
               <SelectValue placeholder="Filter logs" />
             </SelectTrigger>
-            <SelectContent className="bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-neutral-200">
+            <SelectContent className="bg-white dark:bg-neutral-800 border-[3px] border-black dark:border-white text-black dark:text-white">
               {filterOptions.map((option) => (
                 <SelectItem
                   key={option.value}
                   value={option.value}
-                  className="focus:bg-gray-100 dark:focus:bg-neutral-700 focus:text-gray-900 dark:focus:text-white cursor-pointer"
+                  className="focus:bg-[#FFE500] dark:focus:bg-[#FFE500] focus:text-black cursor-pointer font-bold uppercase"
                 >
                   {option.label}
                 </SelectItem>
@@ -119,16 +122,16 @@ export default function SidePanel({ open }: SidePanelProps) {
 
           <div
             className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono transition-colors shadow-sm",
+              "flex items-center gap-2 px-3 py-1.5 border-[3px] border-black dark:border-white text-xs font-black uppercase tracking-wider transition-colors shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)]",
               connected
-                ? "bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400"
-                : "bg-gray-100 dark:bg-neutral-800 border-gray-200 dark:border-white/5 text-gray-500 dark:text-neutral-500"
+                ? "bg-[#ADFF2F] text-black"
+                : "bg-gray-300 dark:bg-neutral-700 text-black dark:text-white"
             )}
           >
             <div
               className={cn(
-                "w-2 h-2 rounded-full transition-all duration-300",
-                connected ? "bg-green-500 shadow-[0_0_8px_rgba(74,222,128,0.5)] animate-pulse" : "bg-gray-400 dark:bg-neutral-500"
+                "w-3 h-3 border-[2px] border-black dark:border-white transition-all duration-300",
+                connected ? "bg-black animate-pulse" : "bg-gray-500 dark:bg-neutral-400"
               )}
             />
             <span>{connected ? "Streaming" : "Paused"}</span>
@@ -136,19 +139,19 @@ export default function SidePanel({ open }: SidePanelProps) {
         </section>
 
         <div
-          className="flex-grow overflow-y-auto overflow-x-hidden px-6 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-white/10 scrollbar-track-transparent"
+          className="flex-grow overflow-y-auto overflow-x-hidden px-6 py-4 scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
           ref={loggerRef}
         >
           <Logger filter={filter} />
         </div>
 
         <div className={cn(
-          "p-6 border-t border-white/20 dark:border-white/5 bg-gray-50/50 dark:bg-black/20 shrink-0 transition-all duration-300",
+          "p-6 border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900 shrink-0 transition-all duration-300",
           { "opacity-50 pointer-events-none": !connected }
         )}>
-          <div className="flex items-end gap-3 p-3 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl focus-within:border-blue-500/50 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all shadow-sm">
+          <div className="flex items-end gap-3 p-3 bg-white dark:bg-neutral-800 border-[3px] border-black dark:border-white focus-within:border-[#00F0FF] focus-within:shadow-[4px_4px_0_0_rgba(0,0,0,1)] dark:focus-within:shadow-[4px_4px_0_0_rgba(255,255,255,0.3)] transition-all shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
             <Textarea
-              className="w-full min-h-[24px] max-h-[120px] p-0 text-sm bg-transparent border-0 shadow-none resize-none focus-visible:ring-0 focus-visible:ring-offset-0 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-neutral-500"
+              className="w-full min-h-[24px] max-h-[120px] p-0 text-sm bg-transparent border-0 shadow-none resize-none focus-visible:ring-0 focus-visible:ring-offset-0 text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-neutral-500 font-bold"
               placeholder="Type a message..."
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -162,11 +165,11 @@ export default function SidePanel({ open }: SidePanelProps) {
             />
             <Button
               type="button"
-              className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white shrink-0 p-0 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-blue-500/20"
+              className="w-10 h-10 border-[3px] border-black dark:border-white bg-[#00F0FF] hover:bg-[#00F0FF] text-black shrink-0 p-0 flex items-center justify-center transition-all duration-100 hover:shadow-[4px_4px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0_0_rgba(255,255,255,0.3)] shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-50"
               onClick={handleSubmit}
               disabled={!textInput.trim() || !connected}
             >
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-5 h-5 font-bold" />
             </Button>
           </div>
         </div>

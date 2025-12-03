@@ -1,5 +1,23 @@
 :root {
-  --text: white;
+  // Neo-Brutalism Color Palette
+  --neo-black: #000000;
+  --neo-white: #FFFFFF;
+  --neo-yellow: #FFE500;
+  --neo-cyan: #00F0FF;
+  --neo-pink: #FF006E;
+  --neo-lime: #ADFF2F;
+  --neo-bg: #F5F5F5;
+  --neo-orange: #FF6B35;
+
+  // Neo-Brutalism Borders & Shadows
+  --neo-border-width: 5px;
+  --neo-border: 5px solid var(--neo-black);
+  --neo-shadow: 8px 8px 0 var(--neo-black);
+  --neo-shadow-hover: 12px 12px 0 var(--neo-black);
+  --neo-shadow-small: 4px 4px 0 var(--neo-black);
+
+  // Legacy variables (keeping for compatibility)
+  --text: var(--neo-black);
   --gray-200: #b4b8bb;
   --gray-300: #80868b;
   --gray-500: #5f6368;
@@ -8,28 +26,27 @@
   --gray-800: #171717;
   --gray-900: #111111;
   --gray-1000: #0a0a0a;
-  --border-stroke: #444444;
-  --accent-blue: rgb(161, 228, 242);
+  --border-stroke: var(--neo-black);
+  --accent-blue: var(--neo-cyan);
   --accent-blue-active-bg: #001233;
-  --accent-blue-active: #98beff;
-  --accent-blue-headers: #448dff;
-  --accent-green: rgb(168, 218, 181);
+  --accent-blue-active: var(--neo-cyan);
+  --accent-blue-headers: var(--neo-cyan);
+  --accent-green: var(--neo-lime);
 
   --midnight-blue: rgb(0, 18, 51);
-  --blue-30: #99beff;
+  --blue-30: var(--neo-cyan);
 
-  --accent-red: #ff4600;
+  --accent-red: var(--neo-pink);
 
-  // --background: var(--gray-900); // Background now defined in index.css :root
   --color: var(--text);
 
-  scrollbar-color: var(--gray-600) var(--gray-900);
+  scrollbar-color: var(--neo-black) var(--neo-bg);
   scrollbar-width: thin;
 
   --font-family: "Space Mono", monospace;
 
-  /* */
-  --Neutral-00: #000;
+  /* Neutral palette mapped to neo-brutalism */
+  --Neutral-00: var(--neo-black);
   --Neutral-5: #181a1b;
   --Neutral-10: #1c1f21;
   --Neutral-15: #232729;
@@ -40,22 +57,41 @@
   --Neutral-80: #c3c6c7;
   --Neutral-90: #e1e2e3;
 
-  --Green-500: #0d9c53;
+  --Green-500: var(--neo-lime);
   --Green-700: #025022;
 
-  --Blue-400: #80c1ff;
-  --Blue-500: #1f94ff;
+  --Blue-400: var(--neo-cyan);
+  --Blue-500: var(--neo-cyan);
   --Blue-800: #0f3557;
 
-  --Red-400: #ff9c7a;
-  --Red-500: #ff4600;
-  --Red-600: #e03c00;
+  --Red-400: var(--neo-pink);
+  --Red-500: var(--neo-pink);
+  --Red-600: var(--neo-pink);
   --Red-700: #bd3000;
 }
 
 body {
   font-family: "Space Mono", monospace;
-  background: var(--Neutral-30);
+  background: var(--neo-bg);
+  color: var(--neo-black);
+  font-size: 14px; // Smaller base font size
+
+  // Responsive scaling
+  @media (min-width: 1920px) {
+    font-size: 16px; // Larger screens
+  }
+
+  @media (max-width: 1440px) {
+    font-size: 13px;
+  }
+
+  @media (max-width: 1024px) {
+    font-size: 12px; // Tablets
+  }
+
+  @media (max-width: 768px) {
+    font-size: 11px; // Mobile
+  }
 }
 
 .material-symbols-outlined {
@@ -116,17 +152,25 @@ body {
 }
 
 .streaming-console {
-  color: var(--gray-300);
+  color: var(--neo-black);
   display: flex;
-  height: calc(100vh - 70px);
+  height: calc(100vh - 56px);
   width: 100vw;
-  margin-top: 70px;
+  margin-top: 56px;
   position: relative;
+  background: var(--neo-bg);
+
+  // Responsive layout
+  @media (max-width: 768px) {
+    flex-direction: column;
+    height: calc(100vh - 50px);
+    margin-top: 50px;
+  }
 
   a,
   a:visited,
   a:active {
-    color: var(--gray-300);
+    color: var(--neo-black);
   }
 
   .disabled {
@@ -144,10 +188,16 @@ body {
     align-items: center;
     justify-content: center;
     flex-grow: 1;
-    gap: 1rem;
+    gap: 0.75rem;
     width: 100%;
     overflow: hidden;
-    transition: margin-right 300ms ease-in-out;
+    transition: margin-right 300ms ease-in-out, margin-left 300ms ease-in-out;
+    background: var(--neo-bg);
+
+    @media (max-width: 768px) {
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
   }
 
   .main-app-area {
@@ -156,6 +206,16 @@ body {
     align-items: center;
     justify-content: center;
     width: 100%;
+    padding: 16px;
+
+    @media (max-width: 1024px) {
+      padding: 12px;
+    }
+
+    @media (max-width: 768px) {
+      padding: 8px;
+      flex-direction: column;
+    }
   }
 
   .question-panel {
@@ -165,8 +225,82 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    /* push content towards top */
     height: 100vh;
+    overflow: hidden;
+
+    // Neo-brutalist geometric background
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: var(--neo-bg);
+      pointer-events: none;
+    }
+
+    // Geometric shapes
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(var(--neo-yellow), var(--neo-yellow)),
+        radial-gradient(circle, var(--neo-cyan) 60%, transparent 60%),
+        linear-gradient(var(--neo-pink), var(--neo-pink)),
+        linear-gradient(135deg, var(--neo-lime) 50%, transparent 50%),
+        linear-gradient(var(--neo-orange), var(--neo-orange)),
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 49px,
+          rgba(0, 0, 0, 0.03) 49px,
+          rgba(0, 0, 0, 0.03) 50px
+        ),
+        repeating-linear-gradient(
+          90deg,
+          transparent,
+          transparent 49px,
+          rgba(0, 0, 0, 0.03) 49px,
+          rgba(0, 0, 0, 0.03) 50px
+        );
+      background-size:
+        120px 120px,
+        150px 150px,
+        100px 100px,
+        180px 180px,
+        60px 60px,
+        50px 50px,
+        50px 50px;
+      background-position:
+        -30px -30px,
+        calc(100% + 30px) -40px,
+        -20px calc(100% + 20px),
+        calc(100% + 40px) calc(100% + 40px),
+        60% 30%,
+        0 0,
+        0 0;
+      background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
+      opacity: 0.15;
+    }
+
+    // Ensure content is above background
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
+  // Dark mode for question panel background
+  :global(.dark) .question-panel {
+    &::before {
+      background: #0a0a0a;
+    }
+
+    &::after {
+      opacity: 0.08;
+    }
   }
 
   .media-mixer-display {
@@ -179,7 +313,7 @@ body {
   }
 
   .media-mixer-display {
-    border-left: 1px solid var(--border-stroke);
+    border-left: 5px solid var(--neo-black);
     transition: all 0.3s ease-in-out;
   }
 
