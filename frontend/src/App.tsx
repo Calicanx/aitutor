@@ -21,6 +21,7 @@ import AuthGuard from "./components/auth/AuthGuard";
 import SidePanel from "./components/side-panel/SidePanel";
 import GradingSidebar from "./components/grading-sidebar/GradingSidebar";
 import Header from "./components/header/Header";
+import BackgroundShapes from "./components/background-shapes/BackgroundShapes";
 import ScratchpadCapture from "./components/scratchpad-capture/ScratchpadCapture";
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
 import FloatingControlPanel from "./components/floating-control-panel/FloatingControlPanel";
@@ -118,12 +119,13 @@ function App() {
                 currentSkill={currentSkill}
               />
               <main style={{
-                marginRight: isSidebarOpen ? "420px" : "0",
-                marginLeft: isGradingSidebarOpen ? "420px" : "60px",
+                marginRight: isSidebarOpen ? "260px" : "0",
+                marginLeft: isGradingSidebarOpen ? "260px" : "40px",
                 transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
               }}>
                 <div className="main-app-area">
                   <div className="question-panel">
+                    <BackgroundShapes />
                     <ScratchpadCapture onFrameCaptured={(imageData) => {
                       mediaMixer.updateScratchpadFrame(imageData);
                     }}>

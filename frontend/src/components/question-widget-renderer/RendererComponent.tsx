@@ -224,129 +224,89 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         : 0;
 
     return (
-        <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-8 px-4">
-            {/* Animated gradient background */}
-            <div className="fixed inset-0 -z-10 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-slate-950 dark:via-purple-950 dark:to-slate-900" />
-                <div className="absolute top-0 -left-4 w-96 h-96 bg-purple-300 dark:bg-purple-600 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-3xl opacity-20 dark:opacity-10 animate-blob" />
-                <div className="absolute top-0 -right-4 w-96 h-96 bg-blue-300 dark:bg-blue-600 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-3xl opacity-20 dark:opacity-10 animate-blob animation-delay-2000" />
-                <div className="absolute -bottom-8 left-20 w-96 h-96 bg-pink-300 dark:bg-pink-600 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-3xl opacity-20 dark:opacity-10 animate-blob animation-delay-4000" />
-            </div>
-
-            {/* Glassmorphism Card */}
-            <Card className="relative flex w-full max-w-6xl h-auto md:h-[650px] flex-col border border-white/20 dark:border-white/10 shadow-2xl backdrop-blur-xl bg-white/70 dark:bg-slate-800/40 overflow-hidden transition-all duration-300 hover:shadow-3xl">
+        <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
+            {/* Neo-Brutalism Card */}
+            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto md:h-[550px] lg:h-[600px] flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
                 {/* Progress bar at top */}
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gray-200/50 dark:bg-gray-700/50">
+                <div className="absolute top-0 left-0 right-0 h-2 md:h-3 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] md:border-b-[3px] border-black dark:border-white">
                     <div
-                        className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-500 ease-out"
+                        className="h-full bg-[#C4B5FD] transition-all duration-500 ease-out"
                         style={{ width: `${progressPercentage}%` }}
                     />
                 </div>
 
-                <CardHeader className="space-y-3 pt-6">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div className="space-y-2 flex-1">
-                            <div className="flex items-center gap-2">
-                                <Sparkles className="w-5 h-5 text-purple-500 dark:text-purple-400" />
-                                <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
-                                    Adaptive Practice Session
+                <CardHeader className="space-y-2 pt-6 md:pt-7 px-4 md:px-6 border-b-[3px] md:border-b-[4px] border-black dark:border-white bg-[#FFD93D]">
+                    <div className="flex items-start justify-between gap-3 md:gap-4 flex-wrap">
+                        <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2 md:gap-3">
+                                <div className="p-1.5 md:p-2 border-[2px] md:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
+                                    <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-black dark:text-white font-bold" />
+                                </div>
+                                <CardTitle className="text-lg md:text-xl font-black text-black uppercase tracking-tight">
+                                    Practice Session
                                 </CardTitle>
                             </div>
-                            <CardDescription className="text-sm">
-                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade}` : 'Loading user profile...'}
+                            <CardDescription className="text-xs md:text-sm font-bold text-black uppercase tracking-wide">
+                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade}` : `User: ${user_id}`}
                             </CardDescription>
                         </div>
 
-                        {/* Modern Progress Indicator */}
-                        <div className="flex items-center gap-4">
-                            <div className="text-right">
-                                <div className="text-xs font-medium text-muted-foreground mb-1">
-                                    User: {user?.name || user_id}
-                                </div>
-                                {!isLoading && perseusItems.length > 0 && (
-                                    <div className="text-sm font-semibold text-foreground">
-                                        Question <span className="text-blue-600 dark:text-blue-400">{item + 1}</span> of {perseusItems.length}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Circular progress */}
+                        {/* Neo-Brutalist Progress Badge */}
+                        <div className="flex items-center gap-2 md:gap-3">
                             {!isLoading && perseusItems.length > 0 && (
-                                <div className="relative w-14 h-14">
-                                    <svg className="transform -rotate-90 w-14 h-14">
-                                        <circle
-                                            cx="28"
-                                            cy="28"
-                                            r="24"
-                                            stroke="currentColor"
-                                            strokeWidth="4"
-                                            fill="transparent"
-                                            className="text-gray-200 dark:text-gray-700"
-                                        />
-                                        <circle
-                                            cx="28"
-                                            cy="28"
-                                            r="24"
-                                            stroke="url(#gradient)"
-                                            strokeWidth="4"
-                                            fill="transparent"
-                                            strokeDasharray={`${2 * Math.PI * 24}`}
-                                            strokeDashoffset={`${2 * Math.PI * 24 * (1 - progressPercentage / 100)}`}
-                                            className="transition-all duration-500 ease-out"
-                                            strokeLinecap="round"
-                                        />
-                                        <defs>
-                                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                <stop offset="0%" stopColor="#3b82f6" />
-                                                <stop offset="50%" stopColor="#a855f7" />
-                                                <stop offset="100%" stopColor="#ec4899" />
-                                            </linearGradient>
-                                        </defs>
-                                    </svg>
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <span className="text-xs font-bold text-foreground">
-                                            {Math.round(progressPercentage)}%
-                                        </span>
+                                <>
+                                    <div className="text-right hidden sm:block">
+                                        <div className="text-[10px] md:text-xs font-black uppercase tracking-wider text-black mb-0.5">
+                                            Progress
+                                        </div>
+                                        <div className="text-xs md:text-sm font-black text-black">
+                                            Q <span className="text-[#FF6B6B]">{item + 1}</span>/{perseusItems.length}
+                                        </div>
                                     </div>
-                                </div>
+                                    <div className="px-3 md:px-4 py-2 md:py-3 border-[2px] md:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+                                        <div className="text-xl md:text-2xl font-black text-black dark:text-white">
+                                            {Math.round(progressPercentage)}%
+                                        </div>
+                                    </div>
+                                </>
                             )}
                         </div>
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 overflow-hidden px-6">
+                <CardContent className="flex-1 overflow-hidden px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
-                        className="relative h-full w-full overflow-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent"
+                        className="relative h-full w-full overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
                     >
                         {endOfTest ? (
-                            <div className="flex h-full items-center justify-center px-4 py-6 text-center">
-                                <div className="max-w-md rounded-2xl border border-emerald-200/50 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/80 to-blue-50/80 dark:from-emerald-950/40 dark:to-blue-950/40 backdrop-blur-sm px-8 py-10 shadow-lg transform transition-all duration-300 hover:scale-105">
-                                    <div className="text-6xl mb-4 animate-bounce">🎉</div>
-                                    <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mb-2">
+                            <div className="flex h-full items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
+                                <div className="max-w-sm md:max-w-md border-[4px] md:border-[5px] border-black dark:border-white bg-[#4ADE80] px-6 md:px-8 py-8 md:py-10 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                                    <div className="text-4xl md:text-6xl mb-3 md:mb-4">🎉</div>
+                                    <p className="text-xl md:text-2xl font-black text-black uppercase mb-2 tracking-tight">
                                         Congratulations!
                                     </p>
-                                    <p className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-4">
+                                    <p className="text-base md:text-lg font-bold text-black mb-3 md:mb-4">
                                         You've successfully completed your test!
                                     </p>
-                                    <p className="text-sm text-muted-foreground">
-                                        You can review questions above or restart the session from the main controls.
+                                    <p className="text-xs md:text-sm font-bold text-black uppercase tracking-wide">
+                                        Review questions or restart session
                                     </p>
                                 </div>
                             </div>
                         ) : isLoading ? (
-                            <div className="flex h-full flex-col items-center justify-center gap-4">
-                                <div className="relative w-16 h-16">
-                                    <div className="absolute inset-0 rounded-full border-4 border-purple-200 dark:border-purple-800"></div>
-                                    <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-purple-600 dark:border-t-purple-400 animate-spin"></div>
+                            <div className="flex h-full flex-col items-center justify-center gap-3 md:gap-4">
+                                <div className="relative w-12 h-12 md:w-16 md:h-16">
+                                    <div className="absolute inset-0 border-[3px] md:border-[4px] border-black dark:border-white"></div>
+                                    <div className="absolute inset-0 border-[3px] md:border-[4px] border-transparent border-t-[#C4B5FD] animate-spin"></div>
                                 </div>
-                                <p className="text-sm font-medium text-muted-foreground animate-pulse">
+                                <p className="text-xs md:text-sm font-black uppercase text-black dark:text-white tracking-wider animate-pulse">
                                     Loading questions...
                                 </p>
                             </div>
                         ) : perseusItems.length > 0 ? (
-                            <div className="space-y-6 py-4">
-                                <div className="rounded-xl bg-white/50 dark:bg-slate-900/30 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 p-6 shadow-sm transition-all duration-200 hover:shadow-md">
+                            <div className="space-y-4 md:space-y-6 py-3 md:py-4">
+                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <PerseusI18nContextProvider locale="en" strings={mockStrings}>
                                         <RenderStateRoot>
                                             <ServerItemRenderer
@@ -369,7 +329,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                     </PerseusI18nContextProvider>
                                 </div>
 
-                                {/* Enhanced feedback with animation */}
+                                {/* Neo-Brutalist feedback */}
                                 {isAnswered && (
                                     <div
                                         className={`transform transition-all duration-300 ${showFeedback
@@ -377,18 +337,22 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                             : 'translate-y-4 opacity-0'
                                             }`}
                                     >
-                                        <div className={`flex items-center gap-3 rounded-xl px-5 py-4 shadow-lg backdrop-blur-sm border ${score?.correct
-                                            ? "bg-gradient-to-r from-emerald-50/90 to-green-50/90 dark:from-emerald-950/50 dark:to-green-950/50 border-emerald-300/50 dark:border-emerald-700/50"
-                                            : "bg-gradient-to-r from-red-50/90 to-orange-50/90 dark:from-red-950/50 dark:to-orange-950/50 border-red-300/50 dark:border-red-700/50"
+                                        <div className={`flex items-center gap-2 md:gap-3 px-4 md:px-5 py-3 md:py-4 border-[3px] md:border-[4px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] ${score?.correct
+                                            ? "bg-[#ADFF2F]"
+                                            : "bg-[#FF006E]"
                                             }`}>
                                             {score?.correct ? (
-                                                <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0 animate-scale-in" />
+                                                <div className="p-1 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-900">
+                                                    <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-black dark:text-white flex-shrink-0 font-bold" />
+                                                </div>
                                             ) : (
-                                                <XCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 animate-scale-in" />
+                                                <div className="p-1 border-[2px] md:border-[3px] border-black dark:border-white bg-white">
+                                                    <XCircle className="w-4 h-4 md:w-5 md:h-5 text-black flex-shrink-0 font-bold" />
+                                                </div>
                                             )}
-                                            <span className={`text-base font-semibold ${score?.correct
-                                                ? "text-emerald-700 dark:text-emerald-300"
-                                                : "text-red-700 dark:text-red-300"
+                                            <span className={`text-sm md:text-base font-black uppercase tracking-tight ${score?.correct
+                                                ? "text-black"
+                                                : "text-white"
                                                 }`}>
                                                 {score?.correct ? "🎯 Excellent! That's correct!" : "📚 Not quite. Keep trying!"}
                                             </span>
@@ -398,9 +362,9 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                             </div>
                         ) : (
                             <div className="flex h-full items-center justify-center">
-                                <div className="text-center space-y-2">
-                                    <div className="text-4xl mb-2">📝</div>
-                                    <p className="text-sm font-medium text-muted-foreground">
+                                <div className="text-center space-y-2 md:space-y-3 border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-6 md:p-8 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                                    <div className="text-3xl md:text-4xl mb-1 md:mb-2">📝</div>
+                                    <p className="text-xs md:text-sm font-black uppercase text-black dark:text-white tracking-wider">
                                         No questions available.
                                     </p>
                                 </div>
@@ -409,25 +373,25 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardContent>
 
-                <CardFooter className="flex justify-end gap-3 px-6 pb-6 pt-4 border-t border-gray-200/50 dark:border-gray-700/50 bg-gradient-to-b from-transparent to-white/30 dark:to-slate-900/30">
+                <CardFooter className="flex justify-end gap-2 md:gap-3 px-4 md:px-6 pb-4 md:pb-5 pt-3 md:pt-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
                     <Button
                         type="button"
-                        variant="outline"
-                        size="default"
-                        onClick={handleNext}
+                        size="sm"
+                        onClick={handleSubmit}
                         disabled={isLoading || endOfTest || perseusItems.length === 0}
-                        className="transition-all duration-200 hover:scale-105 hover:shadow-md border-gray-300 dark:border-gray-600 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm"
+                        className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-[#C4B5FD] hover:bg-[#C4B5FD] text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:hover:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:hover:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
                     >
-                        Next Question →
+                        Submit
                     </Button>
                     <Button
                         type="button"
-                        size="default"
-                        onClick={handleSubmit}
+                        variant="outline"
+                        size="sm"
+                        onClick={handleNext}
                         disabled={isLoading || endOfTest || perseusItems.length === 0}
-                        className="transition-all duration-200 hover:scale-105 hover:shadow-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 dark:from-blue-500 dark:to-purple-500"
+                        className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
                     >
-                        ✓ Submit Answer
+                        Next →
                     </Button>
                 </CardFooter>
             </Card>

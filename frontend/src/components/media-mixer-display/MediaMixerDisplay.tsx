@@ -85,26 +85,26 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
   }, [canvasRef]);
 
   return (
-    <div className="flex flex-col w-full bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white overflow-hidden transition-colors duration-300">
-      <div className="flex flex-col items-center justify-center p-0 bg-neutral-50 dark:bg-black/95 relative overflow-hidden group transition-colors duration-300">
+    <div className="flex flex-col w-full bg-white dark:bg-[#000000] text-black dark:text-white overflow-hidden transition-colors duration-300">
+      <div className="flex flex-col items-center justify-center p-0 bg-white dark:bg-[#000000] relative overflow-hidden group transition-colors duration-300">
         {error && (
-          <div className="text-sm text-center p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400 max-w-[90%] backdrop-blur-md shadow-lg z-20 absolute">
-            <span className="material-symbols-outlined text-2xl mb-2 block">
+          <div className="text-sm text-center p-4 border-[3px] border-black dark:border-white bg-[#FF006E] text-white max-w-[90%] shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] z-20 absolute">
+            <span className="material-symbols-outlined text-2xl mb-2 block font-bold">
               error
             </span>
             {error}
           </div>
         )}
         {!isConnected && !error && (
-          <div className="flex flex-col items-center gap-3 text-neutral-500 dark:text-neutral-400 animate-pulse z-20 py-12">
-            <span className="material-symbols-outlined text-4xl opacity-50">
+          <div className="flex flex-col items-center gap-3 text-black dark:text-white animate-pulse z-20 py-12">
+            <span className="material-symbols-outlined text-4xl opacity-50 font-bold">
               connecting_airports
             </span>
-            <div className="text-sm font-medium">Initializing...</div>
+            <div className="text-sm font-black uppercase">Initializing...</div>
           </div>
         )}
         {isConnected && (
-          <div className="w-full h-auto flex items-center justify-center bg-white dark:bg-black">
+          <div className="w-full h-auto flex items-center justify-center bg-white dark:bg-[#000000]">
             <canvas
               ref={displayCanvasRef}
               className="w-full h-auto object-contain"
@@ -113,23 +113,23 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
           </div>
         )}
 
-        {/* Status indicators */}
+        {/* Status indicators - Neo-Brutalist style */}
         <div className="absolute bottom-2 left-2 flex gap-2 z-10">
           {isCameraEnabled && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+            <div className="flex items-center gap-1 px-2 py-1 border-[2px] border-black dark:border-white bg-[#C4B5FD] text-black dark:text-white text-[10px] font-black uppercase shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+              <span className="w-1.5 h-1.5 bg-black dark:bg-white animate-pulse" />
               Camera
             </div>
           )}
           {isScreenShareEnabled && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/20 text-green-600 dark:text-green-400 text-[10px] font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <div className="flex items-center gap-1 px-2 py-1 border-[2px] border-black dark:border-white bg-[#FFD93D] text-black text-[10px] font-black uppercase shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+              <span className="w-1.5 h-1.5 bg-black dark:bg-white animate-pulse" />
               Screen
             </div>
           )}
           {isCanvasEnabled && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+            <div className="flex items-center gap-1 px-2 py-1 border-[2px] border-black dark:border-white bg-[#FF6B6B] text-white text-[10px] font-black uppercase shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+              <span className="w-1.5 h-1.5 bg-white animate-pulse" />
               Canvas
             </div>
           )}
