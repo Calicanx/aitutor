@@ -112,55 +112,57 @@ function App() {
   return (
     <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
       <div className="App">
-        <LiveAPIProvider>
-          <Header
-            sidebarOpen={isSidebarOpen}
-            onToggleSidebar={toggleSidebar}
-          />
-          <div className="streaming-console">
-            <SidePanel
-              open={isSidebarOpen}
-              onToggle={toggleSidebar}
+        <BackgroundShapes />
+        <div className="App__content">
+          <LiveAPIProvider>
+            <Header
+              sidebarOpen={isSidebarOpen}
+              onToggleSidebar={toggleSidebar}
             />
-            <GradingSidebar
-              open={isGradingSidebarOpen}
-              onToggle={toggleGradingSidebar}
-              currentSkill={currentSkill}
-            />
-            <main style={{
-              marginRight: isSidebarOpen ? "260px" : "0",
-              marginLeft: isGradingSidebarOpen ? "260px" : "40px",
-              transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
-            }}>
-              <div className="main-app-area">
-                <div className="question-panel">
-                  <BackgroundShapes />
-                  <ScratchpadCapture socket={commandSocket}>
-                    <QuestionDisplay onSkillChange={setCurrentSkill} />
-                    {isScratchpadOpen && (
-                      <div className="scratchpad-container">
-                        <Scratchpad />
-                      </div>
-                    )}
-                  </ScratchpadCapture>
+            <div
+              className="streaming-console"
+              data-left-rail={isGradingSidebarOpen ? "open" : "collapsed"}
+              data-right-rail={isSidebarOpen ? "open" : "collapsed"}
+            >
+              <SidePanel
+                open={isSidebarOpen}
+                onToggle={toggleSidebar}
+              />
+              <GradingSidebar
+                open={isGradingSidebarOpen}
+                onToggle={toggleGradingSidebar}
+                currentSkill={currentSkill}
+              />
+              <main className="workspace">
+                <div className="main-app-area">
+                  <div className="question-panel">
+                    <ScratchpadCapture socket={commandSocket}>
+                      <QuestionDisplay onSkillChange={setCurrentSkill} />
+                      {isScratchpadOpen && (
+                        <div className="scratchpad-container">
+                          <Scratchpad />
+                        </div>
+                      )}
+                    </ScratchpadCapture>
+                  </div>
+                  <FloatingControlPanel
+                    socket={commandSocket}
+                    renderCanvasRef={renderCanvasRef}
+                    videoRef={videoRef}
+                    supportsVideo={true}
+                    onVideoStreamChange={setVideoStream}
+                    onMixerStreamChange={setMixerStream}
+                    enableEditingSettings={true}
+                    onPaintClick={() => setScratchpadOpen(!isScratchpadOpen)}
+                    isPaintActive={isScratchpadOpen}
+                    videoSocket={videoSocket}
+                  />
                 </div>
-                <FloatingControlPanel
-                  socket={commandSocket}
-                  renderCanvasRef={renderCanvasRef}
-                  videoRef={videoRef}
-                  supportsVideo={true}
-                  onVideoStreamChange={setVideoStream}
-                  onMixerStreamChange={setMixerStream}
-                  enableEditingSettings={true}
-                  onPaintClick={() => setScratchpadOpen(!isScratchpadOpen)}
-                  isPaintActive={isScratchpadOpen}
-                  videoSocket={videoSocket}
-                />
-              </div>
-            </main>
-          </div>
-          <Toaster richColors closeButton />
-        </LiveAPIProvider>
+              </main>
+            </div>
+            <Toaster richColors closeButton />
+          </LiveAPIProvider>
+        </div>
       </div>
     </ThemeProvider>
   );

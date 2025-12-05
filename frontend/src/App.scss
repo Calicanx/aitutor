@@ -6,101 +6,123 @@
   --neo-red: #FF6B6B; // Hot Red
   --neo-violet: #C4B5FD; // Soft Violet
   --neo-bg: #FFFDF5; // Cream background (aged paper)
-
-  // Legacy color mappings for backward compatibility
-  --neo-cyan: #C4B5FD; // Map cyan to violet
-  --neo-pink: #FF6B6B; // Map pink to red
-  --neo-lime: #FFD93D; // Map lime to yellow
-  --neo-orange: #FF6B6B; // Map orange to red
-
-  // Neo-Brutalism Borders & Shadows
-  --neo-border-width: 5px;
-  --neo-border: 5px solid var(--neo-black);
-  --neo-shadow: 3px 3px 0 var(--neo-black);
-  --neo-shadow-hover: 4px 4px 0 var(--neo-black);
-  --neo-shadow-small: 2px 2px 0 var(--neo-black);
-
-  // Legacy variables (keeping for compatibility)
-  --text: var(--neo-black);
-  --gray-200: #b4b8bb;
-  --gray-300: #80868b;
-  --gray-500: #5f6368;
-  --gray-600: #444444;
-  --gray-700: #202020;
-  --gray-800: #171717;
-  --gray-900: #111111;
-  --gray-1000: #0a0a0a;
+  --neo-success: #4ADE80; // Success green
+  
+  // Neo-brutalism shadows
+  --neo-shadow-sm: 4px 4px 0px 0px #000;
+  --neo-shadow: 6px 6px 0px 0px #000;
+  --neo-shadow-md: 8px 8px 0px 0px #000;
+  --neo-shadow-lg: 12px 12px 0px 0px #000;
+  --neo-shadow-xl: 16px 16px 0px 0px #000;
+  
+  // Neo-brutalism borders
+  --neo-border: 4px solid var(--neo-black);
+  --neo-border-thin: 2px solid var(--neo-black);
+  --neo-border-thick: 6px solid var(--neo-black);
+  
   --border-stroke: var(--neo-black);
-  --accent-blue: var(--neo-cyan);
-  --accent-blue-active-bg: #001233;
-  --accent-blue-active: var(--neo-cyan);
-  --accent-blue-headers: var(--neo-cyan);
-  --accent-green: var(--neo-lime);
+  --accent-blue: var(--neo-violet);
+  --accent-blue-active-bg: var(--neo-violet);
+  --accent-blue-active: var(--neo-violet);
+  --accent-blue-headers: var(--neo-violet);
+  --accent-green: var(--neo-success);
+  --accent-red: var(--neo-red);
 
-  --midnight-blue: rgb(0, 18, 51);
-  --blue-30: var(--neo-cyan);
-
-  --accent-red: var(--neo-pink);
-
-  --color: var(--text);
+  --color: var(--neo-black);
 
   scrollbar-color: var(--neo-black) var(--neo-bg);
   scrollbar-width: thin;
 
-  --font-family: "Space Mono", monospace;
+  --font-family: "Space Grotesk", sans-serif;
+}
 
-  /* Neutral palette mapped to neo-brutalism */
-  --Neutral-00: var(--neo-black);
-  --Neutral-5: #181a1b;
-  --Neutral-10: #1c1f21;
-  --Neutral-15: #232729;
-  --Neutral-20: #2a2f31;
-  --Neutral-30: #404547;
-  --Neutral-50: #707577;
-  --Neutral-60: #888d8f;
-  --Neutral-80: #c3c6c7;
-  --Neutral-90: #e1e2e3;
+// Dark mode variables
+:global(.dark) {
+  --neo-bg: #0a0a0a;
+  --neo-black: #FFFFFF;
+  --neo-white: #1a1a1a;
+  --neo-shadow-sm: 4px 4px 0px 0px rgba(255, 255, 255, 0.3);
+  --neo-shadow: 6px 6px 0px 0px rgba(255, 255, 255, 0.3);
+  --neo-shadow-md: 8px 8px 0px 0px rgba(255, 255, 255, 0.3);
+  --neo-shadow-lg: 12px 12px 0px 0px rgba(255, 255, 255, 0.3);
+  --neo-shadow-xl: 16px 16px 0px 0px rgba(255, 255, 255, 0.3);
+  --neo-border: 4px solid #FFFFFF;
+  --neo-border-thin: 2px solid #FFFFFF;
+  --neo-border-thick: 6px solid #FFFFFF;
+  --border-stroke: #FFFFFF;
+}
 
-  --Green-500: var(--neo-lime);
-  --Green-700: #025022;
-
-  --Blue-400: var(--neo-cyan);
-  --Blue-500: var(--neo-cyan);
-  --Blue-800: #0f3557;
-
-  --Red-400: var(--neo-pink);
-  --Red-500: var(--neo-pink);
-  --Red-600: var(--neo-pink);
-  --Red-700: #bd3000;
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 
 body {
-  font-family: "Space Mono", monospace;
+  font-family: "Space Grotesk", sans-serif;
   background: var(--neo-bg);
   color: var(--neo-black);
-  font-size: 11px; // Much smaller base for better fit
-  font-weight: 700; // Bold typography for Web 1.0 aesthetic
+  font-size: 12px;
+  font-weight: 700; // Bold typography for Neo-Brutalism
 
-  // Responsive scaling - only increase on very large screens
+  // Responsive scaling
   @media (min-width: 2560px) {
-    font-size: 14px; // 4K displays
+    font-size: 15px; // 4K displays
   }
 
   @media (min-width: 1920px) {
-    font-size: 13px; // Full HD
+    font-size: 14px; // Full HD
   }
 
   @media (min-width: 1440px) and (max-width: 1919px) {
-    font-size: 12px; // Standard large laptop
+    font-size: 13px; // Standard large laptop
   }
 
   @media (max-width: 1024px) {
-    font-size: 11px; // Tablets
+    font-size: 12px; // Tablets
   }
 
   @media (max-width: 768px) {
-    font-size: 10px; // Mobile
+    font-size: 11px; // Mobile
   }
+}
+
+.App {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  background: var(--neo-bg);
+  overflow: hidden;
+
+  // Halftone pattern overlay - neo-brutalism signature
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: radial-gradient(#000000 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+    opacity: 0.15;
+  }
+}
+
+:global(.dark) .App {
+  background: #0a0a0a;
+  
+  &::before {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.15) 1.5px, transparent 1.5px);
+    opacity: 1;
+  }
+}
+
+.App__content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  overflow: hidden;
 }
 
 .material-symbols-outlined {
@@ -114,25 +136,25 @@ body {
 }
 
 .space-mono-regular {
-  font-family: "Space Mono", monospace;
+  font-family: "Space Grotesk", sans-serif;
   font-weight: 400;
   font-style: normal;
 }
 
 .space-mono-bold {
-  font-family: "Space Mono", monospace;
+  font-family: "Space Grotesk", sans-serif;
   font-weight: 700;
   font-style: normal;
 }
 
 .space-mono-regular-italic {
-  font-family: "Space Mono", monospace;
+  font-family: "Space Grotesk", sans-serif;
   font-weight: 400;
   font-style: italic;
 }
 
 .space-mono-bold-italic {
-  font-family: "Space Mono", monospace;
+  font-family: "Space Grotesk", sans-serif;
   font-weight: 700;
   font-style: italic;
 }
@@ -161,19 +183,85 @@ body {
 }
 
 .streaming-console {
+  --header-height: clamp(44px, 6vh, 56px);
+  --rail-open-width: clamp(230px, 20vw, 320px);
+  --left-rail-width: clamp(32px, 3vw, 48px);
+  --right-rail-width: 0px;
+  --surface-padding: clamp(12px, 3vw, 32px);
+  --content-gap: clamp(16px, 4vw, 40px);
   color: var(--neo-black);
   display: flex;
-  height: calc(100vh - 48px); // Reduced from 56px
-  width: 100vw;
-  margin-top: 48px; // Reduced from 56px
+  flex-direction: column;
+  height: calc(100vh - var(--header-height));
+  width: 100%;
+  margin-top: var(--header-height);
   position: relative;
-  background: var(--neo-bg);
+  background: transparent;
+  padding: 0 calc(var(--surface-padding) + var(--right-rail-width)) 0
+    calc(var(--surface-padding) + var(--left-rail-width));
+  transition: padding 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
 
-  // Responsive layout
-  @media (max-width: 768px) {
-    flex-direction: column;
-    height: calc(100vh - 44px); // Reduced from 50px
+.streaming-console[data-left-rail="open"] {
+  --left-rail-width: var(--rail-open-width);
+}
+
+.streaming-console[data-right-rail="open"] {
+  --right-rail-width: var(--rail-open-width);
+}
+
+@media (max-width: 1200px) {
+  .streaming-console {
+    --left-rail-width: clamp(24px, 2vw, 36px);
+  }
+}
+
+@media (max-width: 1024px) {
+  .streaming-console {
+    --left-rail-width: 0px !important;
+    --right-rail-width: 0px !important;
     margin-top: 44px;
+    height: calc(100vh - 44px);
+    padding: 0 clamp(12px, 5vw, 24px);
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 768px) {
+  .streaming-console {
+    padding: 0 clamp(8px, 3vw, 16px);
+  }
+}
+
+.workspace {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  gap: var(--content-gap);
+  width: 100%;
+  height: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  overflow: hidden;
+  padding: 0;
+  transition: gap 300ms ease-in-out;
+  background: transparent;
+}
+
+@media (max-width: 1024px) {
+  .workspace {
+    padding: 0;
+    gap: clamp(16px, 5vw, 32px);
+  }
+}
+
+@media (max-width: 768px) {
+  .workspace {
+    gap: clamp(12px, 6vw, 24px);
   }
 }
 
@@ -191,79 +279,92 @@ body {
     }
   }
 
-  main {
-    position: relative;
+  .main-app-area {
     display: flex;
-    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    gap: var(--content-gap);
+    padding: clamp(10px, 1.5vw, 20px);
     align-items: center;
     justify-content: center;
-    flex-grow: 1;
-    gap: 0.75rem;
-    width: 100%;
     overflow: hidden;
-    transition: margin-right 300ms ease-in-out, margin-left 300ms ease-in-out;
-    background: var(--neo-bg);
+  }
 
-    @media (max-width: 768px) {
-      margin-left: 0 !important;
-      margin-right: 0 !important;
+  @media (min-width: 1280px) {
+    .main-app-area {
+      // Single column centered layout
     }
   }
 
-  .main-app-area {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    padding: 16px;
-
-    @media (max-width: 1024px) {
-      padding: 12px;
+  @media (max-width: 1280px) {
+    .main-app-area {
+      padding: clamp(8px, 2vw, 16px);
     }
+  }
 
-    @media (max-width: 768px) {
-      padding: 8px;
-      flex-direction: column;
+  @media (max-width: 768px) {
+    .main-app-area {
+      padding: clamp(6px, 3vw, 12px);
     }
   }
 
   .question-panel {
     position: relative;
     display: flex;
-    flex: 2;
     flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    height: 100vh;
-    overflow: hidden;
+    align-items: stretch;
+    justify-content: center;
+    width: 100%;
+    max-width: 900px;
+    height: calc(100vh - var(--header-height) - 32px);
+    max-height: calc(100vh - var(--header-height) - 32px);
+    padding: 16px;
+    overflow: auto;
     background: var(--neo-bg);
-
-    // SVG dot pattern background
-    &::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-      background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='1.5' fill='%23000000' opacity='0.50'/%3E%3C/svg%3E");
-      background-size: 20px 20px;
-      background-repeat: repeat;
+    border: 3px solid var(--neo-black);
+    border-radius: 0; // Neo-brutalism: sharp corners
+    box-shadow: var(--neo-shadow-sm);
+    transition: all 200ms ease-out;
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--neo-shadow-md);
     }
+  }
 
-    // Ensure content is above background
-    > * {
-      position: relative;
-      z-index: 1;
+  @media (max-width: 1280px) {
+    .question-panel {
+      max-height: calc(100vh - var(--header-height) - 32px);
+      padding: 16px;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .question-panel {
+      height: calc(100vh - 44px - 24px);
+      max-height: calc(100vh - 44px - 24px);
+      padding: 16px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .question-panel {
+      padding: 16px;
+      border-width: 2px;
+      border-radius: 0;
+      height: calc(100vh - 44px - 20px);
+      max-height: none;
     }
   }
 
   // Dark mode for question panel background
   :global(.dark) .question-panel {
     background: #0a0a0a;
-
-    &::before {
-      background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='1.5' fill='%23FFFFFF' opacity='0.08'/%3E%3C/svg%3E");
+    border-color: #FFFFFF;
+    box-shadow: 4px 4px 0px 0px rgba(255, 255, 255, 0.3);
+    
+    &:hover {
+      box-shadow: 6px 6px 0px 0px rgba(255, 255, 255, 0.3);
     }
   }
 

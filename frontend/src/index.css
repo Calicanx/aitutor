@@ -1,17 +1,34 @@
 /* src/index.css or src/App.css */
 
+/* Import Space Grotesk font for Neo-Brutalism - MUST be first */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+
 /* @plugin "tailwindcss-animate"; */
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
 
+html {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
-    "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-weight: 700;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
 }
 
 code {
@@ -298,124 +315,148 @@ a[target="lint-help-window"] {
 /* } */
 
 :root {
-  --background: oklch(0.9842 0.0034 247.8575);
-  --foreground: oklch(0.2795 0.0368 260.031);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2795 0.0368 260.031);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2795 0.0368 260.031);
-  --primary: oklch(0.5854 0.2041 277.1173);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.9276 0.0058 264.5313);
-  --secondary-foreground: oklch(0.3729 0.0306 259.7328);
-  --muted: oklch(0.967 0.0029 264.5419);
-  --muted-foreground: oklch(0.551 0.0234 264.3637);
-  --accent: oklch(0.9299 0.0334 272.7879);
-  --accent-foreground: oklch(0.3729 0.0306 259.7328);
-  --destructive: oklch(0.6368 0.2078 25.3313);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.8717 0.0093 258.3382);
-  --input: oklch(0.8717 0.0093 258.3382);
-  --ring: oklch(0.5854 0.2041 277.1173);
-  --chart-1: oklch(0.5854 0.2041 277.1173);
-  --chart-2: oklch(0.5106 0.2301 276.9656);
-  --chart-3: oklch(0.4568 0.2146 277.0229);
-  --chart-4: oklch(0.3984 0.1773 277.3662);
-  --chart-5: oklch(0.3588 0.1354 278.6973);
-  --sidebar: oklch(0.967 0.0029 264.5419);
-  --sidebar-foreground: oklch(0.2795 0.0368 260.031);
-  --sidebar-primary: oklch(0.5854 0.2041 277.1173);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.9299 0.0334 272.7879);
-  --sidebar-accent-foreground: oklch(0.3729 0.0306 259.7328);
-  --sidebar-border: oklch(0.8717 0.0093 258.3382);
-  --sidebar-ring: oklch(0.5854 0.2041 277.1173);
-  --font-sans: Inter, sans-serif;
-  --font-serif: Merriweather, serif;
-  --font-mono: JetBrains Mono, monospace;
-  --radius: 0.5rem;
-  --shadow-x: 0px;
+  /* Neo-Brutalism Color Palette */
+  --neo-bg: #FFFDF5;
+  --neo-black: #000000;
+  --neo-white: #FFFFFF;
+  --neo-accent: #FF6B6B;
+  --neo-secondary: #FFD93D;
+  --neo-muted: #C4B5FD;
+  --neo-success: #4ADE80;
+  
+  /* Neo-Brutalism Shadows */
+  --neo-shadow-sm: 4px 4px 0px 0px #000;
+  --neo-shadow-md: 8px 8px 0px 0px #000;
+  --neo-shadow-lg: 12px 12px 0px 0px #000;
+  --neo-shadow-xl: 16px 16px 0px 0px #000;
+  
+  /* Neo-Brutalism Border */
+  --neo-border: 4px solid #000000;
+  --neo-border-thin: 2px solid #000000;
+  --neo-border-thick: 6px solid #000000;
+  
+  --background: var(--neo-bg);
+  --foreground: var(--neo-black);
+  --card: var(--neo-white);
+  --card-foreground: var(--neo-black);
+  --popover: var(--neo-white);
+  --popover-foreground: var(--neo-black);
+  --primary: var(--neo-accent);
+  --primary-foreground: var(--neo-white);
+  --secondary: var(--neo-secondary);
+  --secondary-foreground: var(--neo-black);
+  --muted: var(--neo-muted);
+  --muted-foreground: var(--neo-black);
+  --accent: var(--neo-secondary);
+  --accent-foreground: var(--neo-black);
+  --destructive: var(--neo-accent);
+  --destructive-foreground: var(--neo-white);
+  --border: var(--neo-black);
+  --input: var(--neo-black);
+  --ring: var(--neo-black);
+  --chart-1: var(--neo-accent);
+  --chart-2: var(--neo-secondary);
+  --chart-3: var(--neo-muted);
+  --chart-4: var(--neo-success);
+  --chart-5: var(--neo-black);
+  --sidebar: var(--neo-bg);
+  --sidebar-foreground: var(--neo-black);
+  --sidebar-primary: var(--neo-accent);
+  --sidebar-primary-foreground: var(--neo-white);
+  --sidebar-accent: var(--neo-secondary);
+  --sidebar-accent-foreground: var(--neo-black);
+  --sidebar-border: var(--neo-black);
+  --sidebar-ring: var(--neo-black);
+  --font-sans: 'Space Grotesk', sans-serif;
+  --font-serif: 'Space Grotesk', serif;
+  --font-mono: 'Space Mono', monospace;
+  --radius: 0px;
+  --shadow-x: 4px;
   --shadow-y: 4px;
-  --shadow-blur: 8px;
-  --shadow-spread: -1px;
-  --shadow-opacity: 0.1;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
-  --shadow-xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
-  --shadow-sm:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 1px 2px -2px hsl(0 0% 0% / 0.1);
-  --shadow:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 1px 2px -2px hsl(0 0% 0% / 0.1);
-  --shadow-md:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 2px 4px -2px hsl(0 0% 0% / 0.1);
-  --shadow-lg:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 4px 6px -2px hsl(0 0% 0% / 0.1);
-  --shadow-xl:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 8px 10px -2px hsl(0 0% 0% / 0.1);
-  --shadow-2xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.25);
+  --shadow-blur: 0px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 1;
+  --shadow-color: #000000;
+  --shadow-2xs: var(--neo-shadow-sm);
+  --shadow-xs: var(--neo-shadow-sm);
+  --shadow-sm: var(--neo-shadow-sm);
+  --shadow: var(--neo-shadow-md);
+  --shadow-md: var(--neo-shadow-md);
+  --shadow-lg: var(--neo-shadow-lg);
+  --shadow-xl: var(--neo-shadow-xl);
+  --shadow-2xl: var(--neo-shadow-xl);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 }
 
 .dark {
-  --background: oklch(0.2077 0.0398 265.7549);
-  --foreground: oklch(0.9288 0.0126 255.5078);
-  --card: oklch(0.2795 0.0368 260.031);
-  --card-foreground: oklch(0.9288 0.0126 255.5078);
-  --popover: oklch(0.2795 0.0368 260.031);
-  --popover-foreground: oklch(0.9288 0.0126 255.5078);
-  --primary: oklch(0.6801 0.1583 276.9349);
-  --primary-foreground: oklch(0.2077 0.0398 265.7549);
-  --secondary: oklch(0.3351 0.0331 260.912);
-  --secondary-foreground: oklch(0.8717 0.0093 258.3382);
-  --muted: oklch(0.2427 0.0381 259.9437);
-  --muted-foreground: oklch(0.7137 0.0192 261.3246);
-  --accent: oklch(0.3729 0.0306 259.7328);
-  --accent-foreground: oklch(0.8717 0.0093 258.3382);
-  --destructive: oklch(0.6368 0.2078 25.3313);
-  --destructive-foreground: oklch(0.2077 0.0398 265.7549);
-  --border: oklch(0.4461 0.0263 256.8018);
-  --input: oklch(0.4461 0.0263 256.8018);
-  --ring: oklch(0.6801 0.1583 276.9349);
-  --chart-1: oklch(0.6801 0.1583 276.9349);
-  --chart-2: oklch(0.5854 0.2041 277.1173);
-  --chart-3: oklch(0.5106 0.2301 276.9656);
-  --chart-4: oklch(0.4568 0.2146 277.0229);
-  --chart-5: oklch(0.3984 0.1773 277.3662);
-  --sidebar: oklch(0.2795 0.0368 260.031);
-  --sidebar-foreground: oklch(0.9288 0.0126 255.5078);
-  --sidebar-primary: oklch(0.6801 0.1583 276.9349);
-  --sidebar-primary-foreground: oklch(0.2077 0.0398 265.7549);
-  --sidebar-accent: oklch(0.3729 0.0306 259.7328);
-  --sidebar-accent-foreground: oklch(0.8717 0.0093 258.3382);
-  --sidebar-border: oklch(0.4461 0.0263 256.8018);
-  --sidebar-ring: oklch(0.6801 0.1583 276.9349);
-  --font-sans: Inter, sans-serif;
-  --font-serif: Merriweather, serif;
-  --font-mono: JetBrains Mono, monospace;
-  --radius: 0.5rem;
-  --shadow-x: 0px;
+  /* Neo-Brutalism Dark Mode */
+  --neo-bg: #0a0a0a;
+  --neo-black: #FFFFFF;
+  --neo-white: #1a1a1a;
+  
+  --background: var(--neo-bg);
+  --foreground: #FFFFFF;
+  --card: #1a1a1a;
+  --card-foreground: #FFFFFF;
+  --popover: #1a1a1a;
+  --popover-foreground: #FFFFFF;
+  --primary: var(--neo-accent);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--neo-secondary);
+  --secondary-foreground: #000000;
+  --muted: #2a2a2a;
+  --muted-foreground: #a0a0a0;
+  --accent: var(--neo-secondary);
+  --accent-foreground: #000000;
+  --destructive: var(--neo-accent);
+  --destructive-foreground: #FFFFFF;
+  --border: #FFFFFF;
+  --input: #FFFFFF;
+  --ring: #FFFFFF;
+  --chart-1: var(--neo-accent);
+  --chart-2: var(--neo-secondary);
+  --chart-3: var(--neo-muted);
+  --chart-4: var(--neo-success);
+  --chart-5: #FFFFFF;
+  --sidebar: #1a1a1a;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: var(--neo-accent);
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: var(--neo-secondary);
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #FFFFFF;
+  --sidebar-ring: #FFFFFF;
+  --font-sans: 'Space Grotesk', sans-serif;
+  --font-serif: 'Space Grotesk', serif;
+  --font-mono: 'Space Mono', monospace;
+  --radius: 0px;
+  --shadow-x: 4px;
   --shadow-y: 4px;
-  --shadow-blur: 8px;
-  --shadow-spread: -1px;
-  --shadow-opacity: 0.1;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
-  --shadow-xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
-  --shadow-sm:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 1px 2px -2px hsl(0 0% 0% / 0.1);
-  --shadow:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 1px 2px -2px hsl(0 0% 0% / 0.1);
-  --shadow-md:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 2px 4px -2px hsl(0 0% 0% / 0.1);
-  --shadow-lg:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 4px 6px -2px hsl(0 0% 0% / 0.1);
-  --shadow-xl:
-    0px 4px 8px -1px hsl(0 0% 0% / 0.1), 0px 8px 10px -2px hsl(0 0% 0% / 0.1);
-  --shadow-2xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.25);
+  --shadow-blur: 0px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0.3;
+  --shadow-color: rgba(255, 255, 255, 0.3);
+  --shadow-2xs: 4px 4px 0px 0px rgba(255, 255, 255, 0.3);
+  --shadow-xs: 4px 4px 0px 0px rgba(255, 255, 255, 0.3);
+  --shadow-sm: 4px 4px 0px 0px rgba(255, 255, 255, 0.3);
+  --shadow: 8px 8px 0px 0px rgba(255, 255, 255, 0.3);
+  --shadow-md: 8px 8px 0px 0px rgba(255, 255, 255, 0.3);
+  --shadow-lg: 12px 12px 0px 0px rgba(255, 255, 255, 0.3);
+  --shadow-xl: 16px 16px 0px 0px rgba(255, 255, 255, 0.3);
+  --shadow-2xl: 16px 16px 0px 0px rgba(255, 255, 255, 0.3);
 }
 
 @theme inline {
+  /* Neo-Brutalism Colors */
+  --color-neo-bg: #FFFDF5;
+  --color-neo-black: #000000;
+  --color-neo-white: #FFFFFF;
+  --color-neo-accent: #FF6B6B;
+  --color-neo-secondary: #FFD93D;
+  --color-neo-muted: #C4B5FD;
+  --color-neo-success: #4ADE80;
+  
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -453,11 +494,13 @@ a[target="lint-help-window"] {
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Neo-Brutalism: Sharp corners only */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
 
+  /* Neo-Brutalism Hard Shadows */
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
@@ -478,7 +521,100 @@ a[target="lint-help-window"] {
   }
 }
 
+/* Neo-Brutalism Utility Classes */
 @layer utilities {
+  /* Hard shadow utilities */
+  .neo-shadow-sm {
+    box-shadow: 4px 4px 0px 0px #000;
+  }
+  .neo-shadow {
+    box-shadow: 6px 6px 0px 0px #000;
+  }
+  .neo-shadow-md {
+    box-shadow: 8px 8px 0px 0px #000;
+  }
+  .neo-shadow-lg {
+    box-shadow: 12px 12px 0px 0px #000;
+  }
+  .neo-shadow-xl {
+    box-shadow: 16px 16px 0px 0px #000;
+  }
+  
+  .dark .neo-shadow-sm {
+    box-shadow: 4px 4px 0px 0px rgba(255, 255, 255, 0.3);
+  }
+  .dark .neo-shadow {
+    box-shadow: 6px 6px 0px 0px rgba(255, 255, 255, 0.3);
+  }
+  .dark .neo-shadow-md {
+    box-shadow: 8px 8px 0px 0px rgba(255, 255, 255, 0.3);
+  }
+  .dark .neo-shadow-lg {
+    box-shadow: 12px 12px 0px 0px rgba(255, 255, 255, 0.3);
+  }
+  .dark .neo-shadow-xl {
+    box-shadow: 16px 16px 0px 0px rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Neo-brutalism border utilities */
+  .neo-border {
+    border: 4px solid #000;
+  }
+  .neo-border-thin {
+    border: 2px solid #000;
+  }
+  .neo-border-thick {
+    border: 6px solid #000;
+  }
+  
+  .dark .neo-border {
+    border-color: #fff;
+  }
+  .dark .neo-border-thin {
+    border-color: #fff;
+  }
+  .dark .neo-border-thick {
+    border-color: #fff;
+  }
+  
+  /* Neo-brutalism push button effect */
+  .neo-push {
+    transition: transform 100ms ease-out, box-shadow 100ms ease-out;
+  }
+  .neo-push:active {
+    transform: translate(2px, 2px);
+    box-shadow: none !important;
+  }
+  
+  /* Neo-brutalism lift effect for cards */
+  .neo-lift {
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+  }
+  .neo-lift:hover {
+    transform: translateY(-2px);
+  }
+  
+  /* Halftone pattern background */
+  .neo-halftone {
+    background-image: radial-gradient(#000 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+  }
+  
+  .dark .neo-halftone {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.15) 1.5px, transparent 1.5px);
+  }
+  
+  /* Grid pattern background */
+  .neo-grid {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  }
+  
+  .dark .neo-grid {
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  }
 
   /* GPU acceleration for transforms */
   .transform-gpu {

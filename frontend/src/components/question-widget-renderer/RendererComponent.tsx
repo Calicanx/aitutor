@@ -205,18 +205,18 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         : 0;
 
     return (
-        <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
+        <div className="framework-perseus relative flex h-full w-full items-center justify-center p-4">
             {/* Neo-Brutalism Card */}
-            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto md:h-[550px] lg:h-[600px] flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
+            <Card className="relative flex w-full h-full flex-col border-[3px] md:border-[4px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
                 {/* Progress bar at top */}
-                <div className="absolute top-0 left-0 right-0 h-2 md:h-3 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] md:border-b-[3px] border-black dark:border-white">
+                <div className="absolute top-0 left-0 right-0 h-1.5 md:h-2 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] border-black dark:border-white">
                     <div
                         className="h-full bg-[#C4B5FD] transition-all duration-500 ease-out"
                         style={{ width: `${progressPercentage}%` }}
                     />
                 </div>
 
-                <CardHeader className="space-y-2 pt-6 md:pt-7 px-4 md:px-6 border-b-[3px] md:border-b-[4px] border-black dark:border-white bg-[#FFD93D]">
+                <CardHeader className="space-y-1.5 p-4 border-b-[2px] md:border-b-[3px] border-black dark:border-white bg-[#FFD93D]">
                     <div className="flex items-start justify-between gap-3 md:gap-4 flex-wrap">
                         <div className="space-y-1.5 flex-1">
                             <div className="flex items-center gap-2 md:gap-3">
@@ -255,7 +255,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 overflow-hidden px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
+                <CardContent className="flex-1 overflow-hidden p-4 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
                         className="relative h-full w-full overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
@@ -354,7 +354,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardContent>
 
-                <CardFooter className="flex justify-end gap-2 md:gap-3 px-4 md:px-6 pb-4 md:pb-5 pt-3 md:pt-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
+                <CardFooter className="flex justify-end gap-2 md:gap-3 p-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
                     <Button
                         type="button"
                         size="sm"

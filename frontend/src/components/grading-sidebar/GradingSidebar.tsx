@@ -134,7 +134,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
             className={cn(
                 "fixed top-[44px] lg:top-[48px] left-0 flex flex-col border-r-[3px] lg:border-r-[4px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) z-50 will-change-transform shadow-[2px_0_0_0_rgba(0,0,0,1)] lg:shadow-[2px_0_0_0_rgba(0,0,0,1)] dark:shadow-[2px_0_0_0_rgba(255,255,255,0.3)]",
                 "h-[calc(100vh-44px)] lg:h-[calc(100vh-48px)]",
-                open ? "w-[240px] lg:w-[260px]" : "w-[40px]",
+                open ? "w-[280px] lg:w-[320px]" : "w-[40px]",
                 "max-md:hidden" // Hide on mobile
             )}
         >
@@ -178,7 +178,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                 {open ? (
                     <div
                         ref={scrollContainerRef}
-                        className="h-full overflow-y-auto overflow-x-hidden animate-in fade-in duration-500 px-4 py-4"
+                        className="h-full overflow-y-auto overflow-x-hidden animate-in fade-in duration-500 px-4 py-4 lg:px-5 lg:py-5"
                     >
                         <Accordion type="single" collapsible className="w-full space-y-3">
                             {Object.entries(skillStates).map(([skillName, stats]) => {
@@ -218,7 +218,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                 <div className="flex flex-col gap-2 w-full">
                                                     <div className="flex items-center justify-between w-full">
                                                         <span className={cn(
-                                                            "font-black text-sm text-left uppercase tracking-tight",
+                                                            "font-black text-sm text-left uppercase tracking-tight leading-tight break-words",
                                                             isPracticed ? "text-black dark:text-white" : "text-black/50 dark:text-white/50"
                                                         )}>
                                                             {formatSkillName(skillName)}
@@ -255,10 +255,10 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                             </AccordionTrigger>
                                             <AccordionContent>
                                                 <div className="px-4 pb-4 pt-2">
-                                                    <div className="grid grid-cols-2 gap-3">
+                                                    <div className="grid grid-cols-2 gap-3 auto-rows-[minmax(120px,1fr)]">
                                                         {/* Accuracy Card */}
                                                         <div className={cn(
-                                                            "aspect-square p-2.5 border-[3px] border-black dark:border-white shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.2)] flex flex-col",
+                                                            "min-h-[120px] p-2.5 border-[3px] border-black dark:border-white shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.2)] flex flex-col overflow-hidden",
                                                             isPracticed
                                                                 ? "bg-[#FF6B6B] dark:bg-[#FF6B6B]"
                                                                 : "bg-[#FFFDF5] dark:bg-[#000000] opacity-60"
@@ -269,7 +269,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                                     isPracticed ? "text-white" : "text-black dark:text-white"
                                                                 )} />
                                                                 <span className={cn(
-                                                                    "text-[9px] font-black uppercase leading-none",
+                                                                    "text-[9px] font-black uppercase leading-tight whitespace-normal",
                                                                     isPracticed ? "text-white" : "text-black dark:text-white"
                                                                 )}>Accuracy</span>
                                                             </div>
@@ -281,7 +281,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                                     {accuracyPercent}%
                                                                 </div>
                                                                 <div className={cn(
-                                                                    "text-[9px] mt-1 font-bold",
+                                                                    "text-[9px] mt-1 font-bold leading-tight whitespace-normal",
                                                                     isPracticed ? "text-white" : "text-black dark:text-white"
                                                                 )}>
                                                                     {stats.correct_count}/{stats.practice_count} correct
@@ -291,7 +291,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
 
                                                         {/* Practice Count Card */}
                                                         <div className={cn(
-                                                            "aspect-square p-2.5 border-[3px] border-black dark:border-white shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.2)] flex flex-col",
+                                                            "min-h-[120px] p-2.5 border-[3px] border-black dark:border-white shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.2)] flex flex-col overflow-hidden",
                                                             isPracticed
                                                                 ? "bg-[#C4B5FD] dark:bg-[#C4B5FD]"
                                                                 : "bg-[#FFFDF5] dark:bg-[#000000] opacity-60"
@@ -302,7 +302,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                                     isPracticed ? "text-black" : "text-black dark:text-white"
                                                                 )} />
                                                                 <span className={cn(
-                                                                    "text-[9px] font-black uppercase leading-none",
+                                                                    "text-[9px] font-black uppercase leading-tight whitespace-normal",
                                                                     isPracticed ? "text-black" : "text-black dark:text-white"
                                                                 )}>Practice</span>
                                                             </div>
@@ -314,7 +314,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                                     {stats.practice_count}
                                                                 </div>
                                                                 <div className={cn(
-                                                                    "text-[9px] mt-1 font-bold",
+                                                                    "text-[9px] mt-1 font-bold leading-tight whitespace-normal",
                                                                     isPracticed ? "text-black" : "text-black dark:text-white"
                                                                 )}>
                                                                     total attempts
@@ -326,12 +326,14 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                     {/* Last Practice */}
                                                     <div className="mt-2 bg-[#FFFDF5] dark:bg-[#000000] p-2.5 border-[3px] border-black dark:border-white">
                                                         <div className={cn(
-                                                            "flex items-center gap-2 text-xs font-bold",
+                                                            "flex items-center gap-2 text-xs font-bold leading-tight whitespace-normal",
                                                             isPracticed ? "text-black dark:text-white" : "text-black/50 dark:text-white/50"
                                                         )}>
                                                             <Clock className="w-3.5 h-3.5 font-bold flex-shrink-0" />
                                                             <span className="font-black uppercase text-[9px]">Last Practice:</span>
-                                                            <span className="ml-auto text-[9px]">{formatTime(stats.last_practice_time)}</span>
+                                                            <span className="ml-auto text-[9px] text-right leading-tight whitespace-normal break-words">
+                                                                {formatTime(stats.last_practice_time)}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </div>
