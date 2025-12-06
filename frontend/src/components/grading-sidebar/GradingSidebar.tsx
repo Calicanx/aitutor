@@ -1,8 +1,11 @@
 import React, { useEffect, useRef } from "react";
 import cn from "classnames";
 import { GraduationCap, ChevronRight, ChevronLeft, TrendingUp, Clock, Target } from "lucide-react";
-import data from "../../../data.json";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { apiUtils } from "../../lib/api-utils";
+
+const DASH_API_URL = import.meta.env.VITE_DASH_API_URL || 'http://localhost:8000';
 import {
     Accordion,
     AccordionContent,
@@ -39,9 +42,25 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const isUserScrollingRef = useRef(false);
     const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const skillStates = data.skill_states as Record<
+    
+    // Fetch skill scores from API
+    const { data: skillScoresData, isLoading } = useQuery({
+        queryKey: ["skill-scores"],
+        queryFn: async () => {
+            const res = await apiUtils.get(`${DASH_API_URL}/api/skill-scores`);
+            if (!res.ok) {
+                throw new Error(`Failed to fetch skill scores (${res.status})`);
+            }
+            return res.json();
+        },
+        staleTime: 10_000, // Refresh every 10 seconds
+        refetchInterval: 10_000, // Auto-refresh every 10 seconds
+    });
+    
+    const skillStates = (skillScoresData?.skill_states || {}) as Record<
         string,
         {
+            name: string;
             memory_strength: number;
             last_practice_time: number | null;
             practice_count: number;
@@ -181,7 +200,16 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                         className="h-full overflow-y-auto overflow-x-hidden animate-in fade-in duration-500 px-4 py-4"
                     >
                         <Accordion type="single" collapsible className="w-full space-y-3">
-                            {Object.entries(skillStates).map(([skillName, stats]) => {
+                            {isLoading ? (
+                                <div className="text-center py-8 text-sm text-gray-500">
+                                    Loading skills...
+                                </div>
+                            ) : Object.keys(skillStates).length === 0 ? (
+                                <div className="text-center py-8 text-sm text-gray-500">
+                                    No skills available yet
+                                </div>
+                            ) : (
+                                Object.entries(skillStates).map(([skillName, stats]) => {
                                 const strength = Math.max(-2, Math.min(2, stats.memory_strength ?? 0));
                                 const normalizedStrength = ((strength + 2) / 4) * 100; // 0-100%
                                 const isPracticed = stats.practice_count > 0;
@@ -221,7 +249,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                                             "font-black text-sm text-left uppercase tracking-tight",
                                                             isPracticed ? "text-black dark:text-white" : "text-black/50 dark:text-white/50"
                                                         )}>
-                                                            {formatSkillName(skillName)}
+                                                            {stats.name.toUpperCase()}
                                                         </span>
                                                         <div className={cn(
                                                             "px-2.5 py-0.5 border-[2px] border-black dark:border-white text-[10px] font-black uppercase",
@@ -339,7 +367,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                         </div>
                                     </AccordionItem>
                                 );
-                            })}
+                            }))}
                         </Accordion>
                     </div>
                 ) : (
