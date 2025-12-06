@@ -99,8 +99,8 @@ class DASHSystem:
     def _load_from_mongodb(self):
         """Load skills and questions from MongoDB"""
         try:
-            # Load skills from MongoDB
-            skills_docs = list(self.mongo.skills.find())
+            # Load skills from MongoDB (using generated_skills collection)
+            skills_docs = list(self.mongo.generated_skills.find())
             for skill_doc in skills_docs:
                 try:
                     skill = Skill(
@@ -118,23 +118,51 @@ class DASHSystem:
             
             log_print(f"[MONGODB] Loaded {len(self.skills)} skills from MongoDB")
             
-            # Load DASH questions from MongoDB
-            questions_docs = list(self.mongo.dash_questions.find())
+            # Load questions from scraped_questions collection
+            questions_docs = list(self.mongo.scraped_questions.find())
             self.questions.clear()
+            
             for q_doc in questions_docs:
                 try:
+                    # Extract questionId (includes fabricated prefix: e.g., "41.1.2.1.9_x338f5e1fbc6cafdf")
+                    # Format: {course_idx}.{unit_idx}.{lesson_idx}.{exercise_idx}.{question_idx}_{item_id}
+                    question_id = q_doc.get('questionId', '')
+                    if not question_id:
+                        continue
+                    
+                    # Extract exerciseDirName (maps to skill_id)
+                    exercise_dir_name = q_doc.get('exerciseDirName', '')
+                    if not exercise_dir_name:
+                        log_print(f"[WARNING] Skipping question {question_id}: missing exerciseDirName")
+                        continue
+                    
+                    # Verify skill exists in generated_skills
+                    skill = self.skills.get(exercise_dir_name)
+                    if not skill:
+                        # Silently skip questions whose skills aren't in generated_skills
+                        # (These are expected: old questions from non-math subjects or test data)
+                        continue
+                    
+                    # Get difficulty from skill (not from question document)
+                    difficulty = skill.difficulty
+                    
+                    # Create Question object
+                    # Note: content is empty string since Perseus data is loaded separately
                     question = Question(
-                        question_id=q_doc['question_id'],
-                        skill_ids=[q_doc['skill_id']],
-                        content=q_doc['content'],
-                        difficulty=q_doc['difficulty'],
-                        expected_time_seconds=q_doc.get('expected_time_seconds', 60.0)
+                        question_id=question_id,
+                        skill_ids=[exercise_dir_name],  # Single skill per question
+                        content="",  # Not used, Perseus data loaded separately
+                        difficulty=difficulty,
+                        expected_time_seconds=60.0  # Default value
                     )
                     self.questions[question.question_id] = question
+                    
                 except KeyError as e:
-                    log_print(f"[WARNING] Skipping question {q_doc.get('question_id', 'unknown')}: missing field {e}")
+                    log_print(f"[WARNING] Skipping question {q_doc.get('questionId', 'unknown')}: missing field {e}")
+                except Exception as e:
+                    log_print(f"[WARNING] Skipping question {q_doc.get('questionId', 'unknown')}: error {e}")
             
-            log_print(f"[MONGODB] Loaded {len(self.questions)} questions from MongoDB")
+            log_print(f"[MONGODB] Loaded {len(self.questions)} questions from scraped_questions collection")
             
         except Exception as e:
             log_print(f"[ERROR] Error loading from MongoDB: {e}")
@@ -338,8 +366,10 @@ class DASHSystem:
         if is_correct:
             state.correct_count += 1
         
-        # Calculate current memory strength with decay
-        current_strength = self.calculate_memory_strength(student_id, skill_id, current_time)
+        # Update memory strength based on performance
+        # IMPORTANT: Use stored memory_strength (not decayed) as base for updates
+        # Decay is only applied when calculating current strength for display/selection
+        stored_strength = state.memory_strength
         time_since_last = current_time - state.last_practice_time if state.last_practice_time else 0
         
         # Update memory strength based on performance
@@ -351,7 +381,8 @@ class DASHSystem:
             time_penalty = self.calculate_time_penalty(response_time_seconds)
             strength_increment *= time_penalty
             
-            new_strength = min(5.0, current_strength + strength_increment)
+            # Update stored strength (absolute value, not decayed)
+            new_strength = min(5.0, stored_strength + strength_increment)
             state.memory_strength = new_strength
             
             # Compact memory update log
@@ -359,7 +390,8 @@ class DASHSystem:
             log_print(f"  |- {skill_name}: {prev_strength:.3f} -> {new_strength:.3f} ({strength_change:+.3f})")
         else:
             # Slight decrease for incorrect answers
-            new_strength = max(-2.0, current_strength - 0.2)
+            # Use stored strength (not decayed) as base
+            new_strength = max(-2.0, stored_strength - 0.2)
             state.memory_strength = new_strength
             
             # Compact memory update log
