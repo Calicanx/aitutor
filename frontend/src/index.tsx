@@ -21,14 +21,40 @@ import App from "./App";
 import reportWebVitals from "./reportWebVitals";
 import "./package/perseus/testing/perseus-init.tsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import LoginPage from "./components/auth/LoginPage";
+import LandingPageWrapper from "./components/landing/LandingPageWrapper";
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
 );
 
 const queryClient = new QueryClient();
+
+// Component to decide between landing page and app
+const LandingPageOrApp: React.FC = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: '#FFFDF5'
+      }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <LandingPageWrapper />;
+  }
+  
+  return <App />;
+};
 
 root.render(
   <QueryClientProvider client={queryClient}>
@@ -37,6 +63,7 @@ root.render(
         <Switch>
           <Route path="/auth/setup" component={LoginPage} />
           <Route path="/login" component={LoginPage} />
+          <Route path="/" exact component={LandingPageOrApp} />
           <Route path="/" component={App} />
         </Switch>
       </AuthProvider>
