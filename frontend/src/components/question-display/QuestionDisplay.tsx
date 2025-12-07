@@ -7,8 +7,8 @@ interface QuestionDisplayProps {
 
 const QuestionDisplay: React.FC<QuestionDisplayProps> = ({ onSkillChange }) => {
   return (
-    <div className="w-full h-full flex flex-col items-stretch justify-start bg-transparent overflow-auto">
-      <div className="w-full h-full overflow-auto" id="perseus-capture-area">
+    <div className="w-full h-auto md:h-full flex flex-col items-stretch justify-start bg-transparent overflow-visible md:overflow-hidden">
+      <div className="w-full h-auto md:h-full" id="perseus-capture-area">
         <RendererComponent onSkillChange={onSkillChange} />
       </div>
     </div>

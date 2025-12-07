@@ -130,22 +130,23 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
     };
 
     return (
-        <div
-            className={cn(
-                "fixed top-[44px] lg:top-[48px] left-0 flex flex-col border-r-[3px] lg:border-r-[4px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) z-50 will-change-transform shadow-[2px_0_0_0_rgba(0,0,0,1)] lg:shadow-[2px_0_0_0_rgba(0,0,0,1)] dark:shadow-[2px_0_0_0_rgba(255,255,255,0.3)]",
-                "h-[calc(100vh-44px)] lg:h-[calc(100vh-48px)]",
-                open ? "w-[280px] lg:w-[320px]" : "w-[40px]",
-                "max-md:hidden" // Hide on mobile
-            )}
-        >
+        <>
+            <div
+                className={cn(
+                    "fixed top-[44px] lg:top-[48px] left-0 flex flex-col border-r-[3px] lg:border-r-[4px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) z-50 will-change-transform shadow-[2px_0_0_0_rgba(0,0,0,1)] lg:shadow-[2px_0_0_0_rgba(0,0,0,1)] dark:shadow-[2px_0_0_0_rgba(255,255,255,0.3)]",
+                    "h-[calc(100vh-44px)] lg:h-[calc(100vh-48px)]",
+                    open ? "w-[280px] lg:w-[320px]" : "w-[54px]",
+                    open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+                )}
+            >
             <header className={cn(
                 "flex items-center h-[44px] lg:h-[48px] border-b-[3px] border-black dark:border-white shrink-0 overflow-hidden transition-all duration-300 bg-[#FF6B6B]",
-                open ? "justify-between px-3 lg:px-4" : "justify-center"
+                open ? "justify-between px-3 lg:px-4" : "justify-center px-1"
             )}>
                 {open ? (
                     <div className="flex items-center gap-2 lg:gap-2.5 animate-in fade-in slide-in-from-left-4 duration-300">
-                        <div className="p-1.5 lg:p-2 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
-                            <GraduationCap className="w-4 h-4 lg:w-4 lg:h-4 text-black dark:text-white font-bold" />
+                        <div className="h-10 w-10 min-h-10 min-w-10 p-1 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] flex items-center justify-center shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+                            <GraduationCap className="w-5 h-5 text-black dark:text-white font-bold" />
                         </div>
                         <h2 className="text-xs lg:text-sm font-black text-white whitespace-nowrap uppercase tracking-tight">
                             GRADING & SKILLS
@@ -156,7 +157,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                         variant="ghost"
                         size="icon"
                         onClick={onToggle}
-                        className="w-9 h-9 lg:w-10 lg:h-10 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] transition-colors shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
+                        className="h-10 w-10 min-h-10 min-w-10 p-1 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] transition-colors shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
                     >
                         <GraduationCap className="w-6 h-6 text-black dark:text-white dark:hover:text-black font-bold" />
                     </Button>
@@ -167,7 +168,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                         variant="ghost"
                         size="icon"
                         onClick={onToggle}
-                        className="w-10 h-10 border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black transition-all shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
+                        className="h-10 w-10 min-h-10 min-w-10 p-1 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
                     >
                         <ChevronLeft className="w-5 h-5 font-bold" />
                     </Button>
@@ -352,6 +353,15 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                     </div>
                 )}
             </div>
-        </div>
+            </div>
+
+            {open && (
+                <div
+                    className="md:hidden fixed inset-0 top-[44px] bg-black/30 dark:bg-white/10 z-40"
+                    onClick={onToggle}
+                    aria-hidden
+                />
+            )}
+        </>
     );
 }

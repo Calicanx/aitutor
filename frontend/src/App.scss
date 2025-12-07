@@ -231,6 +231,9 @@ body {
 @media (max-width: 768px) {
   .streaming-console {
     padding: 0 clamp(8px, 3vw, 16px);
+    height: auto;
+    min-height: calc(100vh - 44px);
+    overflow: visible;
   }
 }
 
@@ -262,6 +265,10 @@ body {
 @media (max-width: 768px) {
   .workspace {
     gap: clamp(12px, 6vw, 24px);
+    justify-content: flex-start;
+    align-items: stretch;
+    height: auto;
+    flex-grow: 0;
   }
 }
 
@@ -305,6 +312,9 @@ body {
   @media (max-width: 768px) {
     .main-app-area {
       padding: clamp(6px, 3vw, 12px);
+      justify-content: flex-start;
+      align-items: flex-start;
+      height: auto;
     }
   }
 
@@ -313,11 +323,12 @@ body {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
     max-width: 900px;
     height: calc(100vh - var(--header-height) - 32px);
     max-height: calc(100vh - var(--header-height) - 32px);
+    min-height: 0;
     padding: 16px;
     overflow: auto;
     background: var(--neo-bg);
@@ -349,11 +360,21 @@ body {
 
   @media (max-width: 768px) {
     .question-panel {
-      padding: 16px;
+      padding: 8px;
       border-width: 2px;
       border-radius: 0;
-      height: calc(100vh - 44px - 20px);
-      max-height: none;
+      height: auto;
+      min-height: auto;
+      max-height: calc(100vh - 180px); // Account for header + floating capsule
+      overflow: auto; // Hide overflow on container
+      align-self: stretch;
+      flex-shrink: 0;
+      
+      // Make inner content scrollable
+      > * {
+        max-height: 100%;
+        overflow-y: auto;
+      }
     }
   }
 

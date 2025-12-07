@@ -17,7 +17,7 @@
 import { RiSidebarFoldLine, RiSidebarUnfoldLine } from "react-icons/ri";
 import { Button } from "@/components/ui/button";
 import cn from "classnames";
-import { Sparkles, Moon, Sun, User, Settings, LogOut } from "lucide-react";
+import { Sparkles, Moon, Sun, User, Settings, LogOut, GraduationCap } from "lucide-react";
 import { useTheme } from "../theme/theme-provier";
 import {
     DropdownMenu,
@@ -37,9 +37,11 @@ import {
 interface HeaderProps {
     sidebarOpen: boolean;
     onToggleSidebar: () => void;
+    gradingSidebarOpen: boolean;
+    onToggleGradingSidebar: () => void;
 }
 
-export default function Header({ sidebarOpen, onToggleSidebar }: HeaderProps) {
+export default function Header({ sidebarOpen, onToggleSidebar, gradingSidebarOpen, onToggleGradingSidebar }: HeaderProps) {
     const { theme, setTheme } = useTheme();
 
     return (
@@ -65,6 +67,18 @@ export default function Header({ sidebarOpen, onToggleSidebar }: HeaderProps) {
 
             {/* Right side - Actions */}
             <div className="flex items-center gap-1.5 md:gap-2">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="w-7 h-7 md:hidden border-[2px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] transition-all duration-100 text-black dark:text-white dark:hover:text-black"
+                    onClick={onToggleGradingSidebar}
+                    aria-pressed={gradingSidebarOpen}
+                    aria-label="Toggle grades and skills"
+                >
+                    <GraduationCap className="w-4 h-4 font-black" />
+                </Button>
+
                 <Button
                     type="button"
                     variant="ghost"

@@ -117,7 +117,9 @@ function App() {
           <LiveAPIProvider>
             <Header
               sidebarOpen={isSidebarOpen}
+              gradingSidebarOpen={isGradingSidebarOpen}
               onToggleSidebar={toggleSidebar}
+              onToggleGradingSidebar={toggleGradingSidebar}
             />
             <div
               className="streaming-console"

@@ -29,6 +29,8 @@ import {
   MoreHorizontal,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Home,
   X,
   Eye,
@@ -82,6 +84,18 @@ function FloatingControlPanel({
     isConnected: boolean;
     error: string | null;
   }>({ isConnected: false, error: null });
+
+  // Track if we're on mobile for conditional rendering
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Timer for session duration
   useEffect(() => {
@@ -471,21 +485,232 @@ function FloatingControlPanel({
         !isDragging &&
         "transition-all duration-200 ease-out",
         isCollapsed
-          ? "w-[50px] md:w-[55px] py-2 md:py-2.5 px-1 md:px-1.5 shadow-[2px_2px_0_0_rgba(0,0,0,1),_4px_4px_8px_2px_rgba(167,139,250,0.4),_6px_6px_16px_4px_rgba(139,92,246,0.25)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.9),_4px_4px_8px_2px_rgba(167,139,250,0.35),_6px_6px_16px_4px_rgba(139,92,246,0.2)]"
-          : "w-[220px] md:w-[250px] p-2.5 md:p-3 shadow-[3px_3px_0_0_rgba(0,0,0,1),_6px_6px_12px_3px_rgba(167,139,250,0.45),_9px_9px_24px_6px_rgba(139,92,246,0.3)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.9),_6px_6px_12px_3px_rgba(167,139,250,0.4),_9px_9px_24px_6px_rgba(139,92,246,0.25)] md:shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_16px_4px_rgba(167,139,250,0.5),_12px_12px_32px_8px_rgba(139,92,246,0.35)] md:dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_16px_4px_rgba(167,139,250,0.45),_12px_12px_32px_8px_rgba(139,92,246,0.3)]",
+          ? "w-[50px] md:w-[55px] py-2 md:py-2.5 px-1 md:px-1.5 shadow-[2px_2px_0_0_rgba(0,0,0,1),_4px_4px_8px_2px_rgba(128,128,128,0.4),_6px_6px_16px_4px_rgba(96,96,96,0.25)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.9),_4px_4px_8px_2px_rgba(200,200,200,0.35),_6px_6px_16px_4px_rgba(150,150,150,0.2)]"
+          : "w-[220px] md:w-[250px] p-2.5 md:p-3 shadow-[3px_3px_0_0_rgba(0,0,0,1),_6px_6px_12px_3px_rgba(128,128,128,0.45),_9px_9px_24px_6px_rgba(96,96,96,0.3)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.9),_6px_6px_12px_3px_rgba(200,200,200,0.4),_9px_9px_24px_6px_rgba(150,150,150,0.25)] md:shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_16px_4px_rgba(128,128,128,0.5),_12px_12px_32px_8px_rgba(96,96,96,0.35)] md:dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_16px_4px_rgba(200,200,200,0.45),_12px_12px_32px_8px_rgba(150,150,150,0.3)]",
         // Ensure origin is top-left for controlled positioning
         "top-0 left-0",
         // Hover effect with enhanced floating shadow
         !isDragging &&
-        "hover:shadow-[4px_4px_0_0_rgba(0,0,0,1),_10px_10px_20px_5px_rgba(167,139,250,0.55),_16px_16px_40px_10px_rgba(139,92,246,0.4)] dark:hover:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_10px_10px_20px_5px_rgba(167,139,250,0.5),_16px_16px_40px_10px_rgba(139,92,246,0.35)] md:hover:shadow-[5px_5px_0_0_rgba(0,0,0,1),_12px_12px_24px_6px_rgba(167,139,250,0.6),_20px_20px_48px_12px_rgba(139,92,246,0.45)] md:dark:hover:shadow-[5px_5px_0_0_rgba(255,255,255,0.9),_12px_12px_24px_6px_rgba(167,139,250,0.55),_20px_20px_48px_12px_rgba(139,92,246,0.4)]",
+        "hover:shadow-[4px_4px_0_0_rgba(0,0,0,1),_10px_10px_20px_5px_rgba(128,128,128,0.55),_16px_16px_40px_10px_rgba(96,96,96,0.4)] dark:hover:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_10px_10px_20px_5px_rgba(200,200,200,0.5),_16px_16px_40px_10px_rgba(150,150,150,0.35)] md:hover:shadow-[5px_5px_0_0_rgba(0,0,0,1),_12px_12px_24px_6px_rgba(128,128,128,0.6),_20px_20px_48px_12px_rgba(96,96,96,0.45)] md:dark:hover:shadow-[5px_5px_0_0_rgba(255,255,255,0.9),_12px_12px_24px_6px_rgba(200,200,200,0.55),_20px_20px_48px_12px_rgba(150,150,150,0.4)]",
       ),
     [isCollapsed, isDragging],
   );
 
+  // Mobile Bottom Bar Component - Floating Capsule Style
+  const MobileBottomBar = () => (
+    <div className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-32px)] max-w-[900px]">
+      {/* Floating Capsule Container */}
+      <div className="bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[3px] border-black dark:border-white rounded-none shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_20px_4px_rgba(0,0,0,0.25)] dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_20px_4px_rgba(255,255,255,0.15)] px-1.5 py-1">
+        <div className="flex items-center justify-around gap-0.5">
+          {/* Start/End Session Button */}
+          <button
+            onClick={handleConnect}
+            className={cn(
+              "w-10 h-10 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all transform active:scale-95 relative font-black",
+              connected
+                ? "bg-[#FF6B6B] hover:bg-[#FF6B6B] text-white shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff]"
+                : "bg-[#4ADE80] hover:bg-[#4ADE80] text-black shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff]",
+            )}
+            title={connected ? "End Session" : "Start Session"}
+          >
+            {connected ? (
+              <div className="w-4 h-4 bg-white border-2 border-black rounded-sm" />
+            ) : (
+              <PlayCircle className="w-6 h-6" />
+            )}
+            {connected && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#FFD93D] border-2 border-black rounded-full animate-pulse" />
+            )}
+          </button>
+
+          {/* Divider */}
+          <div className="w-[2px] h-7 bg-black/30 dark:bg-white/30 rounded-full" />
+
+          {/* Mic Button */}
+          <button
+            onClick={handleMute}
+            className={cn(
+              "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
+              muted
+                ? "bg-[#FF6B6B] text-white"
+                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
+            )}
+            title={muted ? "Unmute" : "Mute"}
+          >
+            {muted ? (
+              <MicOff className="w-5 h-5 font-bold" />
+            ) : (
+              <Mic className="w-5 h-5 font-bold" />
+            )}
+          </button>
+
+          {/* Camera Button */}
+          {supportsVideo && (
+            <button
+              onClick={() => toggleCamera(!cameraEnabled)}
+              className={cn(
+                "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
+                cameraEnabled
+                  ? "bg-[#C4B5FD] text-black"
+                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
+              )}
+              title="Toggle Camera"
+            >
+              {cameraEnabled ? (
+                <Video className="w-5 h-5 font-bold" />
+              ) : (
+                <VideoOff className="w-5 h-5 font-bold" />
+              )}
+            </button>
+          )}
+
+          {/* Screen Share Button */}
+          {supportsVideo && (
+            <button
+              onClick={() => toggleScreen(!screenEnabled)}
+              className={cn(
+                "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
+                screenEnabled
+                  ? "bg-[#FFD93D] text-black"
+                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
+              )}
+              title="Share Screen"
+            >
+              {screenEnabled ? (
+                <Monitor className="w-5 h-5 font-bold" />
+              ) : (
+                <MonitorOff className="w-5 h-5 font-bold" />
+              )}
+            </button>
+          )}
+
+          {/* Divider */}
+          <div className="w-[2px] h-7 bg-black/30 dark:bg-white/30 rounded-full" />
+
+          {/* Settings Button */}
+          {enableEditingSettings && (
+            <SettingsDialog
+              className="[&]:h-auto [&]:block [&]:p-0 [&]:gap-0"
+              trigger={
+                <button className="group/settings w-9 h-9 border-[2px] border-black dark:border-white rounded-md bg-[#F3F0FF] dark:bg-[#1e1a2e] hover:bg-[#FF6B6B] flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
+                  <Settings className="w-5 h-5 font-bold text-black dark:text-white group-hover/settings:text-white" />
+                </button>
+              }
+            />
+          )}
+
+          {/* Paint/Draw Button */}
+          <button
+            onClick={onPaintClick}
+            className={cn(
+              "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
+              isPaintActive
+                ? "bg-[#FFD93D] text-black"
+                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
+            )}
+            title="Canvas"
+          >
+            <PenTool className="w-5 h-5 font-bold" />
+          </button>
+
+          {/* View/Media Button */}
+          <button
+            onClick={toggleSharedMedia}
+            className={cn(
+              "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
+              sharedMediaOpen
+                ? "bg-[#C4B5FD] text-black"
+                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
+            )}
+            title="View"
+          >
+            <Eye className="w-5 h-5 font-bold" />
+          </button>
+
+          {/* Timer Display */}
+          <div
+            className={cn(
+              "min-w-[44px] h-8 flex items-center justify-center text-[10px] font-mono font-black transition-colors border-[2px] border-black dark:border-white rounded-md px-2",
+              connected
+                ? "bg-[#FFD93D] text-black"
+                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
+            )}
+          >
+            {connected ? formatTime(sessionTime) : "--:--"}
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Popover for Shared Media - appears above the capsule */}
+      {sharedMediaOpen && (
+        <div
+          className={cn(
+            "absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[calc(100vw-32px)] max-w-[360px] h-auto flex flex-col bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[3px] border-black dark:border-white rounded-2xl shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_20px_4px_rgba(0,0,0,0.25)] dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_20px_4px_rgba(255,255,255,0.15)] overflow-hidden z-[1001]",
+            isAnimatingOut ? "animate-popover-out" : "animate-popover-in",
+          )}
+        >
+          <div className="flex items-center justify-between p-3 border-b-[3px] border-black dark:border-white bg-[#FFD93D] rounded-t-xl">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 border-[2px] border-black bg-white rounded-lg">
+                <ImageIcon className="w-4 h-4 text-black font-bold" />
+              </div>
+              <h3 className="font-black text-black uppercase text-xs">
+                ADAM'S VIEW
+              </h3>
+              <span
+                className={cn(
+                  "px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border-[2px] border-black rounded-full",
+                  {
+                    "bg-[#4ADE80] text-black":
+                      mediaMixerStatus.isConnected && !mediaMixerStatus.error,
+                    "bg-[#FF6B6B] text-white":
+                      !!mediaMixerStatus.error,
+                    "bg-white text-black":
+                      !mediaMixerStatus.isConnected &&
+                      !mediaMixerStatus.error,
+                  },
+                )}
+              >
+                {mediaMixerStatus.error
+                  ? "OFF"
+                  : mediaMixerStatus.isConnected
+                    ? "LIVE"
+                    : "..."}
+              </span>
+            </div>
+            <button
+              onClick={toggleSharedMedia}
+              className="w-8 h-8 flex items-center justify-center border-[2px] border-black bg-white hover:bg-[#FF6B6B] text-black hover:text-white transition-all rounded-full shadow-[2px_2px_0_0_#000] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
+            >
+              <X className="w-4 h-4 font-bold" />
+            </button>
+          </div>
+          <div className="flex-1 h-auto w-full rounded-b-xl overflow-hidden">
+            <MediaMixerDisplay
+              socket={videoSocket}
+              renderCanvasRef={renderCanvasRef}
+              onStatusChange={setMediaMixerStatus}
+              isCameraEnabled={cameraEnabled}
+              isScreenShareEnabled={screenEnabled}
+              isCanvasEnabled={isPaintActive}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <Draggable
+    <>
+      {/* Mobile Bottom Bar - only shown on mobile */}
+      {isMobile && <MobileBottomBar />}
+      
+      {/* Desktop Floating Panel - only shown on desktop */}
+      {!isMobile && (
+      <Draggable
       axis="both"
       handle=".drag-handle"
+      cancel=".no-drag"
       nodeRef={panelRef}
       position={position}
       onStart={handleDragStart}
@@ -527,7 +752,7 @@ function FloatingControlPanel({
           )}
           <button
             onClick={handleCollapse}
-            className="w-5 h-5 md:w-6 md:h-6 flex items-center justify-center border-[2px] border-black dark:border-white bg-[#F3F0FF] dark:bg-[#1e1a2e] hover:bg-[#C4B5FD] text-black dark:text-white hover:translate-x-0.5 hover:translate-y-0.5 transition-all duration-100"
+            className="no-drag w-5 h-5 md:w-6 md:h-6 flex items-center justify-center border-[2px] border-black dark:border-white bg-[#F3F0FF] dark:bg-[#1e1a2e] hover:bg-[#C4B5FD] text-black dark:text-white hover:translate-x-0.5 hover:translate-y-0.5 transition-all duration-100"
           >
             {isCollapsed ? (
               <ChevronDown className="w-3 h-3 md:w-3.5 md:h-3.5 font-black" />
@@ -928,7 +1153,7 @@ function FloatingControlPanel({
         {sharedMediaOpen && (
           <div
             className={cn(
-              "absolute w-[320px] md:w-[360px] h-auto flex flex-col bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[3px] md:border-[4px] border-black dark:border-white rounded-none shadow-[3px_3px_0_0_rgba(0,0,0,1),_6px_6px_12px_3px_rgba(167,139,250,0.45),_9px_9px_24px_6px_rgba(139,92,246,0.3)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.9),_6px_6px_12px_3px_rgba(167,139,250,0.4),_9px_9px_24px_6px_rgba(139,92,246,0.25)] md:shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_16px_4px_rgba(167,139,250,0.5),_12px_12px_32px_8px_rgba(139,92,246,0.35)] md:dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_16px_4px_rgba(167,139,250,0.45),_12px_12px_32px_8px_rgba(139,92,246,0.3)] overflow-hidden z-[1001]",
+              "absolute w-[320px] md:w-[360px] h-auto flex flex-col bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[3px] md:border-[4px] border-black dark:border-white rounded-none shadow-[3px_3px_0_0_rgba(0,0,0,1),_6px_6px_12px_3px_rgba(128,128,128,0.45),_9px_9px_24px_6px_rgba(96,96,96,0.3)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.9),_6px_6px_12px_3px_rgba(200,200,200,0.4),_9px_9px_24px_6px_rgba(150,150,150,0.25)] md:shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_16px_4px_rgba(128,128,128,0.5),_12px_12px_32px_8px_rgba(96,96,96,0.35)] md:dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_16px_4px_rgba(200,200,200,0.45),_12px_12px_32px_8px_rgba(150,150,150,0.3)] overflow-hidden z-[1001]",
               isAnimatingOut ? "animate-popover-out" : "animate-popover-in",
               popoverPosition === "right"
                 ? "left-full ml-4 md:ml-6"
@@ -986,6 +1211,8 @@ function FloatingControlPanel({
         )}
       </div>
     </Draggable>
+      )}
+    </>
   );
 }
 export default memo(FloatingControlPanel);

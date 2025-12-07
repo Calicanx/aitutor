@@ -205,9 +205,9 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         : 0;
 
     return (
-        <div className="framework-perseus relative flex h-full w-full items-center justify-center p-4">
+        <div className="framework-perseus relative flex w-full items-center justify-center p-0 md:p-4 md:h-full">
             {/* Neo-Brutalism Card */}
-            <Card className="relative flex w-full h-full flex-col border-[3px] md:border-[4px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
+            <Card className="relative flex w-full h-auto md:h-full md:flex-1 flex-col min-h-0 border-[3px] md:border-[4px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
                 {/* Progress bar at top */}
                 <div className="absolute top-0 left-0 right-0 h-1.5 md:h-2 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] border-black dark:border-white">
                     <div
@@ -255,10 +255,10 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 overflow-hidden p-4 bg-[#FFFDF5] dark:bg-[#000000]">
+                <CardContent className="md:flex-1 flex-none min-h-0 overflow-visible md:overflow-hidden p-2 md:p-4 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
-                        className="relative h-full w-full overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
+                        className="relative w-full h-auto md:h-full overflow-visible md:overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
                     >
                         {endOfTest ? (
                             <div className="flex h-full items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
@@ -286,8 +286,8 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </p>
                             </div>
                         ) : perseusItems.length > 0 ? (
-                            <div className="space-y-4 md:space-y-6 py-3 md:py-4">
-                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                            <div className="space-y-3 md:space-y-6 py-2 md:py-4">
+                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-3 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <PerseusI18nContextProvider locale="en" strings={mockStrings}>
                                         <RenderStateRoot>
                                             <ServerItemRenderer
@@ -354,7 +354,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardContent>
 
-                <CardFooter className="flex justify-end gap-2 md:gap-3 p-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
+                <CardFooter className="flex justify-end gap-2 md:gap-3 p-2 md:p-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
                     <Button
                         type="button"
                         size="sm"
