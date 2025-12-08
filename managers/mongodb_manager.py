@@ -80,6 +80,16 @@ class MongoDBManager:
         """Get skills collection"""
         return self._db['skills']
     
+    @property
+    def generated_skills(self):
+        """Get generated_skills collection"""
+        return self._db['generated_skills']
+    
+    @property
+    def scraped_questions(self):
+        """Get scraped_questions collection"""
+        return self._db['scraped_questions']
+    
     def test_connection(self):
         """Test if MongoDB connection is working"""
         try:

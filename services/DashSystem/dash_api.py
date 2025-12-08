@@ -111,58 +111,84 @@ def get_perseus_files_for_skill(skill_id: str, curriculum_path: str) -> List[str
 def load_perseus_items_for_dash_questions_from_mongodb(
     dash_questions: List[Question]
 ) -> List[Dict]:
-    """Load Perseus items from MongoDB matching DASH-selected questions"""
+    """Load Perseus items from scraped_questions collection matching DASH-selected questions"""
     from managers.mongodb_manager import mongo_db
+    import json
     perseus_items = []
     
     for dash_q in dash_questions:
-        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else "counting_1_10"
+        # question_id includes fabricated prefix (e.g., "41.1.2.1.9_x338f5e1fbc6cafdf")
+        # This matches exactly what's stored in scraped_questions.questionId
+        question_id = dash_q.question_id
+        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else None
         
-        # Map skill to Perseus prefix
-        prefix = SKILL_TO_SLUG_PREFIX.get(skill_id, "1.1.1")
-        
-        # Query MongoDB for matching Perseus questions
         try:
-            matching_docs = list(mongo_db.perseus_questions.find({
-                "skill_prefix": prefix
-            }).limit(20))
+            # Query scraped_questions by questionId (full ID with prefix)
+            scraped_doc = mongo_db.scraped_questions.find_one({"questionId": question_id})
             
-            if not matching_docs:
-                # Fallback to any question with similar prefix
-                prefix_parts = prefix.split('.')
-                broader_prefix = '.'.join(prefix_parts[:3]) if len(prefix_parts) >= 3 else prefix
-                matching_docs = list(mongo_db.perseus_questions.find({
-                    "skill_prefix": {"$regex": f"^{broader_prefix}"}
-                }).limit(20))
-            
-            if not matching_docs:
-                logger.warning(f"No Perseus questions found in MongoDB for skill {skill_id}")
+            if not scraped_doc:
+                logger.warning(f"No scraped question found for question_id {question_id}")
                 continue
             
-            # Randomly select one
-            selected_doc = random.choice(matching_docs)
+            # Extract assessmentData
+            assessment_data = scraped_doc.get('assessmentData', {})
+            if not assessment_data:
+                logger.warning(f"No assessmentData found for question_id {question_id}")
+                continue
             
-            # Build Perseus data structure
-            perseus_data = {
-                "question": selected_doc.get("question", {}),
-                "answerArea": selected_doc.get("answerArea", {}),
-                "hints": selected_doc.get("hints", []),
-                "itemDataVersion": selected_doc.get("itemDataVersion", {}),
-                "dash_metadata": {
-                    'dash_question_id': dash_q.question_id,
-                    'skill_ids': dash_q.skill_ids,
-                    'difficulty': dash_q.difficulty,
-                    'expected_time_seconds': dash_q.expected_time_seconds,
-                    'slug': selected_doc.get("slug"),
-                    'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids 
-                                   if sid in dash_system.skills]
+            # Navigate to itemData: assessmentData.data.assessmentItem.item.itemData
+            try:
+                item_data_str = assessment_data.get('data', {}).get('assessmentItem', {}).get('item', {}).get('itemData', '')
+                if not item_data_str:
+                    logger.warning(f"No itemData found for question_id {question_id}")
+                    continue
+                
+                # Parse JSON string to get Perseus object
+                item_data = json.loads(item_data_str)
+                
+                # Extract required fields
+                question = item_data.get('question', {})
+                answer_area = item_data.get('answerArea', {})
+                hints = item_data.get('hints', [])
+                item_data_version = item_data.get('itemDataVersion', {})
+                
+                # Validate required fields
+                if not question:
+                    logger.warning(f"Missing 'question' field in itemData for question_id {question_id}")
+                    continue
+                
+                # Extract slug from questionId (numeric prefix before underscore)
+                # Example: "41.1.1.1.1_xde8147b8edb82294" -> "41.1.1.1.1"
+                slug = question_id.split('_')[0] if '_' in question_id else question_id
+                
+                # Build Perseus data structure
+                perseus_data = {
+                    "question": question,
+                    "answerArea": answer_area,
+                    "hints": hints,
+                    "itemDataVersion": item_data_version,
+                    "dash_metadata": {
+                        'dash_question_id': question_id,
+                        'skill_ids': dash_q.skill_ids,
+                        'difficulty': dash_q.difficulty,
+                        'expected_time_seconds': dash_q.expected_time_seconds,
+                        'slug': slug,
+                        'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids 
+                                       if sid in dash_system.skills]
+                    }
                 }
-            }
-            
-            perseus_items.append(perseus_data)
+                
+                perseus_items.append(perseus_data)
+                
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse itemData JSON for question_id {question_id}: {e}")
+                continue
+            except KeyError as e:
+                logger.warning(f"Missing field in assessmentData for question_id {question_id}: {e}")
+                continue
             
         except Exception as e:
-            logger.warning(f"Failed to load Perseus from MongoDB for skill {skill_id}: {e}")
+            logger.warning(f"Failed to load Perseus from scraped_questions for question_id {question_id}: {e}")
     
     return perseus_items
 
@@ -411,6 +437,43 @@ def submit_answer(request: Request, answer: AnswerSubmission):
         "affected_skills": affected_skills,
         "message": "Answer recorded successfully"
     }
+
+@app.get("/api/skill-scores")
+def get_skill_scores(request: Request):
+    """
+    Get all skill scores for the current user.
+    Returns skill states in the format expected by the frontend GradingSidebar.
+    """
+    # Get user_id from JWT token
+    user_id = get_current_user(request)
+    
+    # Get user profile to ensure it exists
+    user_profile = dash_system.user_manager.load_user(user_id)
+    if not user_profile:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get current time for calculations
+    current_time = time.time()
+    
+    # Get all skill scores from DASH system
+    scores = dash_system.get_skill_scores(user_id, current_time)
+    
+    # Transform to format expected by frontend
+    # Frontend expects: { skill_id: { name, memory_strength, last_practice_time, practice_count, correct_count } }
+    skill_states = {}
+    for skill_id, score_data in scores.items():
+        # Get student state to get last_practice_time
+        state = dash_system.get_student_state(user_id, skill_id)
+        
+        skill_states[skill_id] = {
+            "name": score_data["name"],  # Include skill name
+            "memory_strength": score_data["memory_strength"],
+            "last_practice_time": state.last_practice_time if state.last_practice_time else None,
+            "practice_count": score_data["practice_count"],
+            "correct_count": score_data["correct_count"]
+        }
+    
+    return {"skill_states": skill_states}
 
 if __name__ == "__main__":
     import uvicorn

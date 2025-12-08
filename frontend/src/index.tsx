@@ -13,29 +13,69 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Route, Switch } from 'react-router-dom';
-import './index.css';
-import App from './App';
-import reportWebVitals from './reportWebVitals';
-import { AuthProvider } from './contexts/AuthContext';
-import LoginPage from './components/auth/LoginPage';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter, Route, Switch } from "react-router-dom";
+import "./index.css";
+import App from "./App";
+import reportWebVitals from "./reportWebVitals";
 import "./package/perseus/testing/perseus-init.tsx";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import LoginPage from "./components/auth/LoginPage";
+import LandingPageWrapper from "./components/landing/LandingPageWrapper";
+import ComingSoon from "./components/coming-soon/ComingSoon";
 
 const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
+  document.getElementById("root") as HTMLElement,
 );
+
+const queryClient = new QueryClient();
+
+// Component to decide between landing page and app
+const LandingPageOrApp: React.FC = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: '#FFFDF5'
+      }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <LandingPageWrapper />;
+  }
+  
+  return <App />;
+};
+
+// COMING SOON MODE: Show ComingSoon page for all routes
+// To restore original functionality, comment out the ComingSoon route and uncomment the original routes below
 root.render(
-  <BrowserRouter>
-    <AuthProvider>
-      <Switch>
-        <Route path="/auth/setup" component={LoginPage} />
-        <Route path="/login" component={LoginPage} />
-        <Route path="/" component={App} />
-      </Switch>
-    </AuthProvider>
-  </BrowserRouter>
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <AuthProvider>
+        <Switch>
+          {/* Coming Soon - blocks all access */}
+          <Route path="*" component={ComingSoon} />
+          
+          {/* Original routes - commented out for coming soon mode */}
+          {/* <Route path="/auth/setup" component={LoginPage} /> */}
+          {/* <Route path="/login" component={LoginPage} /> */}
+          {/* <Route path="/" exact component={LandingPageOrApp} /> */}
+          {/* <Route path="/" component={App} /> */}
+        </Switch>
+      </AuthProvider>
+    </BrowserRouter>
+  </QueryClientProvider>,
 );
 
 // If you want to start measuring performance in your app, pass a function
