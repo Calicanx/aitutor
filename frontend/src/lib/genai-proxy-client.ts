@@ -16,6 +16,10 @@ import {
 import { StreamingLog } from "../types";
 import { base64ToArrayBuffer } from "./utils";
 import { difference } from "lodash";
+import { jwtUtils } from "./jwt-utils";
+
+// Get tutor WebSocket URL from environment
+const TUTOR_WS_URL = import.meta.env.VITE_TUTOR_WS || 'ws://localhost:8767';
 
 /**
  * Event types that can be emitted by the proxy client.
@@ -88,8 +92,19 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     this._status = "connecting";
     this.config = config;
 
-    // Connect to local backend
-    this.ws = new WebSocket("ws://localhost:8767");
+    // Get JWT token for authentication
+    const token = jwtUtils.getToken();
+    if (!token) {
+      console.error("No JWT token available for WebSocket connection");
+      this._status = "disconnected";
+      const errorEvent = new ErrorEvent("error", { message: "Authentication required" });
+      this.emit("error", errorEvent);
+      return false;
+    }
+
+    // Connect to local backend with JWT token in query parameter
+    const wsUrl = `${TUTOR_WS_URL}?token=${encodeURIComponent(token)}`;
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       console.log("Connected to Tutor backend");
@@ -296,4 +311,3 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     });
   }
 }
-

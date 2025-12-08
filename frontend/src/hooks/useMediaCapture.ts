@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface UseMediaCaptureProps {
-  socket: WebSocket | null;
+  onCameraFrame?: (imageData: ImageData) => void;
+  onScreenFrame?: (imageData: ImageData) => void;
 }
 
-export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
+export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptureProps) => {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenEnabled, setScreenEnabled] = useState(false);
 
@@ -80,15 +81,17 @@ export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
         const ctx = canvas.getContext('2d')!;
 
         ctx.drawImage(video, 0, 0);
-        // Increased quality to 0.85 for better text clarity
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
-        // Send to MediaMixer via WebSocket
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: 'camera_frame',
-            data: dataUrl
-          }));
+        // Resize to section dimensions and get ImageData
+        const sectionCanvas = document.createElement('canvas');
+        sectionCanvas.width = 1280;
+        sectionCanvas.height = 720;
+        const sectionCtx = sectionCanvas.getContext('2d');
+
+        if (sectionCtx) {
+          sectionCtx.drawImage(canvas, 0, 0, 1280, 720);
+          const imageData = sectionCtx.getImageData(0, 0, 1280, 720);
+          onCameraFrame?.(imageData);
         }
 
         // Continue loop - reduced to ~5 FPS for better performance
@@ -102,7 +105,7 @@ export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
       console.error('Error starting camera:', error);
       setCameraEnabled(false);
     }
-  }, [socket]);
+  }, [onCameraFrame]);
 
   const startScreen = useCallback(async () => {
     try {
@@ -141,15 +144,17 @@ export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
         const ctx = canvas.getContext('2d')!;
 
         ctx.drawImage(video, 0, 0);
-        // Increased quality to 0.85 for better text clarity
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
-        // Send to MediaMixer via WebSocket
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: 'screen_frame',
-            data: dataUrl
-          }));
+        // Resize to section dimensions and get ImageData
+        const sectionCanvas = document.createElement('canvas');
+        sectionCanvas.width = 1280;
+        sectionCanvas.height = 720;
+        const sectionCtx = sectionCanvas.getContext('2d');
+
+        if (sectionCtx) {
+          sectionCtx.drawImage(canvas, 0, 0, 1280, 720);
+          const imageData = sectionCtx.getImageData(0, 0, 1280, 720);
+          onScreenFrame?.(imageData);
         }
 
         // Continue loop - reduced to ~5 FPS for better performance
@@ -163,19 +168,10 @@ export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
       console.error('Error starting screen share:', error);
       setScreenEnabled(false);
     }
-  }, [socket, stopScreen]);
+  }, [onScreenFrame, stopScreen]);
 
   const toggleCamera = useCallback(async (enabled: boolean) => {
     console.log(`toggleCamera called with enabled=${enabled}`);
-
-    // Send toggle command to MediaMixer
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: 'toggle_camera',
-        data: { enabled }
-      }));
-      console.log('Sent toggle_camera command to MediaMixer');
-    }
 
     setCameraEnabled(enabled);
 
@@ -184,19 +180,10 @@ export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
     } else {
       stopCamera();
     }
-  }, [socket, startCamera, stopCamera]);
+  }, [startCamera, stopCamera]);
 
   const toggleScreen = useCallback(async (enabled: boolean) => {
     console.log(`toggleScreen called with enabled=${enabled}`);
-
-    // Send toggle command to MediaMixer
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: 'toggle_screen',
-        data: { enabled }
-      }));
-      console.log('Sent toggle_screen command to MediaMixer');
-    }
 
     setScreenEnabled(enabled);
 
@@ -205,7 +192,7 @@ export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
     } else {
       stopScreen();
     }
-  }, [socket, startScreen, stopScreen]);
+  }, [startScreen, stopScreen]);
 
   return {
     cameraEnabled,
@@ -214,4 +201,3 @@ export const useMediaCapture = ({ socket }: UseMediaCaptureProps) => {
     toggleScreen
   };
 };
-

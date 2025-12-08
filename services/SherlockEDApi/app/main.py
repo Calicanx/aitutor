@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app import routes as app_routes
+import os
 import uvicorn
 
 app = FastAPI(
@@ -9,17 +10,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-origins = [
-        "http://localhost",
-        "http://localhost:3000", 
-    ]
-
+# Configure CORS - allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["*"],  # Includes OPTIONS for preflight
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 @app.get("/")

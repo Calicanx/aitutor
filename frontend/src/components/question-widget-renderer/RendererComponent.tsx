@@ -18,20 +18,20 @@ import { PerseusI18nContextProvider } from "../../package/perseus/src/components
 import { mockStrings } from "../../package/perseus/src/strings";
 import { KEScore } from "@khanacademy/perseus-core";
 import { toast } from "sonner";
-import { useDashQuestions } from "@/hooks/query-hooks/useDashQuestions";
-import {
-    useDashAnswerMutations,
-    useTeachingAssistantQuestionAnswered,
-} from "@/hooks/query-hooks/useDashAnswerMutations";
 import { CheckCircle2, XCircle, Sparkles } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { apiUtils } from "../../lib/api-utils";
+import { jwtUtils } from "../../lib/jwt-utils";
 
-const TEACHING_ASSISTANT_API_URL = "http://localhost:8002";
+const DASH_API_URL = import.meta.env.VITE_DASH_API_URL || 'http://localhost:8000';
+const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
 
 interface RendererComponentProps {
     onSkillChange?: (skill: string) => void;
 }
 
 const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
+    const { user } = useAuth();
     const [perseusItems, setPerseusItems] = useState<PerseusItem[]>([]);
     const [item, setItem] = useState(0);
     const [endOfTest, setEndOfTest] = useState(false);
@@ -39,42 +39,60 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     const [isAnswered, setIsAnswered] = useState(false);
     const [startTime, setStartTime] = useState<number>(Date.now());
     const [showFeedback, setShowFeedback] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isError, setIsError] = useState(false);
+    const [error, setError] = useState<Error | null>(null);
     const rendererRef = useRef<ServerItemRenderer>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    // User ID - age is now fetched from MongoDB, not frontend
-    const user_id = "mongodb_test_user"; // Use the MongoDB test user
+    // Get user_id from auth context
+    const user_id = user?.user_id || 'mongodb_test_user';
 
-    const {
-        data: questions,
-        isLoading,
-        isError,
-        error,
-    } = useDashQuestions({ userId: user_id, count: 16 });
+    // Fetch questions using apiUtils with JWT authentication
+    useEffect(() => {
+        const fetchQuestions = async () => {
+            if (!jwtUtils.getToken()) {
+                setIsLoading(false);
+                return;
+            }
 
-    const { submitDashAnswer, logQuestionDisplayed } = useDashAnswerMutations();
-    const teachingAssistantQuestionAnswered =
-        useTeachingAssistantQuestionAnswered();
+            setIsLoading(true);
+            setIsError(false);
+            setError(null);
+
+            try {
+                const response = await apiUtils.get(`${DASH_API_URL}/api/questions/16`);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch questions: ${response.status}`);
+                }
+
+                const data = await response.json();
+                setPerseusItems(data);
+                setItem(0);
+                setEndOfTest(false);
+                setIsAnswered(false);
+                setStartTime(Date.now());
+            } catch (err) {
+                console.error('Error fetching questions:', err);
+                setIsError(true);
+                setError(err instanceof Error ? err : new Error('Unknown error'));
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchQuestions();
+    }, [user_id]);
 
     useEffect(() => {
         if (isError) {
-            const message =
-                error instanceof Error ? error.message : "Unknown error fetching questions";
+            const message = error?.message || "Unknown error fetching questions";
             toast.error("Unable to load questions", {
                 description: message,
             });
         }
     }, [isError, error]);
-
-    useEffect(() => {
-        if (questions && questions.length > 0) {
-            setPerseusItems(questions);
-            setItem(0);
-            setEndOfTest(false);
-            setIsAnswered(false);
-            setStartTime(Date.now());
-        }
-    }, [questions]);
 
     // Log when question is displayed (once per item change)
     useEffect(() => {
@@ -82,13 +100,14 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
             const currentItem = perseusItems[item];
             const metadata = (currentItem as any).dash_metadata || {};
 
-            logQuestionDisplayed.mutate({
-                userId: user_id,
-                index: item,
-                metadata,
+            // Log question displayed
+            apiUtils.post(`${DASH_API_URL}/api/question-displayed`, {
+                question_index: item,
+                metadata: metadata
+            }).catch((err) => {
+                console.error('Failed to log question displayed:', err);
             });
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [item, perseusItems, isLoading, user_id]);
 
     // Mock skill state update
@@ -149,12 +168,12 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         if (rendererRef.current) {
             const userInput = rendererRef.current.getUserInput();
             const question = perseusItem.question;
-            const score = scorePerseusItem(question, userInput, "en");
+            const scoreResult = scorePerseusItem(question, userInput, "en");
 
             // Continue to include an empty guess for the now defunct answer area.
             const maxCompatGuess = [rendererRef.current.getUserInputLegacy(), []];
             const keScore = keScoreFromPerseusScore(
-                score,
+                scoreResult,
                 maxCompatGuess,
                 rendererRef.current.getSerializedState().question,
             );
@@ -167,15 +186,15 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                 const currentItem = perseusItems[item];
                 const metadata = (currentItem as any).dash_metadata || {};
 
-                submitDashAnswer.mutate({
-                    userId: user_id,
-                    questionId: metadata.dash_question_id || `q_${item}`,
-                    skillIds: metadata.skill_ids || ["counting_1_10"],
-                    isCorrect: keScore.correct,
-                    responseTimeSeconds,
+                await apiUtils.post(`${DASH_API_URL}/api/submit-answer`, {
+                    user_id: user_id,
+                    question_id: metadata.dash_question_id || `q_${item}`,
+                    skill_ids: metadata.skill_ids || ["counting_1_10"],
+                    is_correct: keScore.correct,
+                    response_time_seconds: responseTimeSeconds
                 });
-            } catch (error) {
-                console.error("Failed to submit answer to DASH:", error);
+            } catch (err) {
+                console.error("Failed to submit answer to DASH:", err);
             }
 
             // Display score to user
@@ -187,14 +206,14 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
             try {
                 const currentItem = perseusItems[item];
                 const metadata = (currentItem as any).dash_metadata || {};
-                const questionId =
-                    metadata.dash_question_id || `q_${item}_${Date.now()}`;
-                teachingAssistantQuestionAnswered.mutate({
-                    questionId,
-                    isCorrect: keScore.correct || false,
+                const questionId = metadata.dash_question_id || `q_${item}_${Date.now()}`;
+                
+                await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/question/answered`, {
+                    question_id: questionId,
+                    is_correct: keScore.correct || false
                 });
-            } catch (error) {
-                console.error("Error recording question answer:", error);
+            } catch (err) {
+                console.error("Error recording question answer:", err);
             }
         }
     };
@@ -205,18 +224,18 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         : 0;
 
     return (
-        <div className="framework-perseus relative flex w-full items-center justify-center p-0 md:p-4 md:h-full">
+        <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
             {/* Neo-Brutalism Card */}
-            <Card className="relative flex w-full h-auto md:h-full md:flex-1 flex-col min-h-0 border-[3px] md:border-[4px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
+            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto md:h-[550px] lg:h-[600px] flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
                 {/* Progress bar at top */}
-                <div className="absolute top-0 left-0 right-0 h-1.5 md:h-2 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] border-black dark:border-white">
+                <div className="absolute top-0 left-0 right-0 h-2 md:h-3 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] md:border-b-[3px] border-black dark:border-white">
                     <div
                         className="h-full bg-[#C4B5FD] transition-all duration-500 ease-out"
                         style={{ width: `${progressPercentage}%` }}
                     />
                 </div>
 
-                <CardHeader className="space-y-1.5 p-4 border-b-[2px] md:border-b-[3px] border-black dark:border-white bg-[#FFD93D]">
+                <CardHeader className="space-y-2 pt-6 md:pt-7 px-4 md:px-6 border-b-[3px] md:border-b-[4px] border-black dark:border-white bg-[#FFD93D]">
                     <div className="flex items-start justify-between gap-3 md:gap-4 flex-wrap">
                         <div className="space-y-1.5 flex-1">
                             <div className="flex items-center gap-2 md:gap-3">
@@ -228,7 +247,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </CardTitle>
                             </div>
                             <CardDescription className="text-xs md:text-sm font-bold text-black uppercase tracking-wide">
-                                User: {user_id}
+                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade}` : `User: ${user_id}`}
                             </CardDescription>
                         </div>
 
@@ -255,10 +274,10 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardHeader>
 
-                <CardContent className="md:flex-1 flex-none min-h-0 overflow-visible md:overflow-hidden p-2 md:p-4 bg-[#FFFDF5] dark:bg-[#000000]">
+                <CardContent className="flex-1 overflow-hidden px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
-                        className="relative w-full h-auto md:h-full overflow-visible md:overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
+                        className="relative h-full w-full overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
                     >
                         {endOfTest ? (
                             <div className="flex h-full items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
@@ -286,8 +305,8 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </p>
                             </div>
                         ) : perseusItems.length > 0 ? (
-                            <div className="space-y-3 md:space-y-6 py-2 md:py-4">
-                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-3 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                            <div className="space-y-4 md:space-y-6 py-3 md:py-4">
+                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <PerseusI18nContextProvider locale="en" strings={mockStrings}>
                                         <RenderStateRoot>
                                             <ServerItemRenderer
@@ -354,7 +373,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardContent>
 
-                <CardFooter className="flex justify-end gap-2 md:gap-3 p-2 md:p-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
+                <CardFooter className="flex justify-end gap-2 md:gap-3 px-4 md:px-6 pb-4 md:pb-5 pt-3 md:pt-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
                     <Button
                         type="button"
                         size="sm"

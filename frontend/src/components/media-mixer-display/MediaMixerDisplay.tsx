@@ -1,9 +1,8 @@
-import React, { useEffect, useState, RefObject } from "react";
+import React, { useEffect, useState, RefObject, useRef } from "react";
 import cn from "classnames";
 
 interface MediaMixerDisplayProps {
-  socket: WebSocket | null;
-  renderCanvasRef: RefObject<HTMLCanvasElement>;
+  canvasRef: RefObject<HTMLCanvasElement>;
   onStatusChange?: (status: {
     isConnected: boolean;
     error: string | null;
@@ -14,16 +13,16 @@ interface MediaMixerDisplayProps {
 }
 
 const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
-  socket,
-  renderCanvasRef,
+  canvasRef,
   onStatusChange,
   isCameraEnabled = true,
   isScreenShareEnabled = true,
   isCanvasEnabled = true,
 }) => {
-  const [imageData, setImageData] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(true); // Frontend-based, always "connected"
   const [error, setError] = useState<string | null>(null);
+  const displayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (onStatusChange) {
@@ -31,119 +30,110 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
     }
   }, [isConnected, error, onStatusChange]);
 
+  // Mirror the MediaMixer canvas to the display canvas
   useEffect(() => {
-    if (!socket) return;
+    const sourceCanvas = canvasRef.current;
+    const displayCanvas = displayCanvasRef.current;
 
-    console.log("MediaMixerDisplay: Setting up video WebSocket connection");
-
-    const image = new Image();
-    image.onload = () => {
-      const canvas = renderCanvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          canvas.width = image.width;
-          canvas.height = image.height;
-          ctx.drawImage(image, 0, 0);
-        }
-      }
-    };
-
-    socket.onopen = () => {
-      console.log("MediaMixerDisplay: Connected to video WebSocket");
-      setIsConnected(true);
-      setError(null);
-    };
-
-    // Check if already open
-    if (socket.readyState === WebSocket.OPEN) {
-      console.log("MediaMixerDisplay: WebSocket already open");
-      setIsConnected(true);
-      setError(null);
-    } else if (
-      socket.readyState === WebSocket.CLOSED ||
-      socket.readyState === WebSocket.CLOSING
-    ) {
-      console.log("MediaMixerDisplay: WebSocket already closed");
-      setError("Connection failed. Please refresh.");
-      setIsConnected(false);
+    if (!sourceCanvas || !displayCanvas) {
+      return;
     }
 
-    socket.onmessage = (event) => {
-      // Match the original, working behavior: assume the MediaMixer sends
-      // raw base64-encoded JPEG frame data (no JSON wrapper).
-      const frame = event.data;
+    const ctx = displayCanvas.getContext('2d');
+    if (!ctx) {
+      setError('Failed to get canvas context');
+      return;
+    }
 
-      // Debug logging: verify we are receiving streaming frame data
-      try {
-        const length = typeof frame === "string" ? frame.length : 0;
-        console.log(
-          "[MediaMixerDisplay] Received frame from /video WebSocket",
-          "type:",
-          typeof frame,
-          "length:",
-          length,
-          "time:",
-          new Date().toISOString(),
-        );
-      } catch {
-        // Ignore logging errors so we never break rendering
+    // Set display canvas size to match source
+    displayCanvas.width = sourceCanvas.width;
+    displayCanvas.height = sourceCanvas.height;
+
+    let lastDrawTime = 0;
+    const targetFPS = 10; // Match MediaMixer FPS
+    const frameInterval = 1000 / targetFPS;
+
+    const drawFrame = (timestamp: number) => {
+      if (timestamp - lastDrawTime >= frameInterval) {
+        // Only draw if source canvas has content
+        if (sourceCanvas.width > 0 && sourceCanvas.height > 0) {
+          // Update display canvas size if source changed
+          if (displayCanvas.width !== sourceCanvas.width || displayCanvas.height !== sourceCanvas.height) {
+            displayCanvas.width = sourceCanvas.width;
+            displayCanvas.height = sourceCanvas.height;
+          }
+
+          // Draw the source canvas onto the display canvas
+          ctx.drawImage(sourceCanvas, 0, 0);
+        }
+        lastDrawTime = timestamp;
       }
 
-      const imageUrl = `data:image/jpeg;base64,${frame}`;
-      setImageData(imageUrl);
-      image.src = imageUrl;
+      animationFrameRef.current = requestAnimationFrame(drawFrame);
     };
 
-    socket.onerror = (err) => {
-      console.error("MediaMixerDisplay: WebSocket error:", err);
-      setError("Failed to connect to MediaMixer video stream. Is it running?");
-      setIsConnected(false);
-    };
-
-    socket.onclose = () => {
-      console.log("MediaMixerDisplay: Disconnected from video WebSocket");
-      setIsConnected(false);
-    };
+    // Start the render loop
+    animationFrameRef.current = requestAnimationFrame(drawFrame);
+    setIsConnected(true);
+    setError(null);
 
     return () => {
-      console.log("MediaMixerDisplay: Cleaning up video WebSocket");
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
-  }, [socket, renderCanvasRef]);
+  }, [canvasRef]);
 
   return (
-    <div className="flex flex-col w-full bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white overflow-hidden transition-colors duration-300">
-      <div className="flex flex-col items-center justify-center p-0 bg-neutral-50 dark:bg-black/95 relative overflow-hidden group transition-colors duration-300">
+    <div className="flex flex-col w-full bg-white dark:bg-[#000000] text-black dark:text-white overflow-hidden transition-colors duration-300">
+      <div className="flex flex-col items-center justify-center p-0 bg-white dark:bg-[#000000] relative overflow-hidden group transition-colors duration-300">
         {error && (
-          <div className="text-sm text-center p-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400 max-w-[90%] backdrop-blur-md shadow-lg z-20 absolute">
-            <span className="material-symbols-outlined text-2xl mb-2 block">
+          <div className="text-sm text-center p-4 border-[3px] border-black dark:border-white bg-[#FF006E] text-white max-w-[90%] shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] z-20 absolute">
+            <span className="material-symbols-outlined text-2xl mb-2 block font-bold">
               error
             </span>
             {error}
           </div>
         )}
         {!isConnected && !error && (
-          <div className="flex flex-col items-center gap-3 text-neutral-500 dark:text-neutral-400 animate-pulse z-20 py-12">
-            <span className="material-symbols-outlined text-4xl opacity-50">
+          <div className="flex flex-col items-center gap-3 text-black dark:text-white animate-pulse z-20 py-12">
+            <span className="material-symbols-outlined text-4xl opacity-50 font-bold">
               connecting_airports
             </span>
-            <div className="text-sm font-medium">Connecting to Stream...</div>
+            <div className="text-sm font-black uppercase">Initializing...</div>
           </div>
         )}
-        {isConnected && imageData && (
-          <div className="w-full h-auto flex items-center justify-center bg-white dark:bg-black">
-            <img
-              src={imageData}
-              alt="Media Mixer Feed"
+        {isConnected && (
+          <div className="w-full h-auto flex items-center justify-center bg-white dark:bg-[#000000]">
+            <canvas
+              ref={displayCanvasRef}
               className="w-full h-auto object-contain"
+              style={{ maxHeight: '600px' }}
             />
-
-            {/* <canvas */}
-            {/*   ref={renderCanvasRef} */}
-            {/*   className="w-full h-full object-contain" */}
-            {/* /> */}
           </div>
         )}
+
+        {/* Status indicators - Neo-Brutalist style */}
+        <div className="absolute bottom-2 left-2 flex gap-2 z-10">
+          {isCameraEnabled && (
+            <div className="flex items-center gap-1 px-2 py-1 border-[2px] border-black dark:border-white bg-[#C4B5FD] text-black dark:text-white text-[10px] font-black uppercase shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+              <span className="w-1.5 h-1.5 bg-black dark:bg-white animate-pulse" />
+              Camera
+            </div>
+          )}
+          {isScreenShareEnabled && (
+            <div className="flex items-center gap-1 px-2 py-1 border-[2px] border-black dark:border-white bg-[#FFD93D] text-black text-[10px] font-black uppercase shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+              <span className="w-1.5 h-1.5 bg-black dark:bg-white animate-pulse" />
+              Screen
+            </div>
+          )}
+          {isCanvasEnabled && (
+            <div className="flex items-center gap-1 px-2 py-1 border-[2px] border-black dark:border-white bg-[#FF6B6B] text-white text-[10px] font-black uppercase shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]">
+              <span className="w-1.5 h-1.5 bg-white animate-pulse" />
+              Canvas
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

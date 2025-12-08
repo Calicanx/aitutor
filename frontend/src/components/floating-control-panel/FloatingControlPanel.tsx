@@ -9,8 +9,9 @@ import React, {
 } from "react";
 import Draggable from "react-draggable";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
-import { useMediaCapture } from "../../hooks/useMediaCapture";
 import { AudioRecorder } from "../../lib/audio-recorder";
+import { jwtUtils } from "../../lib/jwt-utils";
+import { apiUtils } from "../../lib/api-utils";
 import SettingsDialog from "../settings-dialog/SettingsDialog";
 import cn from "classnames";
 import MediaMixerDisplay from "../media-mixer-display/MediaMixerDisplay";
@@ -29,43 +30,45 @@ import {
   MoreHorizontal,
   ChevronDown,
   ChevronUp,
-  ChevronLeft,
-  ChevronRight,
   Home,
   X,
   Eye,
 } from "lucide-react";
 
-const EDGE_PADDING = 16;
-const PANEL_GAP = 24;
-const DEFAULT_Y = 72;
+const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
 
 export type FloatingControlPanelProps = {
-  socket: WebSocket | null;
   videoRef: RefObject<HTMLVideoElement>;
-  renderCanvasRef: RefObject<HTMLCanvasElement>;
+  renderCanvasRef: ((canvas: HTMLCanvasElement | null) => void) | RefObject<HTMLCanvasElement>;
   supportsVideo: boolean;
   onVideoStreamChange?: (stream: MediaStream | null) => void;
   onMixerStreamChange?: (stream: MediaStream | null) => void;
   enableEditingSettings?: boolean;
   onPaintClick: () => void;
   isPaintActive: boolean;
-  videoSocket: WebSocket | null;
+  // Camera/screen control props (from parent)
+  cameraEnabled: boolean;
+  screenEnabled: boolean;
+  onToggleCamera: (enabled: boolean) => void;
+  onToggleScreen: (enabled: boolean) => void;
+  // MediaMixer canvas ref for display
+  mediaMixerCanvasRef: RefObject<HTMLCanvasElement>;
 };
 
 function FloatingControlPanel({
-  socket,
   videoRef,
   renderCanvasRef,
   supportsVideo,
   enableEditingSettings,
   onPaintClick,
   isPaintActive,
-  videoSocket,
+  cameraEnabled,
+  screenEnabled,
+  onToggleCamera,
+  onToggleScreen,
+  mediaMixerCanvasRef,
 }: FloatingControlPanelProps) {
-  const { client, connected, connect, disconnect } = useLiveAPIContext();
-  const { cameraEnabled, screenEnabled, toggleCamera, toggleScreen } =
-    useMediaCapture({ socket });
+  const { client, connected, connect, disconnect, interruptAudio } = useLiveAPIContext();
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("");
   const [audioRecorder] = useState(() => new AudioRecorder());
@@ -83,19 +86,8 @@ function FloatingControlPanel({
   const [mediaMixerStatus, setMediaMixerStatus] = useState<{
     isConnected: boolean;
     error: string | null;
-  }>({ isConnected: false, error: null });
-
-  // Track if we're on mobile for conditional rendering
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+  }>({ isConnected: true, error: null }); // Default to connected since it's frontend-based now
+  const turnCompleteRef = useRef(false);
 
   // Timer for session duration
   useEffect(() => {
@@ -148,7 +140,44 @@ function FloatingControlPanel({
     };
   }, [connected, client, muted, audioRecorder, selectedAudioDevice]);
 
-  // Video handling (similar to ControlTray)
+  // Record conversation turns for TeachingAssistant
+  useEffect(() => {
+    const onTurnComplete = () => {
+      turnCompleteRef.current = true;
+      
+      if (connected) {
+        const token = jwtUtils.getToken();
+        if (token) {
+          apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`).catch((error) => {
+            console.error('Failed to record conversation turn:', error);
+          });
+        }
+      }
+    };
+
+    const onInterrupted = () => {
+      turnCompleteRef.current = true;
+      
+      if (connected) {
+        const token = jwtUtils.getToken();
+        if (token) {
+          apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`).catch((error) => {
+            console.error('Failed to record conversation turn:', error);
+          });
+        }
+      }
+    };
+
+    client.on('turncomplete', onTurnComplete);
+    client.on('interrupted', onInterrupted);
+
+    return () => {
+      client.off('turncomplete', onTurnComplete);
+      client.off('interrupted', onInterrupted);
+    };
+  }, [client, connected]);
+
+  // Video handling - capture full MediaMixer canvas and send to tutor as JPEG
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.srcObject = activeVideoStream;
@@ -157,7 +186,7 @@ function FloatingControlPanel({
     let timeoutId = -1;
 
     function sendVideoFrame() {
-      const canvas = renderCanvasRef.current;
+      const canvas = mediaMixerCanvasRef.current;
 
       if (!canvas) {
         return;
@@ -178,184 +207,165 @@ function FloatingControlPanel({
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [connected, activeVideoStream, client, videoRef, renderCanvasRef]);
-
-  // // Video handling - capture full MediaMixer canvas and send to tutor as JPEG
-  // useEffect(() => {
-  //   if (videoRef.current) {
-  //     videoRef.current.srcObject = activeVideoStream;
-  //   }
-  //
-  //   // Only send frames if camera or screen is enabled
-  //   if (!connected || (!cameraEnabled && !screenEnabled)) {
-  //     return;
-  //   }
-  //
-  //   let rafId: number;
-  //   let lastFrameTime = 0;
-  //   const frameInterval = 1000 / 0.5; // 0.5 FPS (every 2 seconds)
-  //
-  //   function sendVideoFrame(timestamp: number) {
-  //     const canvas = renderCanvasRef.current;
-  //
-  //     if (!canvas) {
-  //       rafId = requestAnimationFrame(sendVideoFrame);
-  //       return;
-  //     }
-  //
-  //     // Throttle to desired FPS
-  //     if (timestamp - lastFrameTime < frameInterval) {
-  //       rafId = requestAnimationFrame(sendVideoFrame);
-  //       return;
-  //     }
-  //
-  //     lastFrameTime = timestamp;
-  //
-  //     if (canvas.width + canvas.height > 0) {
-  //       // Capture the exact MediaMixer output at full resolution for the tutor
-  //       const base64 = canvas.toDataURL("image/jpeg", 1.0);
-  //       const data = base64.slice(base64.indexOf(",") + 1, Infinity);
-  //       client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
-  //     }
-  //
-  //     if (connected) {
-  //       rafId = requestAnimationFrame(sendVideoFrame);
-  //     }
-  //   }
-  //
-  //   if (connected) {
-  //     rafId = requestAnimationFrame(sendVideoFrame);
-  //   }
-  //
-  //   return () => {
-  //     if (rafId) {
-  //       cancelAnimationFrame(rafId);
-  //     }
-  //   };
-  // }, [connected, activeVideoStream, cameraEnabled, screenEnabled, client, videoRef, renderCanvasRef]);
+  }, [connected, activeVideoStream, client, videoRef, mediaMixerCanvasRef]);
 
   const handleConnect = useCallback(async () => {
     if (connected) {
+      // Handle disconnect with TeachingAssistant session end
+      try {
+        interruptAudio();
+        
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        const token = jwtUtils.getToken();
+        if (token) {
+          const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/session/end`, { interrupt_audio: true });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.prompt && client.status === 'connected') {
+              const goodbyeTurnComplete = { current: false };
+              const goodbyeAudioReceived = { current: false };
+              let lastAudioTime = 0;
+              
+              const onAudio = () => {
+                goodbyeAudioReceived.current = true;
+                lastAudioTime = Date.now();
+              };
+              
+              const onTurnComplete = () => {
+                if (goodbyeAudioReceived.current) {
+                  goodbyeTurnComplete.current = true;
+                }
+              };
+              
+              client.on('audio', onAudio);
+              client.on('turncomplete', onTurnComplete);
+              
+              client.send({ text: data.prompt }, true);
+              
+              const maxWaitTime = 30000;
+              const startTime = Date.now();
+              const audioSilenceTimeout = 5000;
+              
+              while (!goodbyeTurnComplete.current && (Date.now() - startTime) < maxWaitTime) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                
+                if (goodbyeAudioReceived.current && lastAudioTime > 0) {
+                  const timeSinceLastAudio = Date.now() - lastAudioTime;
+                  if (timeSinceLastAudio > audioSilenceTimeout && goodbyeTurnComplete.current) {
+                    break;
+                  }
+                }
+              }
+              
+              if (goodbyeAudioReceived.current) {
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+              }
+              
+              client.off('audio', onAudio);
+              client.off('turncomplete', onTurnComplete);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to get goodbye from TeachingAssistant:', error);
+      }
+
       disconnect();
     } else {
+      // Handle connect with TeachingAssistant session start
+      let setupCompleteReceived = false;
+      let setupCompleteResolver: (() => void) | null = null;
+      
+      const onSetupComplete = () => {
+        setupCompleteReceived = true;
+        if (setupCompleteResolver) {
+          setupCompleteResolver();
+          setupCompleteResolver = null;
+        }
+        client.off('setupcomplete', onSetupComplete);
+      };
+      client.on('setupcomplete', onSetupComplete);
+      
       await connect();
+      
+      // Wait for connection to be established
+      const waitForConnection = () => {
+        return new Promise<void>((resolve) => {
+          if (client.status === 'connected') {
+            resolve();
+            return;
+          }
+          const checkConnection = () => {
+            if (client.status === 'connected') {
+              client.off('open', checkConnection);
+              resolve();
+            }
+          };
+          client.on('open', checkConnection);
+        });
+      };
+
+      // Wait for setupComplete with timeout fallback
+      const waitForSetupComplete = () => {
+        return new Promise<void>((resolve) => {
+          if (setupCompleteReceived) {
+            resolve();
+            return;
+          }
+          
+          setupCompleteResolver = resolve;
+          
+          setTimeout(() => {
+            if (setupCompleteResolver === resolve) {
+              setupCompleteResolver = null;
+              resolve();
+            }
+          }, 2000);
+        });
+      };
+
+      try {
+        await waitForConnection();
+        await waitForSetupComplete();
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        
+        const token = jwtUtils.getToken();
+        if (!token) {
+          console.error('No authentication token for TeachingAssistant session start');
+          return;
+        }
+
+        const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/session/start`);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.prompt && client.status === 'connected') {
+            client.send({ text: data.prompt });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to get greeting from TeachingAssistant:', error);
+      } finally {
+        client.off('setupcomplete', onSetupComplete);
+        setupCompleteResolver = null;
+      }
     }
-  }, [connected, connect, disconnect]);
+  }, [connected, connect, disconnect, client, interruptAudio]);
 
   const [verticalAlign, setVerticalAlign] = useState<"top" | "bottom">("top");
 
-  const [position, setPosition] = useState({ x: EDGE_PADDING, y: DEFAULT_Y });
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [hasInitialized, setHasInitialized] = useState(false);
 
-  const clampX = useCallback((rawX: number) => {
-    if (typeof window === "undefined") {
-      return rawX;
-    }
-
-    const viewportWidth = window.innerWidth;
-    const panelWidth = panelRef.current?.offsetWidth ?? 0;
-    const maxX = Math.max(EDGE_PADDING, viewportWidth - panelWidth - EDGE_PADDING);
-    const clamped = Math.min(Math.max(rawX, EDGE_PADDING), maxX);
-    return Number.isFinite(clamped) ? clamped : EDGE_PADDING;
-  }, []);
-
-  const clampY = useCallback((rawY: number) => {
-    if (typeof window === "undefined") {
-      return rawY;
-    }
-
-    const viewportHeight = window.innerHeight;
-    const panelHeight = panelRef.current?.offsetHeight ?? 0;
-    const maxY = Math.max(EDGE_PADDING, viewportHeight - panelHeight - EDGE_PADDING);
-    const clamped = Math.min(Math.max(rawY, EDGE_PADDING), maxY);
-    return Number.isFinite(clamped) ? clamped : EDGE_PADDING;
-  }, []);
-
-  const calculatePinnedX = useCallback(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
-      return EDGE_PADDING;
-    }
-
-    const toolbarWidth = panelRef.current?.offsetWidth ?? 240;
-    const viewportWidth = window.innerWidth;
-    const questionPanel = document.querySelector(".question-panel");
-    const workspace = document.querySelector(".workspace");
-    const maxX = viewportWidth - toolbarWidth - EDGE_PADDING;
-    const minX = EDGE_PADDING;
-
-    const workspaceRect = workspace?.getBoundingClientRect();
-    const questionRect = questionPanel?.getBoundingClientRect();
-    const flushRight = workspaceRect
-      ? workspaceRect.right - toolbarWidth - EDGE_PADDING
-      : maxX;
-
-    if (!questionRect && workspaceRect) {
-      return Math.min(Math.max(flushRight, minX), maxX);
-    }
-
-    if (questionRect && workspaceRect) {
-      const questionTarget = questionRect.right + PANEL_GAP;
-      const whitespace = flushRight - questionTarget;
-      const prefersWorkspace = whitespace > PANEL_GAP;
-      const target = prefersWorkspace ? flushRight : questionTarget;
-      return Math.min(Math.max(target, minX), maxX);
-    }
-
-    if (questionRect) {
-      const target = questionRect.right + PANEL_GAP;
-      return Math.min(Math.max(target, minX), maxX);
-    }
-
-    return Math.min(Math.max(flushRight, minX), maxX);
-  }, []);
-
-  const updatePinnedPosition = useCallback(() => {
-    setPosition((prev) => ({
-      x: clampX(calculatePinnedX()),
-      y: clampY(prev.y ?? DEFAULT_Y),
-    }));
-  }, [calculatePinnedX, clampX, clampY]);
-
-  // Keep the toolbar pinned next to the question panel
+  // Initialize position on mount
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    if (typeof window !== "undefined") {
+      setPosition({ x: window.innerWidth - 380, y: 96 });
+      setHasInitialized(true);
     }
-
-    updatePinnedPosition();
-
-    const handleResize = () => updatePinnedPosition();
-    window.addEventListener("resize", handleResize);
-
-    const questionPanel = document.querySelector(".question-panel");
-    const canObserveResize = typeof ResizeObserver !== "undefined";
-    let resizeObserver: ResizeObserver | null = null;
-    if (questionPanel && canObserveResize) {
-      resizeObserver = new ResizeObserver(() => updatePinnedPosition());
-      resizeObserver.observe(questionPanel);
-    }
-
-    const streamingConsole = document.querySelector(".streaming-console");
-    const canObserveMutations = typeof MutationObserver !== "undefined";
-    let mutationObserver: MutationObserver | null = null;
-    if (streamingConsole && canObserveMutations) {
-      mutationObserver = new MutationObserver((mutationList) => {
-        const shouldUpdate = mutationList.some((mutation) =>
-          mutation.attributeName === "data-left-rail" ||
-          mutation.attributeName === "data-right-rail",
-        );
-        if (shouldUpdate) {
-          updatePinnedPosition();
-        }
-      });
-      mutationObserver.observe(streamingConsole, { attributes: true });
-    }
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
-    };
-  }, [updatePinnedPosition]);
+  }, []);
 
   // Memoize popover position calculation to avoid expensive DOM queries
   const calculatePopoverPosition = useCallback(() => {
@@ -412,8 +422,9 @@ function FloatingControlPanel({
 
   // Adjust position when collapsing/expanding to prevent overflow
   useEffect(() => {
-    if (!panelRef.current || typeof window === "undefined") return;
+    if (!hasInitialized || !panelRef.current) return;
 
+    // Use setTimeout to allow layout to update (height change)
     const timer = setTimeout(() => {
       if (!panelRef.current) return;
       const rect = panelRef.current.getBoundingClientRect();
@@ -424,31 +435,31 @@ function FloatingControlPanel({
       let newY = position.y;
       let newX = position.x;
 
+      // Check bottom overflow
       if (rect.bottom > viewportHeight - margin) {
         newY = viewportHeight - rect.height - margin;
       }
-
+      // Check top overflow
       if (newY < margin) {
         newY = margin;
       }
 
+      // Check right overflow
       if (rect.right > viewportWidth - margin) {
         newX = viewportWidth - rect.width - margin;
       }
-
+      // Check left overflow
       if (newX < margin) {
         newX = margin;
       }
 
-      const clampedY = clampY(newY);
-      const clampedX = clampX(newX);
-      if (clampedY !== position.y || clampedX !== position.x) {
-        setPosition({ x: clampedX, y: clampedY });
+      if (newY !== position.y || newX !== position.x) {
+        setPosition({ x: newX, y: newY });
       }
-    }, 50);
+    }, 50); // Small delay for transition
 
     return () => clearTimeout(timer);
-  }, [clampX, clampY, isCollapsed, position.x, position.y]);
+  }, [isCollapsed, hasInitialized]); // Removed 'position' dependency to avoid loops, relying on rect reading
 
   const handleMute = useCallback(() => {
     setMuted(!muted);
@@ -459,11 +470,27 @@ function FloatingControlPanel({
     setIsDragging(true);
   }, []);
 
-  const handleDrag = useCallback((_: any, data: { x: number; y: number }) => {
-    const clampedY = clampY(data.y);
-    const clampedX = clampX(data.x);
-    setPosition({ x: clampedX, y: clampedY });
-  }, [clampX, clampY]);
+  const handleDrag = useCallback((e: any, data: { x: number; y: number }) => {
+    if (!panelRef.current) return;
+
+    const rect = panelRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Clamp values to keep panel within viewport
+    let newX = data.x;
+    let newY = data.y;
+
+    // Horizontal boundaries
+    if (newX < 0) newX = 0;
+    else if (newX + rect.width > viewportWidth) newX = viewportWidth - rect.width;
+
+    // Vertical boundaries
+    if (newY < 0) newY = 0;
+    else if (newY + rect.height > viewportHeight) newY = viewportHeight - rect.height;
+
+    setPosition({ x: newX, y: newY });
+  }, []);
 
   const handleDragStop = useCallback(() => {
     setIsDragging(false);
@@ -477,240 +504,29 @@ function FloatingControlPanel({
   const panelClasses = useMemo(
     () =>
       cn(
-        // Light lavender background for floating feel
-        "fixed z-[1000] bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[2px] md:border-[3px] border-black dark:border-white rounded-none max-h-[calc(100vh-48px)] max-w-[calc(100vw-32px)] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent",
+        "fixed z-[1000] bg-[#FFFDF5] border-[2px] md:border-[3px] border-black rounded-lg md:rounded-xl",
         // GPU acceleration hints
         "will-change-transform transform-gpu",
         // Only apply transitions when NOT dragging to prevent layout thrashing
         !isDragging &&
         "transition-all duration-200 ease-out",
         isCollapsed
-          ? "w-[50px] md:w-[55px] py-2 md:py-2.5 px-1 md:px-1.5 shadow-[2px_2px_0_0_rgba(0,0,0,1),_4px_4px_8px_2px_rgba(128,128,128,0.4),_6px_6px_16px_4px_rgba(96,96,96,0.25)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.9),_4px_4px_8px_2px_rgba(200,200,200,0.35),_6px_6px_16px_4px_rgba(150,150,150,0.2)]"
-          : "w-[220px] md:w-[250px] p-2.5 md:p-3 shadow-[3px_3px_0_0_rgba(0,0,0,1),_6px_6px_12px_3px_rgba(128,128,128,0.45),_9px_9px_24px_6px_rgba(96,96,96,0.3)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.9),_6px_6px_12px_3px_rgba(200,200,200,0.4),_9px_9px_24px_6px_rgba(150,150,150,0.25)] md:shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_16px_4px_rgba(128,128,128,0.5),_12px_12px_32px_8px_rgba(96,96,96,0.35)] md:dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_16px_4px_rgba(200,200,200,0.45),_12px_12px_32px_8px_rgba(150,150,150,0.3)]",
+          ? "w-[50px] md:w-[55px] py-2 md:py-2.5 px-1 md:px-1.5 shadow-[1px_1px_0_0_rgba(0,0,0,1),_4px_4px_12px_rgba(0,0,0,0.12),_8px_8px_24px_rgba(0,0,0,0.08)]"
+          : "w-[220px] md:w-[250px] p-2.5 md:p-3 shadow-[1px_1px_0_0_rgba(0,0,0,1),_4px_4px_12px_rgba(0,0,0,0.12),_8px_8px_24px_rgba(0,0,0,0.08)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1),_6px_6px_16px_rgba(0,0,0,0.15),_12px_12px_32px_rgba(0,0,0,0.1)]",
         // Ensure origin is top-left for controlled positioning
         "top-0 left-0",
-        // Hover effect with enhanced floating shadow
+        // Hover effect
         !isDragging &&
-        "hover:shadow-[4px_4px_0_0_rgba(0,0,0,1),_10px_10px_20px_5px_rgba(128,128,128,0.55),_16px_16px_40px_10px_rgba(96,96,96,0.4)] dark:hover:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_10px_10px_20px_5px_rgba(200,200,200,0.5),_16px_16px_40px_10px_rgba(150,150,150,0.35)] md:hover:shadow-[5px_5px_0_0_rgba(0,0,0,1),_12px_12px_24px_6px_rgba(128,128,128,0.6),_20px_20px_48px_12px_rgba(96,96,96,0.45)] md:dark:hover:shadow-[5px_5px_0_0_rgba(255,255,255,0.9),_12px_12px_24px_6px_rgba(200,200,200,0.55),_20px_20px_48px_12px_rgba(150,150,150,0.4)]",
+        "hover:shadow-[2px_2px_0_0_rgba(0,0,0,1),_6px_6px_16px_rgba(0,0,0,0.15),_12px_12px_32px_rgba(0,0,0,0.1)] md:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1),_8px_8px_20px_rgba(0,0,0,0.18),_16px_16px_40px_rgba(0,0,0,0.12)]",
       ),
     [isCollapsed, isDragging],
   );
 
-  // Mobile Bottom Bar Component - Floating Capsule Style
-  const MobileBottomBar = () => (
-    <div className="md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-32px)] max-w-[900px]">
-      {/* Floating Capsule Container */}
-      <div className="bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[3px] border-black dark:border-white rounded-none shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_20px_4px_rgba(0,0,0,0.25)] dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_20px_4px_rgba(255,255,255,0.15)] px-1.5 py-1">
-        <div className="flex items-center justify-around gap-0.5">
-          {/* Start/End Session Button */}
-          <button
-            onClick={handleConnect}
-            className={cn(
-              "w-10 h-10 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all transform active:scale-95 relative font-black",
-              connected
-                ? "bg-[#FF6B6B] hover:bg-[#FF6B6B] text-white shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff]"
-                : "bg-[#4ADE80] hover:bg-[#4ADE80] text-black shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff]",
-            )}
-            title={connected ? "End Session" : "Start Session"}
-          >
-            {connected ? (
-              <div className="w-4 h-4 bg-white border-2 border-black rounded-sm" />
-            ) : (
-              <PlayCircle className="w-6 h-6" />
-            )}
-            {connected && (
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-[#FFD93D] border-2 border-black rounded-full animate-pulse" />
-            )}
-          </button>
-
-          {/* Divider */}
-          <div className="w-[2px] h-7 bg-black/30 dark:bg-white/30 rounded-full" />
-
-          {/* Mic Button */}
-          <button
-            onClick={handleMute}
-            className={cn(
-              "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
-              muted
-                ? "bg-[#FF6B6B] text-white"
-                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
-            )}
-            title={muted ? "Unmute" : "Mute"}
-          >
-            {muted ? (
-              <MicOff className="w-5 h-5 font-bold" />
-            ) : (
-              <Mic className="w-5 h-5 font-bold" />
-            )}
-          </button>
-
-          {/* Camera Button */}
-          {supportsVideo && (
-            <button
-              onClick={() => toggleCamera(!cameraEnabled)}
-              className={cn(
-                "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
-                cameraEnabled
-                  ? "bg-[#C4B5FD] text-black"
-                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
-              )}
-              title="Toggle Camera"
-            >
-              {cameraEnabled ? (
-                <Video className="w-5 h-5 font-bold" />
-              ) : (
-                <VideoOff className="w-5 h-5 font-bold" />
-              )}
-            </button>
-          )}
-
-          {/* Screen Share Button */}
-          {supportsVideo && (
-            <button
-              onClick={() => toggleScreen(!screenEnabled)}
-              className={cn(
-                "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
-                screenEnabled
-                  ? "bg-[#FFD93D] text-black"
-                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
-              )}
-              title="Share Screen"
-            >
-              {screenEnabled ? (
-                <Monitor className="w-5 h-5 font-bold" />
-              ) : (
-                <MonitorOff className="w-5 h-5 font-bold" />
-              )}
-            </button>
-          )}
-
-          {/* Divider */}
-          <div className="w-[2px] h-7 bg-black/30 dark:bg-white/30 rounded-full" />
-
-          {/* Settings Button */}
-          {enableEditingSettings && (
-            <SettingsDialog
-              className="[&]:h-auto [&]:block [&]:p-0 [&]:gap-0"
-              trigger={
-                <button className="group/settings w-9 h-9 border-[2px] border-black dark:border-white rounded-md bg-[#F3F0FF] dark:bg-[#1e1a2e] hover:bg-[#FF6B6B] flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
-                  <Settings className="w-5 h-5 font-bold text-black dark:text-white group-hover/settings:text-white" />
-                </button>
-              }
-            />
-          )}
-
-          {/* Paint/Draw Button */}
-          <button
-            onClick={onPaintClick}
-            className={cn(
-              "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
-              isPaintActive
-                ? "bg-[#FFD93D] text-black"
-                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
-            )}
-            title="Canvas"
-          >
-            <PenTool className="w-5 h-5 font-bold" />
-          </button>
-
-          {/* View/Media Button */}
-          <button
-            onClick={toggleSharedMedia}
-            className={cn(
-              "w-9 h-9 border-[2px] border-black dark:border-white rounded-md flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] active:shadow-none active:translate-x-0.5 active:translate-y-0.5",
-              sharedMediaOpen
-                ? "bg-[#C4B5FD] text-black"
-                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
-            )}
-            title="View"
-          >
-            <Eye className="w-5 h-5 font-bold" />
-          </button>
-
-          {/* Timer Display */}
-          <div
-            className={cn(
-              "min-w-[44px] h-8 flex items-center justify-center text-[10px] font-mono font-black transition-colors border-[2px] border-black dark:border-white rounded-md px-2",
-              connected
-                ? "bg-[#FFD93D] text-black"
-                : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
-            )}
-          >
-            {connected ? formatTime(sessionTime) : "--:--"}
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Popover for Shared Media - appears above the capsule */}
-      {sharedMediaOpen && (
-        <div
-          className={cn(
-            "absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[calc(100vw-32px)] max-w-[360px] h-auto flex flex-col bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[3px] border-black dark:border-white rounded-2xl shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_20px_4px_rgba(0,0,0,0.25)] dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_20px_4px_rgba(255,255,255,0.15)] overflow-hidden z-[1001]",
-            isAnimatingOut ? "animate-popover-out" : "animate-popover-in",
-          )}
-        >
-          <div className="flex items-center justify-between p-3 border-b-[3px] border-black dark:border-white bg-[#FFD93D] rounded-t-xl">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 border-[2px] border-black bg-white rounded-lg">
-                <ImageIcon className="w-4 h-4 text-black font-bold" />
-              </div>
-              <h3 className="font-black text-black uppercase text-xs">
-                ADAM'S VIEW
-              </h3>
-              <span
-                className={cn(
-                  "px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border-[2px] border-black rounded-full",
-                  {
-                    "bg-[#4ADE80] text-black":
-                      mediaMixerStatus.isConnected && !mediaMixerStatus.error,
-                    "bg-[#FF6B6B] text-white":
-                      !!mediaMixerStatus.error,
-                    "bg-white text-black":
-                      !mediaMixerStatus.isConnected &&
-                      !mediaMixerStatus.error,
-                  },
-                )}
-              >
-                {mediaMixerStatus.error
-                  ? "OFF"
-                  : mediaMixerStatus.isConnected
-                    ? "LIVE"
-                    : "..."}
-              </span>
-            </div>
-            <button
-              onClick={toggleSharedMedia}
-              className="w-8 h-8 flex items-center justify-center border-[2px] border-black bg-white hover:bg-[#FF6B6B] text-black hover:text-white transition-all rounded-full shadow-[2px_2px_0_0_#000] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
-            >
-              <X className="w-4 h-4 font-bold" />
-            </button>
-          </div>
-          <div className="flex-1 h-auto w-full rounded-b-xl overflow-hidden">
-            <MediaMixerDisplay
-              socket={videoSocket}
-              renderCanvasRef={renderCanvasRef}
-              onStatusChange={setMediaMixerStatus}
-              isCameraEnabled={cameraEnabled}
-              isScreenShareEnabled={screenEnabled}
-              isCanvasEnabled={isPaintActive}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  if (!hasInitialized) return null; // Prevent hydration mismatch
 
   return (
-    <>
-      {/* Mobile Bottom Bar - only shown on mobile */}
-      {isMobile && <MobileBottomBar />}
-      
-      {/* Desktop Floating Panel - only shown on desktop */}
-      {!isMobile && (
-      <Draggable
-      axis="both"
+    <Draggable
       handle=".drag-handle"
-      cancel=".no-drag"
       nodeRef={panelRef}
       position={position}
       onStart={handleDragStart}
@@ -725,6 +541,21 @@ function FloatingControlPanel({
           transform: "translate3d(0, 0, 0)",
         }}
       >
+        {/* Hidden canvas for MediaMixer - will be set by parent */}
+        <canvas
+          ref={(canvas) => {
+            if (typeof renderCanvasRef === 'function') {
+              renderCanvasRef(canvas);
+            } else if (renderCanvasRef && 'current' in renderCanvasRef) {
+              // For RefObject, we need to cast it as mutable
+              (renderCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = canvas;
+            }
+          }}
+          width={1280}
+          height={2160}
+          style={{ display: 'none' }}
+        />
+        
         {/* Drag Handle & Header */}
         <div
           className={cn(
@@ -735,16 +566,16 @@ function FloatingControlPanel({
         >
           {!isCollapsed && (
             <div className="flex items-center gap-1.5 md:gap-2">
-              <div className="flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black dark:border-white bg-[#FFD93D]">
+              <div className="flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black bg-[#FFD93D]">
                 <span className="material-symbols-outlined text-sm md:text-base text-black font-black">
                   smart_toy
                 </span>
               </div>
               <div>
-                <div className="font-black text-[10px] md:text-xs text-black dark:text-white leading-none mb-0 md:mb-0.5 uppercase">
+                <div className="font-black text-[10px] md:text-xs text-black leading-none mb-0 md:mb-0.5 uppercase">
                   AI TUTOR
                 </div>
-                <div className="text-[7px] md:text-[8px] text-black font-bold uppercase tracking-wide bg-[#C4B5FD] px-1 md:px-1.5 py-0 border-[1.5px] border-black dark:border-white inline-block">
+                <div className="text-[7px] md:text-[8px] text-black font-bold uppercase tracking-wide bg-[#C4B5FD] px-1 md:px-1.5 py-0 border-[1.5px] border-black inline-block">
                   CONTROL
                 </div>
               </div>
@@ -752,7 +583,7 @@ function FloatingControlPanel({
           )}
           <button
             onClick={handleCollapse}
-            className="no-drag w-5 h-5 md:w-6 md:h-6 flex items-center justify-center border-[2px] border-black dark:border-white bg-[#F3F0FF] dark:bg-[#1e1a2e] hover:bg-[#C4B5FD] text-black dark:text-white hover:translate-x-0.5 hover:translate-y-0.5 transition-all duration-100"
+            className="w-5 h-5 md:w-6 md:h-6 flex items-center justify-center border-[2px] border-black bg-[#FFFDF5] hover:bg-[#FFD93D] text-black hover:translate-x-0.5 hover:translate-y-0.5 transition-all duration-100"
           >
             {isCollapsed ? (
               <ChevronDown className="w-3 h-3 md:w-3.5 md:h-3.5 font-black" />
@@ -767,7 +598,7 @@ function FloatingControlPanel({
           <div className="flex flex-col items-center gap-1.5 md:gap-2">
             <button
               onClick={handleCollapse}
-              className="w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white bg-[#F3F0FF] dark:bg-[#1e1a2e] hover:bg-[#C4B5FD] flex items-center justify-center text-black dark:text-white transition-all hover:translate-x-0.5 hover:translate-y-0.5 duration-100 shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none"
+              className="w-8 h-8 md:w-9 md:h-9 border-[2px] border-black bg-[#FFFDF5] hover:bg-[#FFD93D] flex items-center justify-center text-black transition-all hover:translate-x-0.5 hover:translate-y-0.5 duration-100 shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-none"
               title="Expand"
             >
               <Home className="w-4 h-4 font-bold" />
@@ -777,10 +608,10 @@ function FloatingControlPanel({
             <button
               onClick={handleConnect}
               className={cn(
-                "w-9 h-9 md:w-10 md:h-10 border-[2px] border-black dark:border-white flex items-center justify-center transition-all transform active:translate-x-1 active:translate-y-1 relative group font-black",
+                "w-9 h-9 md:w-10 md:h-10 border-[2px] border-black flex items-center justify-center transition-all transform active:translate-x-1 active:translate-y-1 relative group font-black",
                 connected
-                  ? "bg-[#FF6B6B] hover:bg-[#FF6B6B] text-white shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none"
-                  : "bg-[#4ADE80] hover:bg-[#4ADE80] text-black shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none",
+                  ? "bg-[#FF6B6B] hover:bg-[#FF6B6B] text-white shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)]"
+                  : "bg-[#4ADE80] hover:bg-[#4ADE80] text-black shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)]",
               )}
               title={connected ? "End Session" : "Start Session"}
             >
@@ -794,15 +625,15 @@ function FloatingControlPanel({
               )}
             </button>
 
-            <div className="w-7 h-[2px] bg-black dark:bg-white my-0.5" />
+            <div className="w-7 h-[2px] bg-black my-0.5" />
 
             <button
               onClick={handleMute}
               className={cn(
-                "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
+                "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black flex items-center justify-center transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
                 muted
                   ? "bg-[#FF6B6B] text-white"
-                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white hover:bg-[#C4B5FD]",
+                  : "bg-[#FFFDF5] text-black hover:bg-[#FFD93D]",
               )}
               title={muted ? "Unmute" : "Mute"}
             >
@@ -815,12 +646,12 @@ function FloatingControlPanel({
 
             {supportsVideo && (
               <button
-                onClick={() => toggleCamera(!cameraEnabled)}
+                onClick={() => onToggleCamera(!cameraEnabled)}
                 className={cn(
-                  "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
+                  "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black flex items-center justify-center transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
                   cameraEnabled
                     ? "bg-[#C4B5FD] text-black"
-                    : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white hover:bg-[#C4B5FD]",
+                    : "bg-[#FFFDF5] text-black hover:bg-[#FFD93D]",
                 )}
                 title="Toggle Camera"
               >
@@ -834,12 +665,12 @@ function FloatingControlPanel({
 
             {supportsVideo && (
               <button
-                onClick={() => toggleScreen(!screenEnabled)}
+                onClick={() => onToggleScreen(!screenEnabled)}
                 className={cn(
-                  "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
+                  "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black flex items-center justify-center transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
                   screenEnabled
                     ? "bg-[#FFD93D] text-black"
-                    : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white hover:bg-[#C4B5FD]",
+                    : "bg-[#FFFDF5] text-black hover:bg-[#FFD93D]",
                 )}
                 title="Share Screen"
               >
@@ -851,14 +682,14 @@ function FloatingControlPanel({
               </button>
             )}
 
-            <div className="w-7 h-[2px] bg-black dark:bg-white my-0.5" />
+            <div className="w-7 h-[2px] bg-black my-0.5" />
 
             {enableEditingSettings && (
               <SettingsDialog
-                className="[&]:h-auto [&]:block [&]:p-0 [&]:gap-0"
+                className="!h-auto !block"
                 trigger={
-                  <button className="group/settings w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white bg-[#F3F0FF] dark:bg-[#1e1a2e] hover:bg-[#FF6B6B] flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100">
-                    <Settings className="w-3.5 h-3.5 font-bold text-black dark:text-white group-hover/settings:text-white" />
+                  <button className="w-8 h-8 md:w-9 md:h-9 border-[2px] border-black bg-[#FFFDF5] hover:bg-[#FF6B6B] flex items-center justify-center text-black hover:text-white transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100">
+                    <Settings className="w-3.5 h-3.5 font-bold" />
                   </button>
                 }
               />
@@ -867,10 +698,10 @@ function FloatingControlPanel({
             <button
               onClick={onPaintClick}
               className={cn(
-                "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
+                "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black flex items-center justify-center transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
                 isPaintActive
                   ? "bg-[#FFD93D] text-black"
-                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white hover:bg-[#C4B5FD]",
+                  : "bg-[#FFFDF5] text-black hover:bg-[#FFD93D]",
               )}
               title="Canvas"
             >
@@ -880,10 +711,10 @@ function FloatingControlPanel({
             <button
               onClick={toggleSharedMedia}
               className={cn(
-                "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white flex items-center justify-center transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
+                "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black flex items-center justify-center transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
                 sharedMediaOpen
                   ? "bg-[#C4B5FD] text-black"
-                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white hover:bg-[#C4B5FD]",
+                  : "bg-[#FFFDF5] text-black hover:bg-[#C4B5FD]",
               )}
               title="View"
             >
@@ -892,10 +723,10 @@ function FloatingControlPanel({
 
             <div
               className={cn(
-                "w-10 h-8 flex items-center justify-center text-[9px] font-mono font-black mt-1 transition-colors border-[2px] border-black dark:border-white",
+                "w-10 h-8 flex items-center justify-center text-[9px] font-mono font-black mt-1 transition-colors border-[2px] border-black",
                 connected
                   ? "bg-[#FFD93D] text-black"
-                  : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white",
+                  : "bg-[#FFFDF5] text-black",
               )}
             >
               {connected ? formatTime(sessionTime) : "--:--"}
@@ -908,16 +739,16 @@ function FloatingControlPanel({
             <div
               onClick={handleMute}
               className={cn(
-                "flex items-center justify-between p-2 md:p-2.5 border-[2px] border-black dark:border-white transition-all duration-100 group cursor-pointer shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5",
+                "flex items-center justify-between p-2 md:p-2.5 border-[2px] border-black transition-all duration-100 group cursor-pointer shadow-[1px_1px_0_0_rgba(0,0,0,1)] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)]",
                 !muted
-                  ? "bg-[#F3F0FF] dark:bg-[#1e1a2e]"
+                  ? "bg-[#FFFDF5]"
                   : "bg-[#FF6B6B]",
               )}
             >
               <div className="flex items-center gap-1.5 md:gap-2 overflow-hidden">
                 <div
                   className={cn(
-                    "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black dark:border-white transition-colors",
+                    "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black transition-colors",
                     !muted
                       ? "bg-[#C4B5FD] text-black"
                       : "bg-white text-black",
@@ -930,11 +761,11 @@ function FloatingControlPanel({
                   )}
                 </div>
                 <div className="flex flex-col">
-                  <span className={cn("text-[8px] md:text-[9px] font-bold uppercase tracking-wide", muted ? "text-white" : "text-black dark:text-white")}>
-                    Mic
+                  <span className="text-[9px] md:text-[10px] font-black text-black uppercase tracking-wide">
+                    Microphone
                   </span>
                   <select
-                    className={cn("bg-transparent border-none text-[10px] md:text-xs outline-none cursor-pointer w-[85px] md:w-[100px] truncate p-0 font-black", muted ? "text-white" : "text-black dark:text-white")}
+                    className="bg-transparent border-none text-[9px] md:text-[10px] text-black outline-none cursor-pointer w-[100px] md:w-[120px] truncate p-0 font-bold uppercase"
                     value={selectedAudioDevice}
                     onChange={(e) => {
                       e.stopPropagation();
@@ -947,7 +778,7 @@ function FloatingControlPanel({
                       <option
                         key={device.deviceId}
                         value={device.deviceId}
-                        className="bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white font-bold"
+                        className="bg-[#FFFDF5] text-black"
                       >
                         {device.label || `Mic ${device.deviceId.slice(0, 4)}`}
                       </option>
@@ -961,34 +792,34 @@ function FloatingControlPanel({
                   handleMute();
                 }}
                 className={cn(
-                  "text-[9px] md:text-[10px] font-black px-2 md:px-2.5 py-1 md:py-1.5 transition-all border-[2px] border-black dark:border-white uppercase tracking-wide",
+                  "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 md:py-1.5 transition-all border-[2px] border-black shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none uppercase",
                   !muted
-                    ? "bg-[#FFD93D] text-black hover:translate-x-0.5 hover:translate-y-0.5 shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none"
-                    : "bg-white text-black hover:translate-x-0.5 hover:translate-y-0.5 shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none",
+                    ? "bg-[#C4B5FD] text-black"
+                    : "bg-[#FFFDF5] text-black",
                 )}
               >
-                {muted ? "On" : "Off"}
+                {muted ? "Unmute" : "Mute"}
               </button>
             </div>
 
             {/* Camera Control */}
             {supportsVideo && (
               <div
-                onClick={() => toggleCamera(!cameraEnabled)}
+                onClick={() => onToggleCamera(!cameraEnabled)}
                 className={cn(
-                  "flex items-center justify-between p-2 md:p-2.5 border-[2px] border-black dark:border-white transition-all duration-100 cursor-pointer shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5",
+                  "flex items-center justify-between p-2 md:p-2.5 border-[2px] border-black transition-all duration-100 cursor-pointer shadow-[1px_1px_0_0_rgba(0,0,0,1)]",
                   cameraEnabled
-                    ? "bg-[#FFD93D]"
-                    : "bg-[#F3F0FF] dark:bg-[#1e1a2e]",
+                    ? "bg-[#C4B5FD]"
+                    : "bg-[#FFFDF5]",
                 )}
               >
                 <div className="flex items-center gap-1.5 md:gap-2">
                   <div
                     className={cn(
-                      "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black dark:border-white transition-colors",
+                      "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black transition-colors",
                       cameraEnabled
-                        ? "bg-white text-black"
-                        : "bg-[#C4B5FD] text-black",
+                        ? "bg-[#FFFDF5] text-black"
+                        : "bg-[#FFFDF5] text-black",
                     )}
                   >
                     {cameraEnabled ? (
@@ -997,20 +828,20 @@ function FloatingControlPanel({
                       <VideoOff className="w-3 h-3 md:w-3.5 md:h-3.5 font-bold" />
                     )}
                   </div>
-                  <span className="text-[10px] md:text-xs font-black text-black dark:text-white uppercase tracking-wide">
+                  <span className="text-[9px] md:text-[10px] font-black text-black uppercase tracking-wide">
                     Camera
                   </span>
                 </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleCamera(!cameraEnabled);
+                    onToggleCamera(!cameraEnabled);
                   }}
                   className={cn(
-                    "text-[9px] md:text-[10px] font-black px-2 md:px-2.5 py-1 md:py-1.5 transition-all border-[2px] border-black dark:border-white uppercase tracking-wide",
+                    "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 md:py-1.5 transition-all border-[2px] border-black shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none uppercase",
                     cameraEnabled
-                      ? "bg-[#FF6B6B] text-white hover:translate-x-0.5 hover:translate-y-0.5 shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none"
-                      : "bg-[#FFD93D] text-black hover:translate-x-0.5 hover:translate-y-0.5 shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none",
+                      ? "bg-[#FFFDF5] text-black"
+                      : "bg-[#C4B5FD] text-black",
                   )}
                 >
                   {cameraEnabled ? "Off" : "On"}
@@ -1021,21 +852,21 @@ function FloatingControlPanel({
             {/* Screen Share Control */}
             {supportsVideo && (
               <div
-                onClick={() => toggleScreen(!screenEnabled)}
+                onClick={() => onToggleScreen(!screenEnabled)}
                 className={cn(
-                  "flex items-center justify-between p-2 md:p-2.5 border-[2px] border-black dark:border-white transition-all duration-100 cursor-pointer shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5",
+                  "flex items-center justify-between p-2 md:p-2.5 border-[2px] border-black transition-all duration-100 cursor-pointer shadow-[1px_1px_0_0_rgba(0,0,0,1)]",
                   screenEnabled
                     ? "bg-[#FFD93D]"
-                    : "bg-[#F3F0FF] dark:bg-[#1e1a2e]",
+                    : "bg-[#FFFDF5]",
                 )}
               >
                 <div className="flex items-center gap-1.5 md:gap-2">
                   <div
                     className={cn(
-                      "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black dark:border-white transition-colors",
+                      "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black transition-colors",
                       screenEnabled
-                        ? "bg-white text-black"
-                        : "bg-[#FFD93D] text-black",
+                        ? "bg-[#FFFDF5] text-black"
+                        : "bg-[#FFFDF5] text-black",
                     )}
                   >
                     {screenEnabled ? (
@@ -1044,23 +875,23 @@ function FloatingControlPanel({
                       <MonitorOff className="w-3 h-3 md:w-3.5 md:h-3.5 font-bold" />
                     )}
                   </div>
-                  <span className="text-[10px] md:text-xs font-black text-black dark:text-white uppercase tracking-wide">
-                    Screen
+                  <span className="text-[9px] md:text-[10px] font-black text-black uppercase tracking-wide">
+                    Screen Share
                   </span>
                 </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleScreen(!screenEnabled);
+                    onToggleScreen(!screenEnabled);
                   }}
                   className={cn(
-                    "text-[9px] md:text-[10px] font-black px-2 md:px-2.5 py-1 md:py-1.5 transition-all border-[2px] border-black dark:border-white uppercase tracking-wide",
+                    "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 md:py-1.5 transition-all border-[2px] border-black shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none uppercase",
                     screenEnabled
-                      ? "bg-[#FF6B6B] text-white hover:translate-x-0.5 hover:translate-y-0.5 shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none"
-                      : "bg-[#C4B5FD] text-black hover:translate-x-0.5 hover:translate-y-0.5 shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] hover:shadow-none",
+                      ? "bg-[#FFFDF5] text-black"
+                      : "bg-[#FFD93D] text-black",
                   )}
                 >
-                  {screenEnabled ? "Stop" : "On"}
+                  {screenEnabled ? "Stop" : "Share"}
                 </button>
               </div>
             )}
@@ -1069,36 +900,36 @@ function FloatingControlPanel({
             <button
               onClick={handleConnect}
               className={cn(
-                "w-full py-2 md:py-2.5 font-black border-[2px] border-black dark:border-white transition-all transform active:translate-x-1 active:translate-y-1 active:shadow-none flex items-center justify-center gap-1.5 mt-1 md:mt-1.5 uppercase tracking-wide text-xs md:text-sm",
+                "w-full py-2.5 md:py-3 font-black text-white transition-all transform active:translate-x-1 active:translate-y-1 active:shadow-none flex items-center justify-center gap-2 mt-1 border-[2px] md:border-[3px] border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] uppercase text-[10px] md:text-xs",
                 connected
-                  ? "bg-[#FF6B6B] text-white hover:bg-[#FF6B6B] shadow-[4px_4px_0_0_#000] dark:shadow-[4px_4px_0_0_#fff] hover:shadow-[2px_2px_0_0_#000] dark:hover:shadow-[2px_2px_0_0_#fff]"
-                  : "bg-[#4ADE80] text-black hover:bg-[#4ADE80] shadow-[4px_4px_0_0_#000] dark:shadow-[4px_4px_0_0_#fff] hover:shadow-[2px_2px_0_0_#000] dark:hover:shadow-[2px_2px_0_0_#fff]",
+                  ? "bg-[#FF6B6B] hover:bg-[#FF6B6B]"
+                  : "bg-[#4ADE80] hover:bg-[#4ADE80]",
               )}
             >
               {connected ? (
                 <>
                   <div className="w-3 h-3 bg-white border-2 border-black" />
-                  <span>End</span>
+                  End Session
                 </>
               ) : (
                 <>
-                  <PlayCircle className="w-4 h-4 md:w-4.5 md:h-4.5" />
-                  <span>Start Session</span>
+                  <PlayCircle className="w-4 h-4 md:w-5 md:h-5" />
+                  Start Session
                 </>
               )}
             </button>
 
             {/* Bottom Actions */}
-            <div className="grid grid-cols-4 gap-1.5 md:gap-2 pt-2 md:pt-2.5 border-t-[2px] border-black dark:border-white">
+            <div className="grid grid-cols-4 gap-1.5 md:gap-2 pt-2 md:pt-3 border-t-[2px] border-black">
               {enableEditingSettings && (
                 <SettingsDialog
                   className="!h-auto !block"
                   trigger={
-                    <button className="flex flex-col items-center gap-0.5 md:gap-1 p-1 md:p-1.5 transition-all group hover:translate-y-0.5">
-                      <div className="p-1 md:p-1.5 border-[2px] border-black dark:border-white bg-[#F3F0FF] dark:bg-[#1e1a2e] group-hover:bg-[#FF6B6B] transition-colors shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] group-hover:shadow-none">
-                        <Settings className="w-3 h-3 md:w-3.5 md:h-3.5 text-black dark:text-white group-hover:text-white font-bold" />
+                    <button className="flex flex-col items-center gap-1 p-1.5 md:p-2 border-[2px] border-black bg-[#FFFDF5] hover:bg-[#FF6B6B] text-black hover:text-white transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none group">
+                      <div className="p-1 border-[2px] border-black bg-[#FFFDF5] group-hover:bg-[#FF6B6B] transition-colors">
+                        <Settings className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                       </div>
-                      <span className="text-[7px] md:text-[8px] font-black uppercase text-black dark:text-white">Set</span>
+                      <span className="text-[8px] md:text-[9px] font-black uppercase">Settings</span>
                     </button>
                   }
                 />
@@ -1106,44 +937,50 @@ function FloatingControlPanel({
               <button
                 onClick={onPaintClick}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 md:gap-1 p-1 md:p-1.5 transition-all group hover:translate-y-0.5",
+                  "flex flex-col items-center gap-1 p-1.5 md:p-2 border-[2px] border-black transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none group",
+                  isPaintActive
+                    ? "bg-[#FFD93D] text-black"
+                    : "bg-[#FFFDF5] text-black hover:bg-[#FFD93D]",
                 )}
               >
                 <div
                   className={cn(
-                    "p-1 md:p-1.5 border-[2px] border-black dark:border-white transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] group-hover:shadow-none",
+                    "p-1 border-[2px] border-black transition-colors",
                     isPaintActive
-                      ? "bg-[#FFD93D] text-black"
-                      : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white group-hover:bg-[#C4B5FD]",
+                      ? "bg-[#FFFDF5] text-black"
+                      : "bg-[#FFFDF5] group-hover:bg-[#FFD93D]",
                   )}
                 >
-                  <PenTool className="w-3 h-3 md:w-3.5 md:h-3.5 font-bold" />
+                  <PenTool className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                 </div>
-                <span className="text-[7px] md:text-[8px] font-black text-black dark:text-white uppercase">Draw</span>
+                <span className="text-[8px] md:text-[9px] font-black uppercase">Canvas</span>
               </button>
               <button
                 onClick={toggleSharedMedia}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 md:gap-1 p-1 md:p-1.5 transition-all group hover:translate-y-0.5",
+                  "flex flex-col items-center gap-1 p-1.5 md:p-2 border-[2px] border-black transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none group",
+                  sharedMediaOpen
+                    ? "bg-[#C4B5FD] text-black"
+                    : "bg-[#FFFDF5] text-black hover:bg-[#C4B5FD]",
                 )}
               >
                 <div
                   className={cn(
-                    "p-1 md:p-1.5 border-[2px] border-black dark:border-white transition-all shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] group-hover:shadow-none",
+                    "p-1 border-[2px] border-black transition-colors",
                     sharedMediaOpen
-                      ? "bg-[#C4B5FD] text-black"
-                      : "bg-[#F3F0FF] dark:bg-[#1e1a2e] text-black dark:text-white group-hover:bg-[#C4B5FD]",
+                      ? "bg-[#FFFDF5] text-black"
+                      : "bg-[#FFFDF5] group-hover:bg-[#C4B5FD]",
                   )}
                 >
-                  <Eye className="w-3 h-3 md:w-3.5 md:h-3.5 font-bold" />
+                  <Eye className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                 </div>
-                <span className="text-[7px] md:text-[8px] font-black text-black dark:text-white uppercase">View</span>
+                <span className="text-[8px] md:text-[9px] font-black uppercase">View</span>
               </button>
-              <button className="flex flex-col items-center gap-0.5 md:gap-1 p-1 md:p-1.5 transition-all group hover:translate-y-0.5">
-                <div className="p-1 md:p-1.5 border-[2px] border-black dark:border-white bg-[#F3F0FF] dark:bg-[#1e1a2e] group-hover:bg-[#C4B5FD] transition-colors shadow-[2px_2px_0_0_#000] dark:shadow-[2px_2px_0_0_#fff] group-hover:shadow-none">
-                  <MoreHorizontal className="w-3 h-3 md:w-3.5 md:h-3.5 text-black dark:text-white font-bold" />
+              <button className="flex flex-col items-center gap-1 p-1.5 md:p-2 border-[2px] border-black bg-[#FFFDF5] hover:bg-[#C4B5FD] text-black transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none group">
+                <div className="p-1 border-[2px] border-black bg-[#FFFDF5] group-hover:bg-[#C4B5FD] transition-colors">
+                  <MoreHorizontal className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                 </div>
-                <span className="text-[7px] md:text-[8px] font-black text-black dark:text-white uppercase">More</span>
+                <span className="text-[8px] md:text-[9px] font-black uppercase">More</span>
               </button>
             </div>
           </div>
@@ -1153,7 +990,7 @@ function FloatingControlPanel({
         {sharedMediaOpen && (
           <div
             className={cn(
-              "absolute w-[320px] md:w-[360px] h-auto flex flex-col bg-[#F3F0FF] dark:bg-[#1e1a2e] border-[3px] md:border-[4px] border-black dark:border-white rounded-none shadow-[3px_3px_0_0_rgba(0,0,0,1),_6px_6px_12px_3px_rgba(128,128,128,0.45),_9px_9px_24px_6px_rgba(96,96,96,0.3)] dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.9),_6px_6px_12px_3px_rgba(200,200,200,0.4),_9px_9px_24px_6px_rgba(150,150,150,0.25)] md:shadow-[4px_4px_0_0_rgba(0,0,0,1),_8px_8px_16px_4px_rgba(128,128,128,0.5),_12px_12px_32px_8px_rgba(96,96,96,0.35)] md:dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.9),_8px_8px_16px_4px_rgba(200,200,200,0.45),_12px_12px_32px_8px_rgba(150,150,150,0.3)] overflow-hidden z-[1001]",
+              "absolute w-[320px] md:w-[360px] h-auto flex flex-col bg-white dark:bg-[#000000] border-[3px] md:border-[4px] border-black dark:border-white rounded-xl md:rounded-2xl shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] overflow-hidden z-[1001]",
               isAnimatingOut ? "animate-popover-out" : "animate-popover-in",
               popoverPosition === "right"
                 ? "left-full ml-4 md:ml-6"
@@ -1161,23 +998,23 @@ function FloatingControlPanel({
               verticalAlign === "bottom" ? "bottom-0" : "top-0",
             )}
           >
-            <div className="flex items-center justify-between p-3 md:p-3.5 border-b-[3px] md:border-b-[4px] border-black dark:border-white bg-[#FFD93D]">
+            <div className="flex items-center justify-between p-3 md:p-3.5 border-b-[3px] md:border-b-[4px] border-black dark:border-white bg-[#FFE500]">
               <div className="flex items-center gap-2 md:gap-3">
-                <div className="p-1.5 md:p-2 border-[2px] md:border-[3px] border-black bg-white">
-                  <ImageIcon className="w-4 h-4 md:w-5 md:h-5 text-black font-bold" />
+                <div className="p-1.5 md:p-2 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-[#000000]">
+                  <ImageIcon className="w-4 h-4 md:w-5 md:h-5 text-black dark:text-white font-bold" />
                 </div>
-                <h3 className="font-black text-black uppercase text-xs md:text-sm">
+                <h3 className="font-black text-black dark:text-white uppercase text-xs md:text-sm">
                   ADAM'S VIEW
                 </h3>
                 <span
                   className={cn(
-                    "px-2 md:px-3 py-0.5 md:py-1 text-[9px] md:text-[10px] font-black uppercase tracking-wider border-[2px] md:border-[3px] border-black",
+                    "px-2 md:px-3 py-0.5 md:py-1 text-[9px] md:text-[10px] font-black uppercase tracking-wider border-[2px] md:border-[3px] border-black dark:border-white",
                     {
-                      "bg-[#4ADE80] text-black":
+                      "bg-[#ADFF2F] text-black":
                         mediaMixerStatus.isConnected && !mediaMixerStatus.error,
-                      "bg-[#FF6B6B] text-white":
+                      "bg-[#FF006E] text-white":
                         !!mediaMixerStatus.error,
-                      "bg-white text-black":
+                      "bg-white dark:bg-[#000000] text-black dark:text-white":
                         !mediaMixerStatus.isConnected &&
                         !mediaMixerStatus.error,
                     },
@@ -1192,15 +1029,14 @@ function FloatingControlPanel({
               </div>
               <button
                 onClick={toggleSharedMedia}
-                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center border-[2px] md:border-[3px] border-black bg-white hover:bg-[#FF6B6B] text-black hover:text-white transition-all shadow-[2px_2px_0_0_#000] md:shadow-[3px_3px_0_0_#000] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
+                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-[#000000] hover:bg-[#FF006E] text-black dark:text-white hover:text-white transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
               >
                 <X className="w-4 h-4 md:w-5 md:h-5 font-bold" />
               </button>
             </div>
             <div className="flex-1 h-auto w-full">
               <MediaMixerDisplay
-                socket={videoSocket}
-                renderCanvasRef={renderCanvasRef}
+                canvasRef={mediaMixerCanvasRef}
                 onStatusChange={setMediaMixerStatus}
                 isCameraEnabled={cameraEnabled}
                 isScreenShareEnabled={screenEnabled}
@@ -1211,8 +1047,6 @@ function FloatingControlPanel({
         )}
       </div>
     </Draggable>
-      )}
-    </>
   );
 }
 export default memo(FloatingControlPanel);

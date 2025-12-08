@@ -17,18 +17,19 @@
 import { useRef, useState, useEffect } from "react";
 import "./App.scss";
 import { LiveAPIProvider } from "./contexts/LiveAPIContext";
+import AuthGuard from "./components/auth/AuthGuard";
 import SidePanel from "./components/side-panel/SidePanel";
 import GradingSidebar from "./components/grading-sidebar/GradingSidebar";
 import Header from "./components/header/Header";
-import MediaMixerDisplay from "./components/media-mixer-display/MediaMixerDisplay";
+import BackgroundShapes from "./components/background-shapes/BackgroundShapes";
 import ScratchpadCapture from "./components/scratchpad-capture/ScratchpadCapture";
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
-import ControlTray from "./components/control-tray/ControlTray";
 import FloatingControlPanel from "./components/floating-control-panel/FloatingControlPanel";
 import Scratchpad from "./components/scratchpad/Scratchpad";
-import BackgroundShapes from "./components/background-shapes/BackgroundShapes";
 import { ThemeProvider } from "./components/theme/theme-provier";
 import { Toaster } from "@/components/ui/sonner";
+import { useMediaMixer } from "./hooks/useMediaMixer";
+import { useMediaCapture } from "./hooks/useMediaCapture";
 
 function App() {
   // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
@@ -39,12 +40,48 @@ function App() {
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [mixerStream, setMixerStream] = useState<MediaStream | null>(null);
   const mixerVideoRef = useRef<HTMLVideoElement>(null);
-  const [commandSocket, setCommandSocket] = useState<WebSocket | null>(null);
-  const [videoSocket, setVideoSocket] = useState<WebSocket | null>(null);
   const [isScratchpadOpen, setScratchpadOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isGradingSidebarOpen, setIsGradingSidebarOpen] = useState(false);
   const [currentSkill, setCurrentSkill] = useState<string | null>(null);
+
+  // Ref to hold mediaMixer instance for use in callbacks
+  const mediaMixerRef = useRef<any>(null);
+
+  // Media capture with frame callbacks - must be called before useMediaMixer
+  const { cameraEnabled, screenEnabled, toggleCamera, toggleScreen } = useMediaCapture({
+    onCameraFrame: (imageData) => {
+      mediaMixerRef.current?.updateCameraFrame(imageData);
+    },
+    onScreenFrame: (imageData) => {
+      mediaMixerRef.current?.updateScreenFrame(imageData);
+    }
+  });
+
+  // MediaMixer hook for local video mixing - uses state from useMediaCapture
+  const mediaMixer = useMediaMixer({
+    width: 1280,
+    height: 2160,
+    fps: 10,
+    quality: 0.85,
+    cameraEnabled: cameraEnabled,
+    screenEnabled: screenEnabled
+  });
+
+  // Store mediaMixer in ref for use in callbacks
+  useEffect(() => {
+    mediaMixerRef.current = mediaMixer;
+  }, [mediaMixer]);
+
+  // Start mixer when component mounts and canvas is available
+  useEffect(() => {
+    if (mediaMixer.canvasRef.current) {
+      mediaMixer.setIsRunning(true);
+      return () => {
+        mediaMixer.setIsRunning(false);
+      };
+    }
+  }, [mediaMixer]);
 
   const toggleSidebar = () => {
     if (!isSidebarOpen) setIsGradingSidebarOpen(false);
@@ -57,53 +94,6 @@ function App() {
   };
 
   useEffect(() => {
-    let commandWs: WebSocket | null = null;
-    let videoWs: WebSocket | null = null;
-    let reconnectTimeout: number | undefined;
-
-    const connectWebSockets = () => {
-      // Command WebSocket
-      commandWs = new WebSocket("ws://localhost:8765/command");
-      commandWs.onopen = () => {
-        console.log("Command WebSocket connected");
-        setCommandSocket(commandWs);
-      };
-      commandWs.onclose = () => {
-        console.log("Command WebSocket disconnected");
-        setCommandSocket(null);
-      };
-      commandWs.onerror = (error) => {
-        console.error("Command WebSocket error:", error);
-      };
-
-      // Video WebSocket
-      videoWs = new WebSocket("ws://localhost:8765/video");
-      videoWs.onopen = () => {
-        console.log("Video WebSocket connected");
-        setVideoSocket(videoWs);
-      };
-      videoWs.onclose = () => {
-        console.log("Video WebSocket disconnected");
-        setVideoSocket(null);
-        // Try to reconnect both if video fails (assuming they go down together)
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = window.setTimeout(connectWebSockets, 3000);
-      };
-      videoWs.onerror = (error) => {
-        console.error("Video WebSocket error:", error);
-      };
-    };
-
-    connectWebSockets();
-
-    return () => {
-      clearTimeout(reconnectTimeout);
-      if (commandWs) commandWs.close();
-      if (videoWs) videoWs.close();
-    };
-  }, []);
-
-  useEffect(() => {
     if (mixerVideoRef.current && mixerStream) {
       mixerVideoRef.current.srcObject = mixerStream;
     }
@@ -112,20 +102,13 @@ function App() {
   return (
     <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
       <div className="App">
-        <BackgroundShapes />
-        <div className="App__content">
+        <AuthGuard>
           <LiveAPIProvider>
             <Header
               sidebarOpen={isSidebarOpen}
-              gradingSidebarOpen={isGradingSidebarOpen}
               onToggleSidebar={toggleSidebar}
-              onToggleGradingSidebar={toggleGradingSidebar}
             />
-            <div
-              className="streaming-console"
-              data-left-rail={isGradingSidebarOpen ? "open" : "collapsed"}
-              data-right-rail={isSidebarOpen ? "open" : "collapsed"}
-            >
+            <div className="streaming-console">
               <SidePanel
                 open={isSidebarOpen}
                 onToggle={toggleSidebar}
@@ -135,10 +118,17 @@ function App() {
                 onToggle={toggleGradingSidebar}
                 currentSkill={currentSkill}
               />
-              <main className="workspace">
+              <main style={{
+                marginRight: isSidebarOpen ? "260px" : "0",
+                marginLeft: isGradingSidebarOpen ? "260px" : "40px",
+                transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
+              }}>
                 <div className="main-app-area">
                   <div className="question-panel">
-                    <ScratchpadCapture socket={commandSocket}>
+                    <BackgroundShapes />
+                    <ScratchpadCapture onFrameCaptured={(imageData) => {
+                      mediaMixer.updateScratchpadFrame(imageData);
+                    }}>
                       <QuestionDisplay onSkillChange={setCurrentSkill} />
                       {isScratchpadOpen && (
                         <div className="scratchpad-container">
@@ -148,8 +138,7 @@ function App() {
                     </ScratchpadCapture>
                   </div>
                   <FloatingControlPanel
-                    socket={commandSocket}
-                    renderCanvasRef={renderCanvasRef}
+                    renderCanvasRef={mediaMixer.canvasRef}
                     videoRef={videoRef}
                     supportsVideo={true}
                     onVideoStreamChange={setVideoStream}
@@ -157,14 +146,18 @@ function App() {
                     enableEditingSettings={true}
                     onPaintClick={() => setScratchpadOpen(!isScratchpadOpen)}
                     isPaintActive={isScratchpadOpen}
-                    videoSocket={videoSocket}
+                    cameraEnabled={cameraEnabled}
+                    screenEnabled={screenEnabled}
+                    onToggleCamera={toggleCamera}
+                    onToggleScreen={toggleScreen}
+                    mediaMixerCanvasRef={mediaMixer.canvasRef}
                   />
                 </div>
               </main>
             </div>
             <Toaster richColors closeButton />
           </LiveAPIProvider>
-        </div>
+        </AuthGuard>
       </div>
     </ThemeProvider>
   );

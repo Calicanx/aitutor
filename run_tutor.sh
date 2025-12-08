@@ -3,6 +3,38 @@
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
+# Load environment variables from .env file if it exists
+if [[ -f ".env" ]]; then
+    echo "Loading environment variables from .env file..."
+    # Read .env file and export variables (works on Windows/Git Bash)
+    while IFS='=' read -r key value; do
+        # Skip comments, empty lines, and lines that start with #
+        [[ $key =~ ^[[:space:]]*#.*$ ]] && continue
+        [[ -z "$key" ]] && continue
+        [[ $key =~ ^# ]] && continue
+        
+        # Remove leading/trailing whitespace
+        key=$(echo "$key" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+        
+        # Skip if key starts with # or is empty after trimming
+        [[ -z "$key" ]] && continue
+        [[ $key =~ ^# ]] && continue
+        
+        # Remove quotes from value if present
+        value=$(echo "$value" | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
+        
+        # Only export if key is valid (contains only alphanumeric and underscore)
+        if [[ $key =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+            export "$key=$value"
+            echo "  Loaded: $key"
+        fi
+    done < .env
+    echo "✅ Environment variables loaded from .env"
+else
+    echo "⚠️  No .env file found. Using default values."
+    echo "   Create a .env file with your MongoDB Atlas URI and other config."
+fi
+
 # Clean up old logs and create a fresh logs directory
 rm -rf "$SCRIPT_DIR/logs"
 mkdir -p "$SCRIPT_DIR/logs"
@@ -75,10 +107,46 @@ cleanup() {
 # Trap the INT signal (sent by Ctrl+C) to run the cleanup function
 trap cleanup INT
 
-# Start the Python backend in the background
-echo "Starting Python backend... Logs -> logs/mediamixer.log"
-(cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/MediaMixer/media_mixer.py) > "$SCRIPT_DIR/logs/mediamixer.log" 2>&1 &
-pids+=($!)
+# Function to check if a port is in use and kill the process
+check_and_free_port() {
+    local port=$1
+    local service_name=$2
+    if lsof -ti:$port > /dev/null 2>&1 || fuser $port/tcp > /dev/null 2>&1; then
+        echo "⚠️  Port $port is already in use. Freeing it for $service_name..."
+        lsof -ti:$port 2>/dev/null | xargs kill -9 2>/dev/null || true
+        fuser -k $port/tcp 2>/dev/null || true
+        sleep 1
+    fi
+}
+
+# Function to wait for a service to be ready
+wait_for_service() {
+    local url=$1
+    local service_name=$2
+    local max_attempts=30
+    local attempt=0
+    
+    echo "Waiting for $service_name to be ready..."
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -s "$url" > /dev/null 2>&1; then
+            echo "✅ $service_name is ready"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+    echo "⚠️  $service_name may not be ready yet (checked $max_attempts times)"
+    return 1
+}
+
+# Free up ports before starting services
+echo "Checking and freeing ports..."
+check_and_free_port 8000 "DASH API"
+check_and_free_port 8001 "SherlockED API"
+check_and_free_port 8002 "TeachingAssistant"
+check_and_free_port 8003 "Auth Service"
+check_and_free_port 8767 "Tutor Service"
+check_and_free_port 3000 "Frontend"
 
 # Start the FastAPI server in the background
 echo "Starting DASH API server... Logs -> logs/dash_api.log"
@@ -100,35 +168,53 @@ echo "Starting TeachingAssistant API server... Logs -> logs/teaching_assistant.l
 (cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/TeachingAssistant/api.py) > "$SCRIPT_DIR/logs/teaching_assistant.log" 2>&1 &
 pids+=($!)
 
+# Start the Auth Service API server in the background
+echo "Starting Auth Service API server... Logs -> logs/auth_service.log"
+(cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/AuthService/auth_api.py) > "$SCRIPT_DIR/logs/auth_service.log" 2>&1 &
+pids+=($!)
+
 # Give the backend servers a moment to start
 echo "Waiting for backend services to initialize..."
-sleep 3
+sleep 5
+
+# Wait for critical services to be ready (with timeout)
+echo "Verifying services are ready..."
+wait_for_service "http://localhost:8000/health" "DASH API" || echo "⚠️  DASH API health check failed, but continuing..."
+wait_for_service "http://localhost:8002/health" "TeachingAssistant" || echo "⚠️  TeachingAssistant health check failed, but continuing..."
+wait_for_service "http://localhost:8003/health" "Auth Service" || echo "⚠️  Auth Service health check failed, but continuing..."
+wait_for_service "http://localhost:8001/health" "SherlockED API" || echo "⚠️  SherlockED API health check failed, but continuing..."
 
 # Extract ports dynamically from configuration files
 FRONTEND_PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "$SCRIPT_DIR/frontend/vite.config.ts" 2>/dev/null | grep -o '[0-9]*' || echo "3000")
-DASH_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/services/DashSystem/dash_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8000")
-SHERLOCKED_API_PORT=$(grep -o 'port=[0-9]*' "$SCRIPT_DIR/services/SherlockEDApi/run_backend.py" 2>/dev/null | grep -o '[0-9]*' || echo "8001")
-TEACHING_ASSISTANT_PORT=$(grep -o 'port.*[0-9]*' "$SCRIPT_DIR/services/TeachingAssistant/api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8002")
-# MediaMixer now uses single port with path-based routing
-MEDIAMIXER_PORT=$(grep -o "PORT',[[:space:]]*[0-9]*" "$SCRIPT_DIR/services/MediaMixer/media_mixer.py" 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "8765")
-MEDIAMIXER_COMMAND_PORT=$MEDIAMIXER_PORT
-MEDIAMIXER_VIDEO_PORT=$MEDIAMIXER_PORT
+DASH_API_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/DashSystem/dash_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8000")
+SHERLOCKED_API_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/SherlockEDApi/run_backend.py" 2>/dev/null | grep -o '[0-9]*' || echo "8001")
+TEACHING_ASSISTANT_PORT=$(grep -o '"8002"' "$SCRIPT_DIR/services/TeachingAssistant/api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8002")
+AUTH_SERVICE_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/AuthService/auth_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8003")
 
-# Start the Node.js frontend in the background
+# Ensure all port variables are properly set (fallback to defaults if extraction failed)
+FRONTEND_PORT=${FRONTEND_PORT:-3000}
+DASH_API_PORT=${DASH_API_PORT:-8000}
+SHERLOCKED_API_PORT=${SHERLOCKED_API_PORT:-8001}
+TEACHING_ASSISTANT_PORT=${TEACHING_ASSISTANT_PORT:-8002}
+AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT:-8003}
+
+# Start the Node.js frontend in the background (after backend services are ready)
 echo "Starting Node.js frontend... Logs -> logs/frontend.log"
 (cd "$SCRIPT_DIR/frontend" && npm run dev) > "$SCRIPT_DIR/logs/frontend.log" 2>&1 &
 pids+=($!)
+
+# Give frontend a moment to start
+sleep 2
 
 echo "Tutor is running with the following PIDs: ${pids[*]}"
 echo ""
 echo "📡 Service URLs:"
 echo "  🌐 Frontend:           http://localhost:$FRONTEND_PORT"
+echo "  🔐 Auth Service:       http://localhost:$AUTH_SERVICE_PORT"
 echo "  🔧 DASH API:           http://localhost:$DASH_API_PORT"
 echo "  🕵️  SherlockED API:     http://localhost:$SHERLOCKED_API_PORT"
 echo "  👨‍🏫 TeachingAssistant:  http://localhost:$TEACHING_ASSISTANT_PORT"
 echo "  🎓 Tutor Service:      ws://localhost:8767"
-echo "  📹 MediaMixer Command: ws://localhost:$MEDIAMIXER_COMMAND_PORT/command"
-echo "  📺 MediaMixer Video:   ws://localhost:$MEDIAMIXER_VIDEO_PORT/video"
 echo ""
 echo "Press Ctrl+C to stop."
 echo "You can view the logs for each service in the 'logs' directory."

@@ -6,7 +6,7 @@ import glob
 import random
 import logging
 from typing import List, Dict, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -24,17 +24,25 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from services.DashSystem.dash_system import DASHSystem, Question
+from shared.auth_middleware import get_current_user
 
 app = FastAPI()
 dash_system = DASHSystem()
 
-# Configure CORS
+# Health check endpoint
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "DASH API"}
+
+# Configure CORS - allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Allows the React frontend to connect
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["*"],  # Includes OPTIONS for preflight
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Perseus item model matching frontend expectations
@@ -109,58 +117,84 @@ def get_perseus_files_for_skill(skill_id: str, curriculum_path: str) -> List[str
 def load_perseus_items_for_dash_questions_from_mongodb(
     dash_questions: List[Question]
 ) -> List[Dict]:
-    """Load Perseus items from MongoDB matching DASH-selected questions"""
+    """Load Perseus items from scraped_questions collection matching DASH-selected questions"""
     from managers.mongodb_manager import mongo_db
+    import json
     perseus_items = []
     
     for dash_q in dash_questions:
-        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else "counting_1_10"
+        # question_id includes fabricated prefix (e.g., "41.1.2.1.9_x338f5e1fbc6cafdf")
+        # This matches exactly what's stored in scraped_questions.questionId
+        question_id = dash_q.question_id
+        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else None
         
-        # Map skill to Perseus prefix
-        prefix = SKILL_TO_SLUG_PREFIX.get(skill_id, "1.1.1")
-        
-        # Query MongoDB for matching Perseus questions
         try:
-            matching_docs = list(mongo_db.perseus_questions.find({
-                "skill_prefix": prefix
-            }).limit(20))
+            # Query scraped_questions by questionId (full ID with prefix)
+            scraped_doc = mongo_db.scraped_questions.find_one({"questionId": question_id})
             
-            if not matching_docs:
-                # Fallback to any question with similar prefix
-                prefix_parts = prefix.split('.')
-                broader_prefix = '.'.join(prefix_parts[:3]) if len(prefix_parts) >= 3 else prefix
-                matching_docs = list(mongo_db.perseus_questions.find({
-                    "skill_prefix": {"$regex": f"^{broader_prefix}"}
-                }).limit(20))
-            
-            if not matching_docs:
-                logger.warning(f"No Perseus questions found in MongoDB for skill {skill_id}")
+            if not scraped_doc:
+                logger.warning(f"No scraped question found for question_id {question_id}")
                 continue
             
-            # Randomly select one
-            selected_doc = random.choice(matching_docs)
+            # Extract assessmentData
+            assessment_data = scraped_doc.get('assessmentData', {})
+            if not assessment_data:
+                logger.warning(f"No assessmentData found for question_id {question_id}")
+                continue
             
-            # Build Perseus data structure
-            perseus_data = {
-                "question": selected_doc.get("question", {}),
-                "answerArea": selected_doc.get("answerArea", {}),
-                "hints": selected_doc.get("hints", []),
-                "itemDataVersion": selected_doc.get("itemDataVersion", {}),
-                "dash_metadata": {
-                    'dash_question_id': dash_q.question_id,
-                    'skill_ids': dash_q.skill_ids,
-                    'difficulty': dash_q.difficulty,
-                    'expected_time_seconds': dash_q.expected_time_seconds,
-                    'slug': selected_doc.get("slug"),
-                    'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids 
-                                   if sid in dash_system.skills]
+            # Navigate to itemData: assessmentData.data.assessmentItem.item.itemData
+            try:
+                item_data_str = assessment_data.get('data', {}).get('assessmentItem', {}).get('item', {}).get('itemData', '')
+                if not item_data_str:
+                    logger.warning(f"No itemData found for question_id {question_id}")
+                    continue
+                
+                # Parse JSON string to get Perseus object
+                item_data = json.loads(item_data_str)
+                
+                # Extract required fields
+                question = item_data.get('question', {})
+                answer_area = item_data.get('answerArea', {})
+                hints = item_data.get('hints', [])
+                item_data_version = item_data.get('itemDataVersion', {})
+                
+                # Validate required fields
+                if not question:
+                    logger.warning(f"Missing 'question' field in itemData for question_id {question_id}")
+                    continue
+                
+                # Extract slug from questionId (numeric prefix before underscore)
+                # Example: "41.1.1.1.1_xde8147b8edb82294" -> "41.1.1.1.1"
+                slug = question_id.split('_')[0] if '_' in question_id else question_id
+                
+                # Build Perseus data structure
+                perseus_data = {
+                    "question": question,
+                    "answerArea": answer_area,
+                    "hints": hints,
+                    "itemDataVersion": item_data_version,
+                    "dash_metadata": {
+                        'dash_question_id': question_id,
+                        'skill_ids': dash_q.skill_ids,
+                        'difficulty': dash_q.difficulty,
+                        'expected_time_seconds': dash_q.expected_time_seconds,
+                        'slug': slug,
+                        'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids 
+                                       if sid in dash_system.skills]
+                    }
                 }
-            }
-            
-            perseus_items.append(perseus_data)
+                
+                perseus_items.append(perseus_data)
+                
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse itemData JSON for question_id {question_id}: {e}")
+                continue
+            except KeyError as e:
+                logger.warning(f"Missing field in assessmentData for question_id {question_id}: {e}")
+                continue
             
         except Exception as e:
-            logger.warning(f"Failed to load Perseus from MongoDB for skill {skill_id}: {e}")
+            logger.warning(f"Failed to load Perseus from scraped_questions for question_id {question_id}: {e}")
     
     return perseus_items
 
@@ -231,15 +265,18 @@ def load_perseus_items_from_dir(directory: str, limit: Optional[int] = None) -> 
     return all_items
 
 @app.get("/api/questions/{sample_size}", response_model=List[PerseusQuestion])
-def get_questions_with_dash_intelligence(sample_size: int, user_id: str = "default_user"):
+def get_questions_with_dash_intelligence(request: Request, sample_size: int):
     """
     Gets questions using DASH intelligence but returns full Perseus items.
     Uses DASH to intelligently select questions based on learning journey and adaptive difficulty.
     
     Args:
+        request: FastAPI request object (for JWT extraction)
         sample_size: Number of questions to return
-        user_id: Unique identifier for the user (age fetched from MongoDB)
     """
+    # Get user_id from JWT token
+    user_id = get_current_user(request)
+    
     logger.info(f"\n{'='*80}")
     logger.info(f"[NEW_SESSION] Requesting {sample_size} questions for user: {user_id}")
     logger.info(f"{'='*80}\n")
@@ -284,9 +321,12 @@ def get_questions_with_dash_intelligence(sample_size: int, user_id: str = "defau
     # Return all questions (all selected by DASH with full intelligence)
     return perseus_items
 
-@app.post("/api/question-displayed/{user_id}")
-def log_question_displayed(user_id: str, display_info: dict):
+@app.post("/api/question-displayed")
+def log_question_displayed(request: Request, display_info: dict):
     """Log when student views a question (Next button clicked)"""
+    
+    # Get user_id from JWT token
+    user_id = get_current_user(request)
     
     idx = display_info.get('question_index', 0)
     metadata = display_info.get('metadata', {})
@@ -323,12 +363,15 @@ def log_question_displayed(user_id: str, display_info: dict):
     logger.info(f"{'='*80}\n")
     return {"success": True}
 
-@app.get("/next-question/{user_id}", response_model=Question)
-def get_next_question(user_id: str):
+@app.get("/next-question", response_model=Question)
+def get_next_question(request: Request):
     """
     Gets the next recommended question for a given user.
     (Original endpoint kept for backward compatibility)
     """
+    # Get user_id from JWT token
+    user_id = get_current_user(request)
+    
     # Ensure the user exists and is loaded
     dash_system.load_user_or_create(user_id)
     
@@ -347,12 +390,15 @@ class AnswerSubmission(BaseModel):
     is_correct: bool
     response_time_seconds: float
 
-@app.post("/api/submit-answer/{user_id}")
-def submit_answer(user_id: str, answer: AnswerSubmission):
+@app.post("/api/submit-answer")
+def submit_answer(request: Request, answer: AnswerSubmission):
     """
     Record a question attempt and update DASH system.
     This enables tracking and adaptive difficulty.
     """
+    # Get user_id from JWT token
+    user_id = get_current_user(request)
+    
     logger.info(f"\n{'-'*80}")
     
     user_profile = dash_system.user_manager.load_user(user_id)
@@ -398,6 +444,44 @@ def submit_answer(user_id: str, answer: AnswerSubmission):
         "message": "Answer recorded successfully"
     }
 
+@app.get("/api/skill-scores")
+def get_skill_scores(request: Request):
+    """
+    Get all skill scores for the current user.
+    Returns skill states in the format expected by the frontend GradingSidebar.
+    """
+    # Get user_id from JWT token
+    user_id = get_current_user(request)
+    
+    # Get user profile to ensure it exists
+    user_profile = dash_system.user_manager.load_user(user_id)
+    if not user_profile:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get current time for calculations
+    current_time = time.time()
+    
+    # Get all skill scores from DASH system
+    scores = dash_system.get_skill_scores(user_id, current_time)
+    
+    # Transform to format expected by frontend
+    # Frontend expects: { skill_id: { name, memory_strength, last_practice_time, practice_count, correct_count } }
+    skill_states = {}
+    for skill_id, score_data in scores.items():
+        # Get student state to get last_practice_time
+        state = dash_system.get_student_state(user_id, skill_id)
+        
+        skill_states[skill_id] = {
+            "name": score_data["name"],  # Include skill name
+            "memory_strength": score_data["memory_strength"],
+            "last_practice_time": state.last_practice_time if state.last_practice_time else None,
+            "practice_count": score_data["practice_count"],
+            "correct_count": score_data["correct_count"]
+        }
+    
+    return {"skill_states": skill_states}
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
