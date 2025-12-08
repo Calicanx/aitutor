@@ -24,6 +24,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import LoginPage from "./components/auth/LoginPage";
 import LandingPageWrapper from "./components/landing/LandingPageWrapper";
+import ComingSoon from "./components/coming-soon/ComingSoon";
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
@@ -56,15 +57,21 @@ const LandingPageOrApp: React.FC = () => {
   return <App />;
 };
 
+// COMING SOON MODE: Show ComingSoon page for all routes
+// To restore original functionality, comment out the ComingSoon route and uncomment the original routes below
 root.render(
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <AuthProvider>
         <Switch>
-          <Route path="/auth/setup" component={LoginPage} />
-          <Route path="/login" component={LoginPage} />
-          <Route path="/" exact component={LandingPageOrApp} />
-          <Route path="/" component={App} />
+          {/* Coming Soon - blocks all access */}
+          <Route path="*" component={ComingSoon} />
+          
+          {/* Original routes - commented out for coming soon mode */}
+          {/* <Route path="/auth/setup" component={LoginPage} /> */}
+          {/* <Route path="/login" component={LoginPage} /> */}
+          {/* <Route path="/" exact component={LandingPageOrApp} /> */}
+          {/* <Route path="/" component={App} /> */}
         </Switch>
       </AuthProvider>
     </BrowserRouter>
