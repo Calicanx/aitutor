@@ -94,8 +94,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
           onCameraFrame?.(imageData);
         }
 
-        // Continue loop - reduced to ~5 FPS for better performance
-        setTimeout(() => requestAnimationFrame(captureLoop), 200);
+        // Continue loop - reduced to ~2 FPS for better performance (500ms)
+        setTimeout(() => requestAnimationFrame(captureLoop), 500);
       };
 
       captureLoop();
@@ -157,8 +157,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
           onScreenFrame?.(imageData);
         }
 
-        // Continue loop - reduced to ~5 FPS for better performance
-        setTimeout(() => requestAnimationFrame(captureLoop), 200);
+        // Continue loop - reduced to ~2 FPS for better performance (500ms)
+        setTimeout(() => requestAnimationFrame(captureLoop), 500);
       };
 
       captureLoop();

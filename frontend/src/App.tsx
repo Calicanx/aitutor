@@ -62,7 +62,7 @@ function App() {
   const mediaMixer = useMediaMixer({
     width: 1280,
     height: 2160,
-    fps: 10,
+    fps: 2,  // Reduced from 10 to 2 FPS for better performance
     quality: 0.85,
     cameraEnabled: cameraEnabled,
     screenEnabled: screenEnabled

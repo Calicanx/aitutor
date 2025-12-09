@@ -53,8 +53,10 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
             }
             return res.json();
         },
-        staleTime: 10_000, // Refresh every 10 seconds
-        refetchInterval: 10_000, // Auto-refresh every 10 seconds
+        staleTime: 60_000, // Data stays fresh for 60 seconds
+        refetchInterval: open ? 60_000 : false, // Only refetch when sidebar is open, every 60s
+        refetchOnWindowFocus: false, // Don't refetch on window focus
+        refetchOnMount: true, // Only fetch on mount
     });
     
     const skillStates = (skillScoresData?.skill_states || {}) as Record<
@@ -69,11 +71,24 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
     >;
 
     const scrollToSkill = (skill: string) => {
-        if (!scrollContainerRef.current) return;
+        const container = scrollContainerRef.current;
+        if (!container) return;
 
         const element = document.getElementById(`skill-${skill}`);
         if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
+            // Calculate the element's position relative to the container
+            const containerTop = container.getBoundingClientRect().top;
+            const elementTop = element.getBoundingClientRect().top;
+            const offset = 0; // Position at the very top
+            
+            // Calculate the target scroll position
+            const scrollPosition = container.scrollTop + (elementTop - containerTop) - offset;
+            
+            // Scroll to position
+            container.scrollTo({
+                top: Math.max(0, scrollPosition),
+                behavior: "smooth"
+            });
         }
     };
 
@@ -163,8 +178,8 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
             )}>
                 {open ? (
                     <div className="flex items-center gap-2 lg:gap-2.5 animate-in fade-in slide-in-from-left-4 duration-300">
-                        <div className="p-1.5 lg:p-2 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
-                            <GraduationCap className="w-4 h-4 lg:w-4 lg:h-4 text-black dark:text-white font-bold" />
+                        <div className="px-2.5 pt-1.5 pb-2.5 lg:px-3 lg:pt-2 lg:pb-3 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
+                            <GraduationCap className="w-[0.7rem] h-[0.7rem] lg:w-[0.75rem] lg:h-[0.75rem] text-black dark:text-white font-bold" />
                         </div>
                         <h2 className="text-xs lg:text-sm font-black text-white whitespace-nowrap uppercase tracking-tight">
                             GRADING & SKILLS
@@ -229,6 +244,8 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                     ? Math.round((stats.correct_count / stats.practice_count) * 100)
                                     : 0;
 
+                                const isCurrentSkill = skillName === currentSkill;
+                                
                                 return (
                                     <AccordionItem
                                         key={skillName}
@@ -238,9 +255,10 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                     >
                                         <div className={cn(
                                             "border-[4px] border-black dark:border-white transition-all duration-200 shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.2)]",
-                                            isPracticed ? "bg-[#FFFDF5] dark:bg-[#000000]" : "bg-[#FFFDF5] dark:bg-[#000000]",
-                                            isPracticed && "hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:translate-x-[-2px] hover:translate-y-[-2px]",
-                                            !isPracticed && "opacity-60"
+                                            isCurrentSkill && "bg-[#FFE500] dark:bg-[#FFD93D] shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(0,0,0,1)] scale-[1.02]",
+                                            !isCurrentSkill && isPracticed && "bg-[#FFFDF5] dark:bg-[#000000]",
+                                            !isCurrentSkill && !isPracticed && "bg-[#FFFDF5] dark:bg-[#000000] opacity-60",
+                                            isPracticed && "hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:translate-x-[-2px] hover:translate-y-[-2px]"
                                         )}>
                                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:hidden cursor-pointer group">
                                                 <div className="flex flex-col gap-2 w-full">

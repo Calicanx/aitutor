@@ -7,7 +7,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import Draggable from "react-draggable";
+import { motion, useDragControls } from "framer-motion";
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { AudioRecorder } from "../../lib/audio-recorder";
 import { jwtUtils } from "../../lib/jwt-utils";
@@ -69,6 +69,7 @@ function FloatingControlPanel({
   mediaMixerCanvasRef,
 }: FloatingControlPanelProps) {
   const { client, connected, connect, disconnect, interruptAudio } = useLiveAPIContext();
+  const dragControls = useDragControls();
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("");
   const [audioRecorder] = useState(() => new AudioRecorder());
@@ -82,7 +83,6 @@ function FloatingControlPanel({
   const [popoverPosition, setPopoverPosition] = useState<"left" | "right">(
     "right",
   );
-  const [isDragging, setIsDragging] = useState(false);
   const [mediaMixerStatus, setMediaMixerStatus] = useState<{
     isConnected: boolean;
     error: string | null;
@@ -356,15 +356,10 @@ function FloatingControlPanel({
 
   const [verticalAlign, setVerticalAlign] = useState<"top" | "bottom">("top");
 
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [hasInitialized, setHasInitialized] = useState(false);
-
-  // Initialize position on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setPosition({ x: window.innerWidth - 380, y: 96 });
-      setHasInitialized(true);
-    }
+  // Calculate initial position once without state
+  const initialPosition = useMemo(() => {
+    if (typeof window === "undefined") return { x: 0, y: 0 };
+    return { x: window.innerWidth - 380, y: 96 };
   }, []);
 
   // Memoize popover position calculation to avoid expensive DOM queries
@@ -420,81 +415,13 @@ function FloatingControlPanel({
     setIsCollapsed(!isCollapsed);
   }, [isCollapsed]);
 
-  // Adjust position when collapsing/expanding to prevent overflow
-  useEffect(() => {
-    if (!hasInitialized || !panelRef.current) return;
-
-    // Use setTimeout to allow layout to update (height change)
-    const timer = setTimeout(() => {
-      if (!panelRef.current) return;
-      const rect = panelRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
-      const margin = 16;
-
-      let newY = position.y;
-      let newX = position.x;
-
-      // Check bottom overflow
-      if (rect.bottom > viewportHeight - margin) {
-        newY = viewportHeight - rect.height - margin;
-      }
-      // Check top overflow
-      if (newY < margin) {
-        newY = margin;
-      }
-
-      // Check right overflow
-      if (rect.right > viewportWidth - margin) {
-        newX = viewportWidth - rect.width - margin;
-      }
-      // Check left overflow
-      if (newX < margin) {
-        newX = margin;
-      }
-
-      if (newY !== position.y || newX !== position.x) {
-        setPosition({ x: newX, y: newY });
-      }
-    }, 50); // Small delay for transition
-
-    return () => clearTimeout(timer);
-  }, [isCollapsed, hasInitialized]); // Removed 'position' dependency to avoid loops, relying on rect reading
-
   const handleMute = useCallback(() => {
     setMuted(!muted);
   }, [muted]);
 
-  // Memoize drag handlers to avoid re-creating functions
-  const handleDragStart = useCallback(() => {
-    setIsDragging(true);
-  }, []);
-
-  const handleDrag = useCallback((e: any, data: { x: number; y: number }) => {
-    if (!panelRef.current) return;
-
-    const rect = panelRef.current.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    // Clamp values to keep panel within viewport
-    let newX = data.x;
-    let newY = data.y;
-
-    // Horizontal boundaries
-    if (newX < 0) newX = 0;
-    else if (newX + rect.width > viewportWidth) newX = viewportWidth - rect.width;
-
-    // Vertical boundaries
-    if (newY < 0) newY = 0;
-    else if (newY + rect.height > viewportHeight) newY = viewportHeight - rect.height;
-
-    setPosition({ x: newX, y: newY });
-  }, []);
-
-  const handleDragStop = useCallback(() => {
-    setIsDragging(false);
-    // Recalculate position after drag ends
+  // Simplified drag end handler for Framer Motion
+  const handleDragEnd = useCallback(() => {
+    // Recalculate popover position after drag ends
     if (sharedMediaOpen) {
       updatePopoverPosition();
     }
@@ -505,42 +432,47 @@ function FloatingControlPanel({
     () =>
       cn(
         "fixed z-[1000] bg-[#FFFDF5] border-[2px] md:border-[3px] border-black rounded-lg md:rounded-xl",
-        // GPU acceleration hints
-        "will-change-transform transform-gpu",
-        // Only apply transitions when NOT dragging to prevent layout thrashing
-        !isDragging &&
-        "transition-all duration-200 ease-out",
         isCollapsed
           ? "w-[50px] md:w-[55px] py-2 md:py-2.5 px-1 md:px-1.5 shadow-[1px_1px_0_0_rgba(0,0,0,1),_4px_4px_12px_rgba(0,0,0,0.12),_8px_8px_24px_rgba(0,0,0,0.08)]"
           : "w-[220px] md:w-[250px] p-2.5 md:p-3 shadow-[1px_1px_0_0_rgba(0,0,0,1),_4px_4px_12px_rgba(0,0,0,0.12),_8px_8px_24px_rgba(0,0,0,0.08)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1),_6px_6px_16px_rgba(0,0,0,0.15),_12px_12px_32px_rgba(0,0,0,0.1)]",
-        // Ensure origin is top-left for controlled positioning
-        "top-0 left-0",
-        // Hover effect
-        !isDragging &&
         "hover:shadow-[2px_2px_0_0_rgba(0,0,0,1),_6px_6px_16px_rgba(0,0,0,0.15),_12px_12px_32px_rgba(0,0,0,0.1)] md:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1),_8px_8px_20px_rgba(0,0,0,0.18),_16px_16px_40px_rgba(0,0,0,0.12)]",
       ),
-    [isCollapsed, isDragging],
+    [isCollapsed],
   );
 
-  if (!hasInitialized) return null; // Prevent hydration mismatch
-
   return (
-    <Draggable
-      handle=".drag-handle"
-      nodeRef={panelRef}
-      position={position}
-      onStart={handleDragStart}
-      onDrag={handleDrag}
-      onStop={handleDragStop}
+    <motion.div
+      ref={panelRef}
+      className={panelClasses}
+      drag
+      dragControls={dragControls}
+      dragListener={false}
+      dragMomentum={false}
+      dragElastic={0}
+      dragConstraints={{
+        left: 0,
+        top: 0,
+        right: typeof window !== "undefined" ? window.innerWidth - (isCollapsed ? 55 : 250) : 1000,
+        bottom: typeof window !== "undefined" ? window.innerHeight - 100 : 800,
+      }}
+      onDragEnd={handleDragEnd}
+      initial={initialPosition}
+      whileDrag={{ 
+        cursor: "grabbing",
+        scale: 1.0,
+      }}
+      dragTransition={{
+        bounceStiffness: 600,
+        bounceDamping: 20,
+        power: 0.1,
+      }}
+      style={{
+        left: 0,
+        top: 0,
+        x: initialPosition.x,
+        y: initialPosition.y,
+      }}
     >
-      <div
-        ref={panelRef}
-        className={panelClasses}
-        style={{
-          // Use transform3d for GPU acceleration
-          transform: "translate3d(0, 0, 0)",
-        }}
-      >
         {/* Hidden canvas for MediaMixer - will be set by parent */}
         <canvas
           ref={(canvas) => {
@@ -559,10 +491,10 @@ function FloatingControlPanel({
         {/* Drag Handle & Header */}
         <div
           className={cn(
-            "drag-handle cursor-grab active:cursor-grabbing flex items-center mb-1.5 md:mb-2",
-            !isDragging && "transition-all duration-200 ease-out",
+            "cursor-grab active:cursor-grabbing flex items-center mb-1.5 md:mb-2",
             isCollapsed ? "justify-center mb-1 md:mb-1.5" : "justify-between",
           )}
+          onPointerDown={(e) => dragControls.start(e)}
         >
           {!isCollapsed && (
             <div className="flex items-center gap-1.5 md:gap-2">
@@ -923,9 +855,9 @@ function FloatingControlPanel({
             <div className="grid grid-cols-4 gap-1.5 md:gap-2 pt-2 md:pt-3 border-t-[2px] border-black">
               {enableEditingSettings && (
                 <SettingsDialog
-                  className="!h-auto !block"
+                  className="w-full"
                   trigger={
-                    <button className="flex flex-col items-center gap-1 p-1.5 md:p-2 border-[2px] border-black bg-[#FFFDF5] hover:bg-[#FF6B6B] text-black hover:text-white transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none group">
+                    <button className="flex flex-col items-center gap-1 p-1.5 md:p-2 border-[2px] border-black bg-[#FFFDF5] hover:bg-[#FF6B6B] text-black hover:text-white transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none group w-full">
                       <div className="p-1 border-[2px] border-black bg-[#FFFDF5] group-hover:bg-[#FF6B6B] transition-colors">
                         <Settings className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                       </div>
@@ -1034,7 +966,7 @@ function FloatingControlPanel({
                 <X className="w-4 h-4 md:w-5 md:h-5 font-bold" />
               </button>
             </div>
-            <div className="flex-1 h-auto w-full">
+            <div className="p-6 pt-0 px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
               <MediaMixerDisplay
                 canvasRef={mediaMixerCanvasRef}
                 onStatusChange={setMediaMixerStatus}
@@ -1045,8 +977,7 @@ function FloatingControlPanel({
             </div>
           </div>
         )}
-      </div>
-    </Draggable>
+      </motion.div>
   );
 }
 export default memo(FloatingControlPanel);

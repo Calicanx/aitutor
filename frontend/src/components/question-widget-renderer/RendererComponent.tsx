@@ -129,14 +129,22 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         }
     }, [isAnswered]);
 
-    // Auto-scroll to bottom when feedback is shown
+    // Auto-scroll to feedback when shown (scroll the question-panel container)
     useEffect(() => {
         if (showFeedback && scrollContainerRef.current) {
             // Use setTimeout to ensure the DOM has updated with the feedback element
             setTimeout(() => {
-                if (scrollContainerRef.current) {
-                    scrollContainerRef.current.scrollTo({
-                        top: scrollContainerRef.current.scrollHeight,
+                // Find the question-panel parent container to scroll
+                const questionPanel = scrollContainerRef.current?.closest('.question-panel');
+                if (questionPanel) {
+                    questionPanel.scrollTo({
+                        top: questionPanel.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                } else {
+                    // Fallback to window scroll if question-panel not found
+                    window.scrollTo({
+                        top: document.documentElement.scrollHeight,
                         behavior: 'smooth'
                     });
                 }
@@ -226,7 +234,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     return (
         <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
             {/* Neo-Brutalism Card */}
-            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto md:h-[550px] lg:h-[600px] flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
+            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] transition-all duration-200">
                 {/* Progress bar at top */}
                 <div className="absolute top-0 left-0 right-0 h-2 md:h-3 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] md:border-b-[3px] border-black dark:border-white">
                     <div
@@ -274,13 +282,13 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 overflow-hidden px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
+                <CardContent className="px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
-                        className="relative h-full w-full overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
+                        className="relative w-full overflow-visible"
                     >
                         {endOfTest ? (
-                            <div className="flex h-full items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
+                            <div className="flex min-h-[300px] items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
                                 <div className="max-w-sm md:max-w-md border-[4px] md:border-[5px] border-black dark:border-white bg-[#4ADE80] px-6 md:px-8 py-8 md:py-10 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <div className="text-4xl md:text-6xl mb-3 md:mb-4">🎉</div>
                                     <p className="text-xl md:text-2xl font-black text-black uppercase mb-2 tracking-tight">
@@ -295,7 +303,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </div>
                             </div>
                         ) : isLoading ? (
-                            <div className="flex h-full flex-col items-center justify-center gap-3 md:gap-4">
+                            <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 md:gap-4">
                                 <div className="relative w-12 h-12 md:w-16 md:h-16">
                                     <div className="absolute inset-0 border-[3px] md:border-[4px] border-black dark:border-white"></div>
                                     <div className="absolute inset-0 border-[3px] md:border-[4px] border-transparent border-t-[#C4B5FD] animate-spin"></div>
@@ -306,7 +314,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                             </div>
                         ) : perseusItems.length > 0 ? (
                             <div className="space-y-4 md:space-y-6 py-3 md:py-4">
-                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                                <div id="question-content-container" className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <PerseusI18nContextProvider locale="en" strings={mockStrings}>
                                         <RenderStateRoot>
                                             <ServerItemRenderer
@@ -361,7 +369,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 )}
                             </div>
                         ) : (
-                            <div className="flex h-full items-center justify-center">
+                            <div className="flex min-h-[300px] items-center justify-center">
                                 <div className="text-center space-y-2 md:space-y-3 border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-6 md:p-8 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <div className="text-3xl md:text-4xl mb-1 md:mb-2">📝</div>
                                     <p className="text-xs md:text-sm font-black uppercase text-black dark:text-white tracking-wider">
