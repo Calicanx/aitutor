@@ -958,7 +958,7 @@ function FloatingControlPanel({
                 <X className="w-4 h-4 md:w-5 md:h-5 font-bold" />
               </button>
             </div>
-            <div className="p-0 bg-[#FFFDF5] dark:bg-[#000000]">
+            <div className="p-0 m-0 bg-[#FFFDF5] dark:bg-[#000000] min-h-[500px] md:min-h-[500px]">
               <MediaMixerDisplay
                 canvasRef={mediaMixerCanvasRef}
                 onStatusChange={setMediaMixerStatus}

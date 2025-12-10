@@ -34,7 +34,7 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
   // Mirror the MediaMixer canvas to the display canvas
   useEffect(() => {
     // Function to calculate optimal canvas size maintaining aspect ratio
-    // Uses "cover" behavior: fills container completely, maintains aspect ratio, may crop edges
+    // Uses "contain" behavior: shows entire canvas, maintains aspect ratio, fills container as much as possible
     const calculateCanvasSize = (
       sourceWidth: number,
       sourceHeight: number,
@@ -51,15 +51,15 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
       let displayWidth: number;
       let displayHeight: number;
 
-      // Fill container while maintaining aspect ratio (cover behavior - no white space)
+      // Fit entire canvas within container while maintaining aspect ratio (contain behavior - shows all three sections)
       if (sourceAspect > containerAspect) {
-        // Source is wider than container - fit to height (will crop width)
-        displayHeight = containerHeight;
-        displayWidth = containerHeight * sourceAspect;
-      } else {
-        // Source is taller than container - fit to width (will crop height)
+        // Source is wider than container - fit to width (may have space on top/bottom)
         displayWidth = containerWidth;
         displayHeight = containerWidth / sourceAspect;
+      } else {
+        // Source is taller than container - fit to height (may have space on left/right)
+        displayHeight = containerHeight;
+        displayWidth = containerHeight * sourceAspect;
       }
 
       return { width: displayWidth, height: displayHeight };
@@ -93,9 +93,17 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
           containerRect.height
         );
         
-        // Set CSS size for display (maintains aspect ratio, no stretching)
+        // Set CSS size for display (maintains aspect ratio, shows all three sections)
+        // Position absolutely, centered to fill container as much as possible with no padding
         displayCanvas.style.width = `${width}px`;
         displayCanvas.style.height = `${height}px`;
+        displayCanvas.style.position = 'absolute';
+        displayCanvas.style.top = '50%';
+        displayCanvas.style.left = '50%';
+        displayCanvas.style.transform = 'translate(-50%, -50%)';
+        displayCanvas.style.display = 'block';
+        displayCanvas.style.margin = '0';
+        displayCanvas.style.padding = '0';
       }
     };
 
@@ -147,10 +155,10 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
   }, [canvasRef]);
 
   return (
-    <div className="flex flex-col w-full bg-white dark:bg-[#000000] text-black dark:text-white overflow-hidden transition-colors duration-300">
+    <div className="flex flex-col w-full bg-white dark:bg-[#000000] text-black dark:text-white overflow-hidden transition-colors duration-300 p-0 m-0">
       <div 
         ref={containerRef}
-        className="flex flex-col w-full h-full min-h-[200px] bg-white dark:bg-[#000000] relative overflow-hidden group transition-colors duration-300"
+        className="flex flex-col w-full h-full min-h-[500px] md:min-h-[594px] bg-white dark:bg-[#000000] relative overflow-hidden group transition-colors duration-300 p-0 m-0"
       >
         {error && (
           <div className="text-sm text-center p-4 border-[3px] border-black dark:border-white bg-[#FF006E] text-white max-w-[90%] shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] z-20 absolute">
@@ -169,12 +177,12 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
           </div>
         )}
         {isConnected && (
-          <div className="w-full h-full flex items-center justify-center bg-white dark:bg-[#000000] overflow-hidden">
-            <canvas
-              ref={displayCanvasRef}
-              className="block"
-            />
-          </div>
+          <canvas
+            ref={displayCanvasRef}
+            style={{ 
+              display: 'block'
+            }}
+          />
         )}
 
         {/* Status indicators - Neo-Brutalist style */}
