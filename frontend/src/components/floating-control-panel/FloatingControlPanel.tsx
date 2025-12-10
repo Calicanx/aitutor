@@ -498,19 +498,11 @@ function FloatingControlPanel({
         >
           {!isCollapsed && (
             <div className="flex items-center gap-1.5 md:gap-2">
-              <div className="flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black bg-[#FFD93D]">
-                <span className="material-symbols-outlined text-sm md:text-base text-black font-black">
-                  smart_toy
-                </span>
-              </div>
-              <div>
-                <div className="font-black text-[10px] md:text-xs text-black leading-none mb-0 md:mb-0.5 uppercase">
-                  AI TUTOR
-                </div>
-                <div className="text-[7px] md:text-[8px] text-black font-bold uppercase tracking-wide bg-[#C4B5FD] px-1 md:px-1.5 py-0 border-[1.5px] border-black inline-block">
-                  CONTROL
-                </div>
-              </div>
+              <img 
+                src="/logo.png" 
+                alt="teachr" 
+                className="h-6 md:h-7 w-auto"
+              />
             </div>
           )}
           <button
@@ -677,10 +669,10 @@ function FloatingControlPanel({
                   : "bg-[#FF6B6B]",
               )}
             >
-              <div className="flex items-center gap-1.5 md:gap-2 overflow-hidden">
+              <div className="flex items-center gap-1.5 md:gap-2 min-w-0 flex-1 pr-2 md:pr-3">
                 <div
                   className={cn(
-                    "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black transition-colors",
+                    "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black transition-colors flex-shrink-0",
                     !muted
                       ? "bg-[#C4B5FD] text-black"
                       : "bg-white text-black",
@@ -692,12 +684,12 @@ function FloatingControlPanel({
                     <Mic className="w-3 h-3 md:w-3.5 md:h-3.5 font-bold" />
                   )}
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-[9px] md:text-[10px] font-black text-black uppercase tracking-wide">
                     Microphone
                   </span>
                   <select
-                    className="bg-transparent border-none text-[9px] md:text-[10px] text-black outline-none cursor-pointer w-[100px] md:w-[120px] truncate p-0 font-bold uppercase"
+                    className="bg-transparent border-none text-[9px] md:text-[10px] text-black outline-none cursor-pointer w-full max-w-[100px] md:max-w-[120px] truncate p-0 font-bold uppercase pr-4"
                     value={selectedAudioDevice}
                     onChange={(e) => {
                       e.stopPropagation();
@@ -724,7 +716,7 @@ function FloatingControlPanel({
                   handleMute();
                 }}
                 className={cn(
-                  "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 md:py-1.5 transition-all border-[2px] border-black shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none uppercase",
+                  "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 md:py-1.5 transition-all border-[2px] border-black shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none uppercase flex-shrink-0",
                   !muted
                     ? "bg-[#C4B5FD] text-black"
                     : "bg-[#FFFDF5] text-black",
@@ -861,7 +853,7 @@ function FloatingControlPanel({
                       <div className="p-1 border-[2px] border-black bg-[#FFFDF5] group-hover:bg-[#FF6B6B] transition-colors">
                         <Settings className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                       </div>
-                      <span className="text-[8px] md:text-[9px] font-black uppercase">Settings</span>
+                      <span className="text-[7px] md:text-[8px] font-black uppercase">Settings</span>
                     </button>
                   }
                 />
@@ -885,7 +877,7 @@ function FloatingControlPanel({
                 >
                   <PenTool className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                 </div>
-                <span className="text-[8px] md:text-[9px] font-black uppercase">Canvas</span>
+                <span className="text-[7px] md:text-[8px] font-black uppercase">Canvas</span>
               </button>
               <button
                 onClick={toggleSharedMedia}
@@ -906,13 +898,13 @@ function FloatingControlPanel({
                 >
                   <Eye className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                 </div>
-                <span className="text-[8px] md:text-[9px] font-black uppercase">View</span>
+                <span className="text-[7px] md:text-[8px] font-black uppercase">View</span>
               </button>
               <button className="flex flex-col items-center gap-1 p-1.5 md:p-2 border-[2px] border-black bg-[#FFFDF5] hover:bg-[#C4B5FD] text-black transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none group">
                 <div className="p-1 border-[2px] border-black bg-[#FFFDF5] group-hover:bg-[#C4B5FD] transition-colors">
                   <MoreHorizontal className="w-3 h-3 md:w-4 md:h-4 font-bold" />
                 </div>
-                <span className="text-[8px] md:text-[9px] font-black uppercase">More</span>
+                <span className="text-[7px] md:text-[8px] font-black uppercase">More</span>
               </button>
             </div>
           </div>
@@ -966,7 +958,7 @@ function FloatingControlPanel({
                 <X className="w-4 h-4 md:w-5 md:h-5 font-bold" />
               </button>
             </div>
-            <div className="p-6 pt-0 px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
+            <div className="p-0 bg-[#FFFDF5] dark:bg-[#000000]">
               <MediaMixerDisplay
                 canvasRef={mediaMixerCanvasRef}
                 onStatusChange={setMediaMixerStatus}

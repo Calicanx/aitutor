@@ -26,7 +26,9 @@ import ScratchpadCapture from "./components/scratchpad-capture/ScratchpadCapture
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
 import FloatingControlPanel from "./components/floating-control-panel/FloatingControlPanel";
 import Scratchpad from "./components/scratchpad/Scratchpad";
+import HintButton from "./components/hint-button/HintButton";
 import { ThemeProvider } from "./components/theme/theme-provier";
+import { HintProvider } from "./contexts/HintContext";
 import { Toaster } from "@/components/ui/sonner";
 import { useMediaMixer } from "./hooks/useMediaMixer";
 import { useMediaCapture } from "./hooks/useMediaCapture";
@@ -101,9 +103,10 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
-      <div className="App">
-        <AuthGuard>
-          <LiveAPIProvider>
+      <HintProvider>
+        <div className="App">
+          <AuthGuard>
+            <LiveAPIProvider>
             <Header
               sidebarOpen={isSidebarOpen}
               onToggleSidebar={toggleSidebar}
@@ -155,10 +158,12 @@ function App() {
                 </div>
               </main>
             </div>
+            <HintButton isGradingSidebarOpen={isGradingSidebarOpen} />
             <Toaster richColors closeButton />
-          </LiveAPIProvider>
-        </AuthGuard>
-      </div>
+            </LiveAPIProvider>
+          </AuthGuard>
+        </div>
+      </HintProvider>
     </ThemeProvider>
   );
 }

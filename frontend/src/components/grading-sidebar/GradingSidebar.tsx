@@ -178,8 +178,8 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
             )}>
                 {open ? (
                     <div className="flex items-center gap-2 lg:gap-2.5 animate-in fade-in slide-in-from-left-4 duration-300">
-                        <div className="px-2.5 pt-1.5 pb-2.5 lg:px-3 lg:pt-2 lg:pb-3 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
-                            <GraduationCap className="w-[0.7rem] h-[0.7rem] lg:w-[0.75rem] lg:h-[0.75rem] text-black dark:text-white font-bold" />
+                        <div className="px-[0.25rem] pt-[0.15rem] pb-[0.25rem] lg:px-[0.375rem] lg:pt-[0.25rem] lg:pb-[0.375rem] border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
+                            <GraduationCap className="w-4 h-4 text-black dark:text-white font-bold" />
                         </div>
                         <h2 className="text-xs lg:text-sm font-black text-white whitespace-nowrap uppercase tracking-tight">
                             GRADING & SKILLS
@@ -190,9 +190,9 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                         variant="ghost"
                         size="icon"
                         onClick={onToggle}
-                        className="w-9 h-9 lg:w-10 lg:h-10 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] transition-colors shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
+                        className="w-[1.8125rem] h-[1.6rem] lg:w-[2.025rem] lg:h-[1.8125rem] border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] transition-colors shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
                     >
-                        <GraduationCap className="w-6 h-6 text-black dark:text-white dark:hover:text-black font-bold" />
+                        <GraduationCap className="w-3 h-3 text-black dark:text-white dark:hover:text-black font-bold" />
                     </Button>
                 )}
 
@@ -201,7 +201,7 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                         variant="ghost"
                         size="icon"
                         onClick={onToggle}
-                        className="w-10 h-10 border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black transition-all shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
+                        className="w-[2.125rem] h-[2.125rem] border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black transition-all shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
                     >
                         <ChevronLeft className="w-5 h-5 font-bold" />
                     </Button>

@@ -20,8 +20,10 @@ import { KEScore } from "@khanacademy/perseus-core";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Sparkles } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useHint } from "../../contexts/HintContext";
 import { apiUtils } from "../../lib/api-utils";
 import { jwtUtils } from "../../lib/jwt-utils";
+import HintDisplay from "../hint-display/HintDisplay";
 
 const DASH_API_URL = import.meta.env.VITE_DASH_API_URL || 'http://localhost:8000';
 const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
@@ -32,6 +34,7 @@ interface RendererComponentProps {
 
 const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     const { user } = useAuth();
+    const { setTotalHints, setCurrentHintIndex, showHints, setShowHints } = useHint();
     const [perseusItems, setPerseusItems] = useState<PerseusItem[]>([]);
     const [item, setItem] = useState(0);
     const [endOfTest, setEndOfTest] = useState(false);
@@ -152,6 +155,26 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         }
     }, [showFeedback]);
 
+    // Auto-scroll to hints when shown
+    useEffect(() => {
+        if (showHints && scrollContainerRef.current) {
+            setTimeout(() => {
+                const questionPanel = scrollContainerRef.current?.closest('.question-panel');
+                if (questionPanel) {
+                    questionPanel.scrollTo({
+                        top: questionPanel.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                } else {
+                    window.scrollTo({
+                        top: document.documentElement.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
+        }
+    }, [showHints]);
+
     const handleNext = () => {
         setItem((prev) => {
             const index = prev + 1;
@@ -167,6 +190,8 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
 
             setIsAnswered(false);
             setShowFeedback(false);
+            setShowHints(false); // Hide hints when moving to next question
+            setCurrentHintIndex(0); // Reset hint index
             setStartTime(Date.now()); // Reset timer for next question
             return index;
         });
@@ -231,6 +256,34 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         ? ((item + 1) / perseusItems.length) * 100
         : 0;
 
+    // Extract hints from perseusItem
+    const hints = React.useMemo(() => {
+        if (!perseusItem) {
+            return [];
+        }
+        // Hints are directly in perseusItem as extracted from itemData
+        const itemHints = (perseusItem as any).hints;
+        if (Array.isArray(itemHints) && itemHints.length > 0) {
+            return itemHints;
+        }
+        return [];
+    }, [perseusItem]);
+
+    // Update hint count when hints change
+    React.useEffect(() => {
+        if (hints && hints.length > 0) {
+            setTotalHints(hints.length);
+        } else {
+            setTotalHints(0);
+        }
+    }, [hints, setTotalHints]);
+
+    // Reset hint index and hide hints when question changes
+    React.useEffect(() => {
+        setCurrentHintIndex(0);
+        setShowHints(false);
+    }, [item, setCurrentHintIndex, setShowHints]);
+
     return (
         <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
             {/* Neo-Brutalism Card */}
@@ -255,7 +308,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </CardTitle>
                             </div>
                             <CardDescription className="text-xs md:text-sm font-bold text-black uppercase tracking-wide">
-                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade}` : `User: ${user_id}`}
+                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade.replace(/_/g, ' ')}` : `User: ${user_id}`}
                             </CardDescription>
                         </div>
 
@@ -336,6 +389,11 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                         </RenderStateRoot>
                                     </PerseusI18nContextProvider>
                                 </div>
+
+                                {/* Hints Display */}
+                                {hints && hints.length > 0 && (
+                                    <HintDisplay hints={hints} />
+                                )}
 
                                 {/* Neo-Brutalist feedback */}
                                 {isAnswered && (
