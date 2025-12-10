@@ -17,6 +17,7 @@ from services.AuthService.oauth_handler import GoogleOAuthHandler
 from services.AuthService.jwt_utils import create_jwt_token, create_setup_token, verify_setup_token, verify_token
 from managers.user_manager import UserManager
 from managers.user_manager import calculate_grade_from_age
+from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 
 # Configure logging
 logging.basicConfig(
@@ -28,13 +29,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Auth Service")
 
-# Configure CORS - allow all origins
+# Configure CORS with secure origins from environment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
     expose_headers=["*"],
 )
 

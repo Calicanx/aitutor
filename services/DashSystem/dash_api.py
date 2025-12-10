@@ -25,17 +25,18 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 
 from services.DashSystem.dash_system import DASHSystem, Question
 from shared.auth_middleware import get_current_user
+from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 
 app = FastAPI()
 dash_system = DASHSystem()
 
-# Configure CORS - allow all origins
+# Configure CORS with secure origins from environment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["*"],  # Includes OPTIONS for preflight
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
     expose_headers=["*"],
 )
 
