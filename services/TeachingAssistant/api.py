@@ -126,7 +126,7 @@ def end_session(http_request: Request, request: Optional[EndSessionRequest] = No
         return PromptResponse(prompt=prompt, session_info=session_info)
     except Exception as e:
         # Log the actual error for debugging
-        print(f"Error in end_session: {e}")
+        logger.error(f"Error in end_session: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
