@@ -12,19 +12,20 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 
 from services.TeachingAssistant.teaching_assistant import TeachingAssistant
 from shared.auth_middleware import get_current_user
+from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 
 app = FastAPI(title="Teaching Assistant API")
 
 # Add GZip compression middleware (Phase 7)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
-# Configure CORS - allow all origins
+# Configure CORS with secure origins from environment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly include OPTIONS
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
     expose_headers=["*"],
 )
 
@@ -56,11 +57,13 @@ async def cache_control_middleware(request: Request, call_next):
 async def options_handler(full_path: str):
     """Handle OPTIONS preflight requests explicitly for Cloud Run"""
     from fastapi.responses import Response
+    # Use first allowed origin or * if none configured
+    origin = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "*"
     return Response(
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": ", ".join(ALLOWED_METHODS),
             "Access-Control-Allow-Headers": "*",
         }
     )

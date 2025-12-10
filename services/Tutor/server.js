@@ -22,7 +22,33 @@ try {
 const PORT = process.env.PORT || 8767;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.5-flash-native-audio-preview-09-2025';
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'teachr-api';
+const JWT_ISSUER = process.env.JWT_ISSUER || 'teachr-auth-service';
+
+// Validate JWT secret on startup
+if (!JWT_SECRET || JWT_SECRET === 'change-me-in-production' || JWT_SECRET.length < 32) {
+  console.error('\n' + '='.repeat(80));
+  console.error('🔒 JWT SECURITY ERROR');
+  console.error('='.repeat(80));
+  console.error('\n❌ JWT_SECRET is not set or is too weak\n');
+  console.error('To fix this issue:');
+  console.error('1. Generate a strong JWT secret:');
+  console.error('   node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"');
+  console.error('\n2. Set it in your environment:');
+  console.error('   export JWT_SECRET=\'your-generated-secret-here\'');
+  console.error('\n3. Or add it to your .env file:');
+  console.error('   JWT_SECRET=your-generated-secret-here');
+  console.error('\n' + '='.repeat(80) + '\n');
+
+  if (process.env.ENVIRONMENT === 'production') {
+    console.error('⛔ REFUSING TO START IN PRODUCTION WITH WEAK JWT SECRET');
+    process.exit(1);
+  } else {
+    console.warn('⚠️  WARNING: Running in development mode with weak JWT secret');
+    console.warn('⚠️  This is INSECURE and should NEVER be used in production!\n');
+  }
+}
 
 // Load system prompt (with error handling)
 let SYSTEM_PROMPT = '';
@@ -92,9 +118,13 @@ server.on('upgrade', (request, socket, head) => {
     return;
   }
 
-  // Verify JWT token
+  // Verify JWT token with audience and issuer validation
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ['HS256'],
+      audience: JWT_AUDIENCE,
+      issuer: JWT_ISSUER
+    });
     const user_id = decoded.sub;
 
     if (!user_id) {
