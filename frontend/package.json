@@ -105,10 +105,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:analyze": "vite build --mode analyze",
     "type-check": "tsc --noEmit --skipLibCheck",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "perf:lighthouse": "lhci autorun",
+    "perf:bundle": "npm run build && npx vite-bundle-visualizer"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.17.0",
@@ -127,6 +130,7 @@
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.17",
+    "terser": "^5.44.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3",
     "vite": "^7.2.4"

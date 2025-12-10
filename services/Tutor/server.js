@@ -51,7 +51,28 @@ const server = http.createServer((req, res) => {
 });
 
 // Create WebSocket server attached to HTTP server
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({
+  noServer: true,
+  perMessageDeflate: {
+    zlibDeflateOptions: {
+      // See zlib defaults.
+      chunkSize: 1024,
+      memLevel: 7,
+      level: 3
+    },
+    zlibInflateOptions: {
+      chunkSize: 10 * 1024
+    },
+    // Other options settable:
+    clientNoContextTakeover: true, // Defaults to negotiated value.
+    serverNoContextTakeover: true, // Defaults to negotiated value.
+    serverMaxWindowBits: 10, // Defaults to negotiated value.
+    // Below options specified as default values.
+    concurrencyLimit: 10, // Limits zlib concurrency for perf.
+    threshold: 1024 // Size (in bytes) below which messages
+    // should not be compressed.
+  }
+});
 
 // Handle WebSocket upgrade requests
 // Cloud Run supports WebSocket upgrades on any path
@@ -59,31 +80,31 @@ const wss = new WebSocketServer({ noServer: true });
 server.on('upgrade', (request, socket, head) => {
   // Allow all origins for WebSocket connections
   // Origin validation removed to allow all connections
-  
+
   // Extract and validate JWT token from query parameters
   const parsedUrl = parse(request.url, true);
   const token = parsedUrl.query.token;
-  
+
   if (!token) {
     console.warn('⚠️  WebSocket connection rejected: missing token');
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     socket.destroy();
     return;
   }
-  
+
   // Verify JWT token
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user_id = decoded.sub;
-    
+
     if (!user_id) {
       throw new Error('Invalid token: missing user_id');
     }
-    
+
     // Store user_id in request for later use
     request.user_id = user_id;
     console.log(`✅ WebSocket connection authenticated for user: ${user_id}`);
-    
+
     // Accept WebSocket upgrade
     wss.handleUpgrade(request, socket, head, (ws) => {
       // Attach user_id to WebSocket connection
@@ -120,7 +141,7 @@ server.on('error', (error) => {
 wss.on('connection', (clientWs, request) => {
   const user_id = clientWs.user_id || request.user_id || 'unknown';
   console.log(`✅ Frontend client connected (user: ${user_id})`);
-  
+
   let geminiSession = null;
   let geminiClient = null;
 
@@ -128,7 +149,7 @@ wss.on('connection', (clientWs, request) => {
   clientWs.on('message', async (data) => {
     try {
       const message = JSON.parse(data.toString());
-      
+
       // Handle connection request
       if (message.type === 'connect') {
         if (!GEMINI_API_KEY) {
@@ -138,21 +159,21 @@ wss.on('connection', (clientWs, request) => {
           }));
           return;
         }
-        
+
         const { config } = message;
-        
+
         // Initialize Gemini client
         geminiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-        
+
         // Inject system prompt into config
         const fullConfig = {
           ...config,
           systemInstruction: config.systemInstruction || SYSTEM_PROMPT,
         };
-        
+
         console.log(`🔗 Connecting to Gemini model: ${GEMINI_MODEL}`);
         console.log(`🎤 Voice: ${fullConfig.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName || 'default'}`);
-        
+
         // Connect to Gemini Live API
         try {
           geminiSession = await geminiClient.live.connect({
@@ -186,7 +207,7 @@ wss.on('connection', (clientWs, request) => {
               }
             }
           });
-          
+
           console.log('✅ Gemini session established');
         } catch (error) {
           console.error('❌ Failed to connect to Gemini:', error.message);
@@ -196,7 +217,7 @@ wss.on('connection', (clientWs, request) => {
           }));
         }
       }
-      
+
       // Handle disconnect request
       else if (message.type === 'disconnect') {
         if (geminiSession) {
@@ -205,21 +226,21 @@ wss.on('connection', (clientWs, request) => {
           console.log('🔌 Gemini session closed');
         }
       }
-      
+
       // Handle realtime input (audio/video)
       else if (message.type === 'realtimeInput') {
         if (geminiSession) {
           geminiSession.sendRealtimeInput({ media: message.data });
         }
       }
-      
+
       // Handle tool response
       else if (message.type === 'toolResponse') {
         if (geminiSession) {
           geminiSession.sendToolResponse(message.data);
         }
       }
-      
+
       // Handle client content (text messages)
       else if (message.type === 'send') {
         if (geminiSession) {
@@ -229,7 +250,7 @@ wss.on('connection', (clientWs, request) => {
           });
         }
       }
-      
+
     } catch (error) {
       console.error('❌ Error processing message:', error);
       clientWs.send(JSON.stringify({

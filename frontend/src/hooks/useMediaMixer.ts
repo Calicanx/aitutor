@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useRef, useCallback, useState, useEffect, RefObject } from 'react';
 
 interface MediaMixerConfig {
   width: number;      // 1280
@@ -7,13 +7,13 @@ interface MediaMixerConfig {
   quality: number;    // 0.85 (not used in canvas mixing)
   cameraEnabled?: boolean;
   screenEnabled?: boolean;
+  cameraVideoRef?: RefObject<HTMLVideoElement>;
+  screenVideoRef?: RefObject<HTMLVideoElement>;
 }
 
 export const useMediaMixer = (config: MediaMixerConfig) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const scratchpadFrameRef = useRef<ImageData | null>(null);
-  const cameraFrameRef = useRef<ImageData | null>(null);
-  const screenFrameRef = useRef<ImageData | null>(null);
+  const scratchpadCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // State for UI control - controlled by props
   const showCamera = config.cameraEnabled || false;
@@ -25,87 +25,69 @@ export const useMediaMixer = (config: MediaMixerConfig) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no alpha
     if (!ctx) return;
-
 
     const sectionHeight = config.height / 3;
 
     // Clear canvas with appropriate backgrounds
-    ctx.fillStyle = 'white';  // Scratchpad background
+    // We can skip clearing if we are going to overwrite everything, but let's keep it for safety
+    // or just fill the whole thing once if we want to be super optimized, but sections have different colors.
+
+    // Scratchpad Section
+    ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, config.width, sectionHeight);
 
-    ctx.fillStyle = 'black';  // Screen background
+    if (scratchpadCanvasRef.current) {
+      try {
+        ctx.drawImage(scratchpadCanvasRef.current, 0, 0, config.width, sectionHeight);
+      } catch (error) {
+        // console.error('Error drawing scratchpad frame:', error);
+      }
+    }
+
+    // Screen Section
+    ctx.fillStyle = 'black';
     ctx.fillRect(0, sectionHeight, config.width, sectionHeight);
 
-    ctx.fillStyle = '#404040'; // Camera background
+    if (showScreen && config.screenVideoRef?.current) {
+      try {
+        const video = config.screenVideoRef.current;
+        if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+          // Draw directly from video element
+          // Maintain aspect ratio or fill? The original code did a resize via temp canvas.
+          // We'll draw to fill the section (1280x720)
+          ctx.drawImage(video, 0, sectionHeight, config.width, sectionHeight);
+        }
+      } catch (error) {
+        // console.error('Error drawing screen frame:', error);
+      }
+    }
+
+    // Camera Section
+    ctx.fillStyle = '#404040';
     ctx.fillRect(0, 2 * sectionHeight, config.width, sectionHeight);
 
-
-    // Draw scratchpad frame if available
-    if (scratchpadFrameRef.current) {
+    if (showCamera && config.cameraVideoRef?.current) {
       try {
-        // Create a temporary canvas to convert ImageData to drawable format
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = config.width;
-        tempCanvas.height = sectionHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-
-        if (tempCtx) {
-          tempCtx.putImageData(scratchpadFrameRef.current, 0, 0);
-          ctx.drawImage(tempCanvas, 0, 0);
+        const video = config.cameraVideoRef.current;
+        if (video.readyState >= 2) {
+          ctx.drawImage(video, 0, 2 * sectionHeight, config.width, sectionHeight);
         }
       } catch (error) {
-        console.error('Error drawing scratchpad frame:', error);
+        // console.error('Error drawing camera frame:', error);
       }
     }
-
-    // Draw screen frame if available and enabled
-    if (showScreen && screenFrameRef.current) {
-      try {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = config.width;
-        tempCanvas.height = sectionHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-
-        if (tempCtx) {
-          tempCtx.putImageData(screenFrameRef.current, 0, 0);
-          ctx.drawImage(tempCanvas, 0, sectionHeight);
-        }
-      } catch (error) {
-        console.error('Error drawing screen frame:', error);
-      }
-    }
-
-    // Draw camera frame if available and enabled
-    if (showCamera && cameraFrameRef.current) {
-      try {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = config.width;
-        tempCanvas.height = sectionHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-
-        if (tempCtx) {
-          tempCtx.putImageData(cameraFrameRef.current, 0, 0);
-          ctx.drawImage(tempCanvas, 0, 2 * sectionHeight);
-        }
-      } catch (error) {
-        console.error('Error drawing camera frame:', error);
-      }
-    }
-  }, [config.width, config.height, showCamera, showScreen]);
+  }, [config.width, config.height, showCamera, showScreen, config.cameraVideoRef, config.screenVideoRef]);
 
   // Update frame buffers
-  const updateScratchpadFrame = useCallback((imageData: ImageData) => {
-    scratchpadFrameRef.current = imageData;
-  }, []);
-
-  const updateCameraFrame = useCallback((imageData: ImageData) => {
-    cameraFrameRef.current = imageData;
-  }, []);
-
-  const updateScreenFrame = useCallback((imageData: ImageData) => {
-    screenFrameRef.current = imageData;
+  const updateScratchpadFrame = useCallback((canvas: HTMLCanvasElement) => {
+    // Instead of copying ImageData, we just store the reference to the latest canvas
+    // Or we could draw it to an offscreen canvas if the source canvas is reused/cleared.
+    // Assuming ScratchpadCapture creates a new canvas or we can just draw from it.
+    // If ScratchpadCapture reuses the same canvas, we might get tearing if we draw while it's updating.
+    // But for now, let's just store the ref.
+    scratchpadCanvasRef.current = canvas;
   }, []);
 
   // Mixing loop using requestAnimationFrame
@@ -141,8 +123,6 @@ export const useMediaMixer = (config: MediaMixerConfig) => {
   return {
     canvasRef,
     updateScratchpadFrame,
-    updateCameraFrame,
-    updateScreenFrame,
     setIsRunning,
     mixFrames: () => mixFrames() // Manual trigger
   };

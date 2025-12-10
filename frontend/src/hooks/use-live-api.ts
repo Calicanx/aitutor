@@ -45,9 +45,18 @@ export function useLiveAPI(): UseLiveAPIResults {
     if (!audioStreamerRef.current) {
       audioContext({ id: "audio-out" }).then((audioCtx: AudioContext) => {
         audioStreamerRef.current = new AudioStreamer(audioCtx);
+        
+        // Throttling mechanism for volume updates
+        let lastUpdate = 0;
+        const THROTTLE_MS = 100; // Update volume at most every 100ms (10 FPS)
+
         audioStreamerRef.current
           .addWorklet<any>("vumeter-out", VolMeterWorket, (ev: any) => {
-            setVolume(ev.data.volume);
+            const now = Date.now();
+            if (now - lastUpdate >= THROTTLE_MS) {
+              setVolume(ev.data.volume);
+              lastUpdate = now;
+            }
           })
           .then(() => {
             // Successfully added worklet

@@ -1,0 +1,84 @@
+name: Performance CI
+
+on:
+  pull_request:
+    branches: [main, staging]
+  push:
+    branches: [main, staging]
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+      
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli
+      
+      - name: Run Lighthouse CI
+        working-directory: ./frontend
+        run: lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+      
+      - name: Upload Lighthouse results
+        uses: actions/upload-artifact@v3
+        with:
+          name: lighthouse-results
+          path: .lighthouseci/
+
+  bundle-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+      
+      - name: Analyze bundle size
+        working-directory: ./frontend
+        run: |
+          du -sh build/assets/*.js | sort -h
+          echo "Main bundle size:"
+          ls -lh build/assets/index-*.js
+          echo "Vendor bundle size:"
+          ls -lh build/assets/vendor-*.js
+      
+      - name: Check bundle size limits
+        working-directory: ./frontend
+        run: |
+          # Check if main bundle is under 500KB gzipped
+          MAIN_SIZE=$(gzip -c build/assets/index-*.js | wc -c)
+          if [ $MAIN_SIZE -gt 512000 ]; then
+            echo "❌ Main bundle exceeds 500KB gzipped limit: ${MAIN_SIZE} bytes"
+            exit 1
+          else
+            echo "✅ Main bundle size OK: ${MAIN_SIZE} bytes"
+          fi

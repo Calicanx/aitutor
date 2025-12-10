@@ -2,8 +2,11 @@ import sys
 import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+import asyncio
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
@@ -11,6 +14,9 @@ from services.TeachingAssistant.teaching_assistant import TeachingAssistant
 from shared.auth_middleware import get_current_user
 
 app = FastAPI(title="Teaching Assistant API")
+
+# Add GZip compression middleware (Phase 7)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 # Configure CORS - allow all origins
 app.add_middleware(
@@ -21,6 +27,29 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Request timeout middleware (Phase 3)
+@app.middleware("http")
+async def timeout_middleware(request: Request, call_next):
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=30.0)
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={"detail": "Request timeout"}
+        )
+
+# Cache control middleware for static responses (Phase 7)
+@app.middleware("http")
+async def cache_control_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/health":
+        response.headers["Cache-Control"] = "public, max-age=60"
+    elif request.url.path.startswith("/session/info"):
+        response.headers["Cache-Control"] = "private, max-age=10"
+    else:
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 # Explicit OPTIONS handler for Cloud Run compatibility (backup)
 @app.options("/{full_path:path}")
