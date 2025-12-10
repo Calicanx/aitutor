@@ -1,0 +1,26 @@
+/* MCQ Highlighting Fix - Override to ensure only selected option is highlighted */
+
+/* Prevent all choices from highlighting when one is clicked */
+:global(.framework-perseus) .choice {
+    /* Reset any global hover states that might affect all choices */
+    transition: background-color 0.15s ease;
+}
+
+/* Only highlight the actually selected choice */
+:global(.framework-perseus) .choice:has(> button[aria-pressed="true"]) {
+    /* Ensure selected state is visually distinct */
+    background-color: rgba(24, 101, 242, 0.08) !important;
+}
+
+/* Ensure hover only affects the hovered choice, not siblings */
+@media (hover: hover) {
+    :global(.framework-perseus) .choice:hover:not(:has(> button[aria-pressed="true"])) {
+        background-color: rgba(0, 0, 0, 0.04);
+    }
+}
+
+/* Fix: Prevent CSS from applying to all choices when one is selected */
+:global(.framework-perseus) .choice+.choice {
+    /* Ensure each choice is independent */
+    isolation: isolate;
+}
