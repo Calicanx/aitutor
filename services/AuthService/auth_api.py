@@ -19,6 +19,11 @@ from managers.user_manager import UserManager
 from managers.user_manager import calculate_grade_from_age
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

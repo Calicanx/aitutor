@@ -14,6 +14,11 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 import json
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 # Load environment variables
 load_dotenv()
 
@@ -27,7 +32,7 @@ def test_mongodb_data():
     # Connect to MongoDB using environment variables
     uri = os.getenv('MONGODB_URI')
     if not uri:
-        print("❌ ERROR: MONGODB_URI not found in environment variables")
+        logger.error(" ERROR: MONGODB_URI not found in environment variables")
         print("   Please create a .env file with MONGODB_URI")
         print("   See .env.example for template")
         return False
@@ -36,7 +41,7 @@ def test_mongodb_data():
     client = MongoClient(uri)
     db = client[db_name]
     
-    print(f"✅ Connected to MongoDB (database: {db_name})\n")
+    logger.info(f" Connected to MongoDB (database: {db_name})\n")
     
     all_tests_passed = True
     
@@ -172,14 +177,14 @@ def test_mongodb_data():
     # Final Summary
     print("="*80)
     if all_tests_passed:
-        print("✅ ALL TESTS PASSED!")
+        logger.info(" ALL TESTS PASSED!")
         print("="*80)
         print("\nMongoDB data is ready. You can now:")
         print("  1. Update code to use MongoDB")
         print("  2. Test the system with real data")
         print("  3. Keep local files as backup")
     else:
-        print("❌ SOME TESTS FAILED!")
+        logger.error(" SOME TESTS FAILED!")
         print("="*80)
         print("\nPlease check the errors above and:")
         print("  1. Verify migration scripts ran successfully")

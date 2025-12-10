@@ -16,6 +16,7 @@
 
 import { useRef, useState, useEffect, Suspense, lazy } from "react";
 import "./App.scss";
+import "./styles/mobile-fixes.css"; // Mobile UI fixes
 import { LiveAPIProvider } from "./contexts/LiveAPIContext";
 import AuthGuard from "./components/auth/AuthGuard";
 import Header from "./components/header/Header";

@@ -27,6 +27,11 @@ from services.DashSystem.dash_system import DASHSystem, Question
 from shared.auth_middleware import get_current_user
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 app = FastAPI()
 dash_system = DASHSystem()
 

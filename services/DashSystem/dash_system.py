@@ -10,6 +10,11 @@ from enum import Enum
 
 from managers.user_manager import UserManager, UserProfile, SkillState
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
