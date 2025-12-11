@@ -34,7 +34,7 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
   // Mirror the MediaMixer canvas to the display canvas
   useEffect(() => {
     // Function to calculate optimal canvas size maintaining aspect ratio
-    // Uses "contain" behavior: shows entire canvas, maintains aspect ratio, fills container as much as possible
+    // Uses "cover" behavior: fills entire container, maintains aspect ratio, may crop edges
     const calculateCanvasSize = (
       sourceWidth: number,
       sourceHeight: number,
@@ -51,15 +51,15 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
       let displayWidth: number;
       let displayHeight: number;
 
-      // Fit entire canvas within container while maintaining aspect ratio (contain behavior - shows all three sections)
+      // Fill entire container while maintaining aspect ratio (cover behavior - fills all space, may crop)
       if (sourceAspect > containerAspect) {
-        // Source is wider than container - fit to width (may have space on top/bottom)
-        displayWidth = containerWidth;
-        displayHeight = containerWidth / sourceAspect;
-      } else {
-        // Source is taller than container - fit to height (may have space on left/right)
+        // Source is wider than container - fit to height (fills height, may crop left/right)
         displayHeight = containerHeight;
         displayWidth = containerHeight * sourceAspect;
+      } else {
+        // Source is taller than container - fit to width (fills width, may crop top/bottom)
+        displayWidth = containerWidth;
+        displayHeight = containerWidth / sourceAspect;
       }
 
       return { width: displayWidth, height: displayHeight };
@@ -93,8 +93,8 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
           containerRect.height
         );
         
-        // Set CSS size for display (maintains aspect ratio, shows all three sections)
-        // Position absolutely, centered to fill container as much as possible with no padding
+        // Set CSS size for display (fills container completely, maintains aspect ratio)
+        // Position absolutely to fill container with no white space
         displayCanvas.style.width = `${width}px`;
         displayCanvas.style.height = `${height}px`;
         displayCanvas.style.position = 'absolute';
@@ -104,6 +104,7 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
         displayCanvas.style.display = 'block';
         displayCanvas.style.margin = '0';
         displayCanvas.style.padding = '0';
+        displayCanvas.style.objectFit = 'cover';
       }
     };
 
@@ -155,10 +156,10 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
   }, [canvasRef]);
 
   return (
-    <div className="flex flex-col w-full bg-white dark:bg-[#000000] text-black dark:text-white overflow-hidden transition-colors duration-300 p-0 m-0">
+    <div className="flex flex-col w-full h-full bg-white dark:bg-[#000000] text-black dark:text-white overflow-hidden transition-colors duration-300 p-0 m-0">
       <div 
         ref={containerRef}
-        className="flex flex-col w-full h-full min-h-[500px] md:min-h-[594px] bg-white dark:bg-[#000000] relative overflow-hidden group transition-colors duration-300 p-0 m-0"
+        className="flex flex-col w-full h-full min-h-[500px] md:min-h-[500px] bg-white dark:bg-[#000000] relative overflow-hidden group transition-colors duration-300 p-0 m-0"
       >
         {error && (
           <div className="text-sm text-center p-4 border-[3px] border-black dark:border-white bg-[#FF006E] text-white max-w-[90%] shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] z-20 absolute">

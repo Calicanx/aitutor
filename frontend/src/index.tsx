@@ -42,7 +42,7 @@ const LandingPageOrApp: React.FC = () => {
         justifyContent: 'center',
         alignItems: 'center',
         height: '100vh',
-        background: '#FFFDF5'
+        background: 'var(--neo-bg, #FFFDF5)'
       }}>
         <div>Loading...</div>
       </div>
