@@ -27,13 +27,7 @@ from services.DashSystem.dash_system import DASHSystem, Question
 from shared.auth_middleware import get_current_user
 
 app = FastAPI()
-dash_system = DASHSystem()
-
-# Health check endpoint
-@app.get("/health")
-def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "DASH API"}
+dash_system = None  # Initialize as None, will be set in startup event
 
 # Configure CORS - allow all origins
 app.add_middleware(
@@ -45,15 +39,55 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Helper function to ensure DASH system is initialized
+def ensure_dash_system():
+    """Ensure DASH system is initialized before use"""
+    if dash_system is None:
+        raise HTTPException(status_code=503, detail="DASHSystem not initialized")
+
+# Startup event to initialize DASH system
+@app.on_event("startup")
+async def startup_event():
+    """Initialize DASHSystem on startup"""
+    global dash_system
+    logger.info("Initializing DASHSystem...")
+    try:
+        dash_system = DASHSystem()
+        logger.info(f"DASHSystem initialized: {len(dash_system.skills)} skills, {len(dash_system.question_index)} questions in index")
+    except Exception as e:
+        logger.error(f"Failed to initialize DASHSystem: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise
+
 # Perseus item model matching frontend expectations
 class PerseusQuestion(BaseModel):
     question: dict = Field(description="The question data")
     answerArea: dict = Field(description="The answer area")
     hints: List = Field(description="List of question hints")
+    itemDataVersion: Optional[dict] = Field(default=None, description="Perseus item data version")
     dash_metadata: Optional[dict] = Field(default=None, description="DASH metadata for tracking")
     
     class Config:
         extra = "allow"  # Allow additional fields that aren't in the model
+
+# Health check endpoint for startup verification
+@app.get("/health")
+def health_check():
+    """Health check endpoint for startup verification"""
+    from fastapi import Response
+    if dash_system is None:
+        return Response(
+            content='{"status": "initializing", "ready": false}',
+            media_type="application/json",
+            status_code=503
+        )
+    return {
+        "status": "ready",
+        "ready": True,
+        "skills_count": len(dash_system.skills),
+        "questions_count": len(dash_system.question_index)
+    }
 
 # Path to CurriculumBuilder with full Perseus items
 CURRICULUM_BUILDER_PATH = os.path.abspath(
@@ -121,6 +155,11 @@ def load_perseus_items_for_dash_questions_from_mongodb(
     from managers.mongodb_manager import mongo_db
     import json
     perseus_items = []
+    
+    # Ensure dash_system is available
+    if dash_system is None:
+        logger.error("DASH system not initialized when loading Perseus items")
+        return perseus_items
     
     for dash_q in dash_questions:
         # question_id includes fabricated prefix (e.g., "41.1.2.1.9_x338f5e1fbc6cafdf")
@@ -229,14 +268,19 @@ def load_perseus_items_for_dash_questions(
                 perseus_data = json.load(f)
             
             # Tag with DASH metadata
+            # Note: This function is fallback only, dash_system should be initialized
+            skill_names = []
+            if dash_system is not None:
+                skill_names = [dash_system.skills[sid].name for sid in dash_q.skill_ids 
+                               if sid in dash_system.skills]
+            
             perseus_data['dash_metadata'] = {
                 'dash_question_id': dash_q.question_id,
                 'skill_ids': dash_q.skill_ids,
                 'difficulty': dash_q.difficulty,
                 'expected_time_seconds': dash_q.expected_time_seconds,
                 'slug': extract_slug_from_filename(selected_file),
-                'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids 
-                               if sid in dash_system.skills]
+                'skill_names': skill_names
             }
             
             perseus_items.append(perseus_data)
@@ -264,6 +308,110 @@ def load_perseus_items_from_dir(directory: str, limit: Optional[int] = None) -> 
         return random.sample(all_items, limit)
     return all_items
 
+@app.get("/api/questions/preloaded", response_model=List[PerseusQuestion])
+def get_preloaded_questions(request: Request):
+    """
+    Get pre-loaded questions for next session.
+    Returns empty if no pre-loaded questions exist.
+    """
+    ensure_dash_system()
+    
+    # Get user_id with proper error handling
+    try:
+        user_id = get_current_user(request)
+    except HTTPException as e:
+        logger.error(f"[PRELOADED] Authentication error: {e.status_code} - {e.detail}")
+        raise  # Re-raise to return proper 401/403 status code
+    except Exception as e:
+        logger.error(f"[PRELOADED] Unexpected error getting user: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    
+    logger.info(f"\n{'='*80}")
+    logger.info(f"[PRELOADED] Checking for pre-loaded questions for user: {user_id}")
+    logger.info(f"{'='*80}\n")
+    
+    # Check if user has pre-loaded questions stored
+    from managers.mongodb_manager import mongo_db
+    
+    try:
+        user_data = mongo_db.users.find_one({"user_id": user_id})
+        if not user_data:
+            logger.info("[PRELOADED] User not found")
+            return []
+        
+        preloaded_question_ids = user_data.get("preloaded_question_ids", [])
+        if not preloaded_question_ids:
+            logger.info("[PRELOADED] No pre-loaded questions found")
+            return []
+        
+        logger.info(f"[PRELOADED] Found {len(preloaded_question_ids)} pre-loaded question IDs: {preloaded_question_ids[:3]}...")
+        
+        # Convert question IDs to Question objects (on-demand creation)
+        selected_questions = []
+        for qid in preloaded_question_ids:
+            question = dash_system._get_or_create_question(qid)
+            if question:
+                selected_questions.append(question)
+            else:
+                logger.warning(f"[PRELOADED] Question ID {qid} not found in DASH system")
+        
+        if not selected_questions:
+            logger.info("[PRELOADED] No valid questions found from pre-loaded IDs")
+            # Clear invalid pre-loaded questions
+            mongo_db.users.update_one(
+                {"user_id": user_id},
+                {"$unset": {"preloaded_question_ids": ""}}
+            )
+            return []
+        
+        logger.info(f"[PRELOADED] Converted {len(selected_questions)} question IDs to Question objects")
+        
+        # Load Perseus items for pre-loaded questions
+        perseus_items = load_perseus_items_for_dash_questions_from_mongodb(selected_questions)
+        logger.info(f"[PRELOADED] Loaded {len(perseus_items)} Perseus questions from MongoDB")
+        
+        # Validate perseus_items structure before returning
+        if perseus_items:
+            # Validate first item structure
+            first_item = perseus_items[0]
+            required_fields = ['question', 'answerArea', 'hints']
+            missing_fields = [field for field in required_fields if field not in first_item]
+            if missing_fields:
+                logger.error(f"[PRELOADED] Invalid Perseus item structure - missing fields: {missing_fields}")
+                logger.error(f"[PRELOADED] Item keys: {list(first_item.keys())}")
+            else:
+                logger.info(f"[PRELOADED] Validated Perseus item structure - all required fields present")
+        
+        # Clear pre-loaded questions after retrieval
+        mongo_db.users.update_one(
+            {"user_id": user_id},
+            {"$unset": {"preloaded_question_ids": ""}}
+        )
+        logger.info("[PRELOADED] Cleared pre-loaded questions from user profile")
+        
+        # Ensure we return empty list if no questions (valid response for FastAPI)
+        if not perseus_items:
+            logger.info("[PRELOADED] Returning empty list (no Perseus items loaded)")
+            return []
+        
+        logger.info(f"[PRELOADED] Returning {len(perseus_items)} Perseus questions")
+        return perseus_items
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to load pre-loaded questions: {e}")
+        import traceback
+        logger.error(f"[ERROR] Traceback: {traceback.format_exc()}")
+        # Clear on error too
+        try:
+            mongo_db.users.update_one(
+                {"user_id": user_id},
+                {"$unset": {"preloaded_question_ids": ""}}
+            )
+        except Exception as clear_error:
+            logger.error(f"[ERROR] Failed to clear pre-loaded questions: {clear_error}")
+        # Return empty list on error (valid response)
+        logger.info("[PRELOADED] Returning empty list due to error")
+        return []
+
 @app.get("/api/questions/{sample_size}", response_model=List[PerseusQuestion])
 def get_questions_with_dash_intelligence(request: Request, sample_size: int):
     """
@@ -274,6 +422,7 @@ def get_questions_with_dash_intelligence(request: Request, sample_size: int):
         request: FastAPI request object (for JWT extraction)
         sample_size: Number of questions to return
     """
+    ensure_dash_system()
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
@@ -324,6 +473,9 @@ def get_questions_with_dash_intelligence(request: Request, sample_size: int):
 @app.post("/api/question-displayed")
 def log_question_displayed(request: Request, display_info: dict):
     """Log when student views a question (Next button clicked)"""
+    ensure_dash_system()
+    # Get user_id from JWT token
+    user_id = get_current_user(request)
     
     # Get user_id from JWT token
     user_id = get_current_user(request)
@@ -369,6 +521,7 @@ def get_next_question(request: Request):
     Gets the next recommended question for a given user.
     (Original endpoint kept for backward compatibility)
     """
+    ensure_dash_system()
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
@@ -390,12 +543,17 @@ class AnswerSubmission(BaseModel):
     is_correct: bool
     response_time_seconds: float
 
+class RecommendNextRequest(BaseModel):
+    current_question_ids: List[str]
+    count: int = 5
+
 @app.post("/api/submit-answer")
 def submit_answer(request: Request, answer: AnswerSubmission):
     """
     Record a question attempt and update DASH system.
     This enables tracking and adaptive difficulty.
     """
+    ensure_dash_system()
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
@@ -450,6 +608,7 @@ def get_skill_scores(request: Request):
     Get all skill scores for the current user.
     Returns skill states in the format expected by the frontend GradingSidebar.
     """
+    ensure_dash_system()
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
@@ -480,6 +639,74 @@ def get_skill_scores(request: Request):
         }
     
     return {"skill_states": skill_states}
+
+@app.post("/api/questions/recommend-next", response_model=List[PerseusQuestion])
+def recommend_next_questions(request: Request, req: RecommendNextRequest):
+    """
+    Recommend next questions based on currently loaded questions.
+    Takes existing question IDs and recommends next batch using DASH intelligence.
+    Only returns questions if they differ from current ones.
+    
+    Args:
+        request: FastAPI request object (for JWT extraction)
+        req: Request body containing current question IDs and count
+    """
+    ensure_dash_system()
+    user_id = get_current_user(request)
+    
+    logger.info(f"\n{'='*80}")
+    logger.info(f"[RECOMMEND_NEXT] User: {user_id}, Current questions: {len(req.current_question_ids)}, Requesting: {req.count}")
+    logger.info(f"{'='*80}\n")
+    
+    # Ensure the user exists and is loaded
+    user_profile = dash_system.load_user_or_create(user_id)
+    current_time = time.time()
+    
+    # Get next questions using DASH, excluding current ones
+    selected_questions = []
+    exclude_ids = set(req.current_question_ids)
+    
+    for i in range(req.count):
+        next_question = dash_system.get_next_question_flexible(
+            user_id,
+            current_time,
+            exclude_question_ids=list(exclude_ids)
+        )
+        if next_question:
+            selected_questions.append(next_question)
+            exclude_ids.add(next_question.question_id)
+        else:
+            logger.info(f"[RECOMMEND_NEXT] No more questions available after {len(selected_questions)}")
+            break
+    
+    if not selected_questions:
+        logger.info("[RECOMMEND_NEXT] No new questions available")
+        return []  # Return empty if no new questions
+    
+    # Load Perseus items for selected questions
+    try:
+        perseus_items = load_perseus_items_for_dash_questions_from_mongodb(selected_questions)
+        logger.info(f"[RECOMMEND_NEXT] Loaded {len(perseus_items)} new questions")
+        
+        # Verify no overlap with current questions (should not happen due to exclusion, but check for safety)
+        new_question_ids = {item.get('dash_metadata', {}).get('dash_question_id') for item in perseus_items if item.get('dash_metadata', {}).get('dash_question_id')}
+        current_question_ids_set = set(req.current_question_ids)
+        
+        # Check for any overlap (should not happen, but log warning if it does)
+        overlap = new_question_ids.intersection(current_question_ids_set)
+        if overlap:
+            logger.warning(f"[RECOMMEND_NEXT] Warning: {len(overlap)} recommended questions overlap with current (should not happen)")
+            # Filter out overlapping questions
+            perseus_items = [item for item in perseus_items 
+                           if item.get('dash_metadata', {}).get('dash_question_id') not in overlap]
+            if not perseus_items:
+                logger.info("[RECOMMEND_NEXT] All recommended questions were duplicates, returning empty")
+                return []
+        
+        return perseus_items
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to load recommended questions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load recommended questions: {e}")
 
 if __name__ == "__main__":
     import uvicorn

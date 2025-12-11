@@ -26,7 +26,6 @@ import ScratchpadCapture from "./components/scratchpad-capture/ScratchpadCapture
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
 import FloatingControlPanel from "./components/floating-control-panel/FloatingControlPanel";
 import Scratchpad from "./components/scratchpad/Scratchpad";
-import HintButton from "./components/hint-button/HintButton";
 import { ThemeProvider } from "./components/theme/theme-provier";
 import { HintProvider } from "./contexts/HintContext";
 import { Toaster } from "@/components/ui/sonner";
@@ -158,7 +157,6 @@ function App() {
                 </div>
               </main>
             </div>
-            <HintButton isGradingSidebarOpen={isGradingSidebarOpen} />
             <Toaster richColors closeButton />
             </LiveAPIProvider>
           </AuthGuard>

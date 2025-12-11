@@ -5,16 +5,17 @@ import { useHint } from "../../contexts/HintContext";
 
 interface HintButtonProps {
   isGradingSidebarOpen?: boolean;
+  inline?: boolean; // New prop to control inline vs fixed positioning
 }
 
-const HintButton: React.FC<HintButtonProps> = ({ isGradingSidebarOpen = false }) => {
+const HintButton: React.FC<HintButtonProps> = ({ isGradingSidebarOpen = false, inline = false }) => {
   const { showHints, toggleHints } = useHint();
 
   return (
     <button
       onClick={toggleHints}
       className={cn(
-        "fixed bottom-4 z-40 flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5",
+        "flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5",
         "border-[2px] md:border-[3px] border-black dark:border-white",
         showHints
           ? "bg-[#FFD93D] dark:bg-[#FFD93D] text-black"
@@ -26,13 +27,15 @@ const HintButton: React.FC<HintButtonProps> = ({ isGradingSidebarOpen = false })
         "hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:hover:shadow-[3px_3px_0_0_rgba(0,0,0,1)]",
         "hover:translate-x-0.5 hover:translate-y-0.5",
         "active:translate-x-1 active:translate-y-1 active:shadow-none",
-        isGradingSidebarOpen 
+        // Fixed positioning only when not inline
+        !inline && "fixed bottom-4 z-40",
+        !inline && (isGradingSidebarOpen 
           ? "left-[264px] md:left-[268px]" 
-          : "left-[48px] md:left-[48px]"
+          : "left-[48px] md:left-[48px]")
       )}
-      style={{
+      style={!inline ? {
         transition: "left 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
-      }}
+      } : undefined}
       title={showHints ? "Hide Hint" : "Show Hint"}
     >
       <Lightbulb className={cn(

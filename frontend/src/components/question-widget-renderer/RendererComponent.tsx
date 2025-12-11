@@ -24,6 +24,7 @@ import { useHint } from "../../contexts/HintContext";
 import { apiUtils } from "../../lib/api-utils";
 import { jwtUtils } from "../../lib/jwt-utils";
 import HintDisplay from "../hint-display/HintDisplay";
+import HintButton from "../hint-button/HintButton";
 
 const DASH_API_URL = import.meta.env.VITE_DASH_API_URL || 'http://localhost:8000';
 const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
@@ -45,6 +46,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isError, setIsError] = useState(false);
     const [error, setError] = useState<Error | null>(null);
+    const [isLoadingNextBatch, setIsLoadingNextBatch] = useState(false);
     const rendererRef = useRef<ServerItemRenderer>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -63,19 +65,66 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
             setIsError(false);
             setError(null);
 
-            try {
-                const response = await apiUtils.get(`${DASH_API_URL}/api/questions/16`);
-                
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch questions: ${response.status}`);
-                }
+            // Retry logic for connection errors with exponential backoff
+            const maxRetries = 3;
+            let retryCount = 0;
+            
+            const attemptFetch = async (): Promise<void> => {
+                try {
+                    // First, check for pre-loaded questions
+                    const preloadedResponse = await apiUtils.get(`${DASH_API_URL}/api/questions/preloaded`);
+                    if (preloadedResponse.ok) {
+                        const preloadedData = await preloadedResponse.json();
+                        if (preloadedData && preloadedData.length > 0) {
+                            setPerseusItems(preloadedData);
+                            setItem(0);
+                            setEndOfTest(false);
+                            setIsAnswered(false);
+                            setStartTime(Date.now());
+                            setIsLoading(false);
+                            return; // Use pre-loaded questions
+                        }
+                    } else if (preloadedResponse.status === 422) {
+                        // 422 means validation error, but we can still try fallback
+                        console.warn('Pre-loaded questions endpoint returned 422, using fallback');
+                    }
+                    
+                    // Fallback: Load initial 5 questions
+                    const response = await apiUtils.get(`${DASH_API_URL}/api/questions/5`);
+                    
+                    if (!response.ok) {
+                        // Don't retry on HTTP error codes (401, 403, 404, 500, etc.)
+                        throw new Error(`Failed to fetch questions: ${response.status}`);
+                    }
 
-                const data = await response.json();
-                setPerseusItems(data);
-                setItem(0);
-                setEndOfTest(false);
-                setIsAnswered(false);
-                setStartTime(Date.now());
+                    const data = await response.json();
+                    setPerseusItems(data);
+                    setItem(0);
+                    setEndOfTest(false);
+                    setIsAnswered(false);
+                    setStartTime(Date.now());
+                } catch (err) {
+                    // Check if it's a network/connection error that we should retry
+                    const isNetworkError = err instanceof TypeError && 
+                        (err.message.includes('Failed to fetch') || 
+                         err.message.includes('NetworkError') ||
+                         err.message.includes('ERR_CONNECTION_REFUSED'));
+                    
+                    if (isNetworkError && retryCount < maxRetries) {
+                        retryCount++;
+                        const backoffDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 2s, 4s, 8s
+                        console.log(`Retrying fetch (attempt ${retryCount}/${maxRetries}) after ${backoffDelay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, backoffDelay));
+                        return attemptFetch(); // Retry
+                    }
+                    
+                    // Not a retryable error or max retries reached
+                    throw err;
+                }
+            };
+
+            try {
+                await attemptFetch();
             } catch (err) {
                 console.error('Error fetching questions:', err);
                 setIsError(true);
@@ -88,6 +137,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         fetchQuestions();
     }, [user_id]);
 
+    // Fetch questions using apiUtils with JWT authentication
     useEffect(() => {
         if (isError) {
             const message = error?.message || "Unknown error fetching questions";
@@ -132,48 +182,54 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         }
     }, [isAnswered]);
 
-    // Auto-scroll to feedback when shown (scroll the question-panel container)
-    useEffect(() => {
-        if (showFeedback && scrollContainerRef.current) {
-            // Use setTimeout to ensure the DOM has updated with the feedback element
-            setTimeout(() => {
-                // Find the question-panel parent container to scroll
-                const questionPanel = scrollContainerRef.current?.closest('.question-panel');
-                if (questionPanel) {
-                    questionPanel.scrollTo({
-                        top: questionPanel.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                } else {
-                    // Fallback to window scroll if question-panel not found
-                    window.scrollTo({
-                        top: document.documentElement.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }
-            }, 100);
-        }
-    }, [showFeedback]);
+    // Auto-scroll removed - scrolling is now handled by the home screen container
 
-    // Auto-scroll to hints when shown
-    useEffect(() => {
-        if (showHints && scrollContainerRef.current) {
-            setTimeout(() => {
-                const questionPanel = scrollContainerRef.current?.closest('.question-panel');
-                if (questionPanel) {
-                    questionPanel.scrollTo({
-                        top: questionPanel.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                } else {
-                    window.scrollTo({
-                        top: document.documentElement.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }
-            }, 100);
+    // Load next batch of questions when approaching end
+    const loadNextBatch = async () => {
+        if (perseusItems.length === 0) return;
+        
+        // Prevent concurrent calls
+        if (isLoadingNextBatch) {
+            return;
         }
-    }, [showHints]);
+        
+        setIsLoadingNextBatch(true);
+        
+        try {
+            // Get current question IDs
+            const currentQuestionIds = perseusItems.map(
+                (item: any) => item.dash_metadata?.dash_question_id || ''
+            ).filter(Boolean);
+            
+            if (currentQuestionIds.length === 0) {
+                setIsLoadingNextBatch(false);
+                return; // No valid question IDs
+            }
+            
+            // Request next 5 questions
+            const response = await apiUtils.post(`${DASH_API_URL}/api/questions/recommend-next`, {
+                current_question_ids: currentQuestionIds,
+                count: 5
+            });
+            
+            if (!response.ok) {
+                console.warn('Failed to fetch next batch:', response.status);
+                setIsLoadingNextBatch(false);
+                return;
+            }
+            
+            const newQuestions = await response.json();
+            
+            // Only update if we got new questions (non-empty response means questions changed)
+            if (newQuestions.length > 0) {
+                setPerseusItems(prev => [...prev, ...newQuestions]);
+            }
+        } catch (err) {
+            console.error('Error loading next batch:', err);
+        } finally {
+            setIsLoadingNextBatch(false);
+        }
+    };
 
     const handleNext = () => {
         setItem((prev) => {
@@ -184,14 +240,17 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                 return prev; // stay at last valid index
             }
 
+            // Load next batch when 2 questions remaining
+            if (index === perseusItems.length - 2) {
+                loadNextBatch();
+            }
+
             if (index === perseusItems.length - 1) {
                 setEndOfTest(true);
             }
 
             setIsAnswered(false);
             setShowFeedback(false);
-            setShowHints(false); // Hide hints when moving to next question
-            setCurrentHintIndex(0); // Reset hint index
             setStartTime(Date.now()); // Reset timer for next question
             return index;
         });
@@ -256,33 +315,13 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         ? ((item + 1) / perseusItems.length) * 100
         : 0;
 
-    // Extract hints from perseusItem
-    const hints = React.useMemo(() => {
-        if (!perseusItem) {
-            return [];
-        }
-        // Hints are directly in perseusItem as extracted from itemData
-        const itemHints = (perseusItem as any).hints;
-        if (Array.isArray(itemHints) && itemHints.length > 0) {
-            return itemHints;
-        }
-        return [];
-    }, [perseusItem]);
+    // Extract hints from current question
+    const hints = (perseusItem as any)?.hints || [];
 
-    // Update hint count when hints change
-    React.useEffect(() => {
-        if (hints && hints.length > 0) {
-            setTotalHints(hints.length);
-        } else {
-            setTotalHints(0);
-        }
-    }, [hints, setTotalHints]);
-
-    // Reset hint index and hide hints when question changes
-    React.useEffect(() => {
+    // Reset hint index when question changes
+    useEffect(() => {
         setCurrentHintIndex(0);
-        setShowHints(false);
-    }, [item, setCurrentHintIndex, setShowHints]);
+    }, [item, setCurrentHintIndex]);
 
     return (
         <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
@@ -308,7 +347,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </CardTitle>
                             </div>
                             <CardDescription className="text-xs md:text-sm font-bold text-black uppercase tracking-wide">
-                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade.replace(/_/g, ' ')}` : `User: ${user_id}`}
+                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade}` : `User: ${user_id}`}
                             </CardDescription>
                         </div>
 
@@ -335,13 +374,13 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardHeader>
 
-                <CardContent className="px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
+                <CardContent className="flex-1 min-h-0 px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
-                        className="relative w-full overflow-visible"
+                        className="relative w-full min-h-full"
                     >
                         {endOfTest ? (
-                            <div className="flex min-h-[300px] items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
+                            <div className="flex h-full items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
                                 <div className="max-w-sm md:max-w-md border-[4px] md:border-[5px] border-black dark:border-white bg-[#4ADE80] px-6 md:px-8 py-8 md:py-10 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <div className="text-4xl md:text-6xl mb-3 md:mb-4">🎉</div>
                                     <p className="text-xl md:text-2xl font-black text-black uppercase mb-2 tracking-tight">
@@ -356,7 +395,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </div>
                             </div>
                         ) : isLoading ? (
-                            <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 md:gap-4">
+                            <div className="flex h-full flex-col items-center justify-center gap-3 md:gap-4">
                                 <div className="relative w-12 h-12 md:w-16 md:h-16">
                                     <div className="absolute inset-0 border-[3px] md:border-[4px] border-black dark:border-white"></div>
                                     <div className="absolute inset-0 border-[3px] md:border-[4px] border-transparent border-t-[#C4B5FD] animate-spin"></div>
@@ -367,7 +406,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                             </div>
                         ) : perseusItems.length > 0 ? (
                             <div className="space-y-4 md:space-y-6 py-3 md:py-4">
-                                <div id="question-content-container" className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <PerseusI18nContextProvider locale="en" strings={mockStrings}>
                                         <RenderStateRoot>
                                             <ServerItemRenderer
@@ -391,7 +430,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 </div>
 
                                 {/* Hints Display */}
-                                {hints && hints.length > 0 && (
+                                {hints.length > 0 && (
                                     <HintDisplay hints={hints} />
                                 )}
 
@@ -427,7 +466,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                 )}
                             </div>
                         ) : (
-                            <div className="flex min-h-[300px] items-center justify-center">
+                            <div className="flex h-full items-center justify-center">
                                 <div className="text-center space-y-2 md:space-y-3 border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-6 md:p-8 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <div className="text-3xl md:text-4xl mb-1 md:mb-2">📝</div>
                                     <p className="text-xs md:text-sm font-black uppercase text-black dark:text-white tracking-wider">
@@ -439,26 +478,29 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardContent>
 
-                <CardFooter className="flex justify-end gap-2 md:gap-3 px-4 md:px-6 pb-4 md:pb-5 pt-3 md:pt-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
-                    <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleSubmit}
-                        disabled={isLoading || endOfTest || perseusItems.length === 0}
-                        className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-[#C4B5FD] hover:bg-[#C4B5FD] text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:hover:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:hover:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
-                    >
-                        Submit
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleNext}
-                        disabled={isLoading || endOfTest || perseusItems.length === 0}
-                        className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
-                    >
-                        Next →
-                    </Button>
+                <CardFooter className="flex justify-between items-center gap-2 md:gap-3 px-4 md:px-6 pb-4 md:pb-5 pt-3 md:pt-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
+                    <HintButton inline={true} />
+                    <div className="flex gap-2 md:gap-3">
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleSubmit}
+                            disabled={isLoading || endOfTest || perseusItems.length === 0}
+                            className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-[#C4B5FD] hover:bg-[#C4B5FD] text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:hover:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:hover:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
+                        >
+                            Submit
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleNext}
+                            disabled={isLoading || endOfTest || perseusItems.length === 0}
+                            className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
+                        >
+                            Next →
+                        </Button>
+                    </div>
                 </CardFooter>
             </Card>
         </div>

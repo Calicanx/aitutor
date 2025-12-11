@@ -1,7 +1,7 @@
 /**
- * Landing Page Neo: Extreme Neo-Brutalism Style
+ * Landing Page Neo: Matching designprompts.dev Neo-Brutalism Reference
  * Content from landing-page-content_2.md
- * Mobile-first, visually appealing, interactive with animations
+ * Visual style matching the reference screenshots
  */
 import React, { useEffect, useState } from 'react';
 import TeachrLogo from './TeachrLogo';
@@ -13,361 +13,354 @@ interface LandingPageNeoProps {
 
 const LandingPageNeo: React.FC<LandingPageNeoProps> = ({ onGetStarted }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
     setIsVisible(true);
-    const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   return (
-    <div className="landing-page landing-page-neo">
-      {/* Background texture overlay */}
-      <div className="neo-bg-texture" />
-      
-      <div className="landing-container">
-        {/* Header with decorative badge */}
-        <header className="landing-header neo-header">
-          <TeachrLogo size="medium" />
-          <div className="neo-badge neo-badge-header" style={{ transform: 'rotate(3deg)' }}>
-            NEW
-          </div>
-        </header>
-
-        {/* Hero Section with extreme styling */}
-        <section className="landing-hero neo-hero">
-          {/* Decorative floating shapes - positioned behind content */}
-          <div className="neo-shape neo-shape-1" />
-          <div className="neo-shape neo-shape-2" />
-          <div className="neo-shape neo-shape-3" />
-          
-          <div className="hero-content" style={{ opacity: isVisible ? 1 : 0, transition: 'opacity 0.5s ease-out' }}>
-            {/* Badge */}
-            <div className="neo-badge neo-badge-hero" style={{ transform: 'rotate(-2deg)' }}>
-              ACTUALLY UNDERSTAND
+    <div className="landing-page landing-page-neo-ref">
+      {/* ===== HEADER ===== */}
+      <header className="neo-ref-header">
+        <div className="neo-ref-container">
+          <div className="neo-ref-header-content">
+            <div className="neo-ref-logo">
+              <TeachrLogo size="large" />
             </div>
-            
-            <h1 className="hero-title neo-title-stroke">
-              What If You Actually Understood It?
+            <button onClick={onGetStarted} className="neo-ref-button neo-ref-button-primary">
+              GET STARTED
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ===== HERO SECTION with Halftone Background ===== */}
+      <section className="neo-ref-hero">
+        <div className="neo-ref-container">
+          {/* Floating decorative shapes */}
+          <div className="neo-ref-shape neo-ref-shape-red" style={{ top: '10%', left: '5%' }} />
+          <div className="neo-ref-shape neo-ref-shape-yellow neo-ref-shape-circle" style={{ top: '15%', right: '8%' }} />
+          
+          <div className="neo-ref-hero-content">
+            <h1 className="neo-ref-hero-title">
+              <span className="neo-ref-title-line">WHAT IF YOU</span>
+              <span className="neo-ref-title-line neo-ref-title-highlight">ACTUALLY UNDERSTOOD IT?</span>
             </h1>
-            <p className="hero-subtitle">
-              Not memorized it for the test. Not faked your way through it. Actually got it. That's what we're building.
-            </p>
-            <div className="hero-cta-wrapper">
-              <button 
-                onClick={onGetStarted}
-                className="cta-button cta-button-neo neo-button-press"
-              >
-                Try It Free
-              </button>
-              <div className="neo-badge neo-badge-cta" style={{ transform: 'rotate(5deg)' }}>
-                NO CREDIT CARD
+            
+            <div className="neo-ref-hero-description">
+              <p className="neo-ref-text-large">
+                Not memorized it for the test. Not faked your way through it. Actually got it. That's what we're building.
+              </p>
+              
+              <div className="neo-ref-hero-cta">
+                <button onClick={onGetStarted} className="neo-ref-button neo-ref-button-cta">
+                  TRY IT FREE
+                </button>
+                <div className="neo-ref-badge neo-ref-badge-rotate">NO CREDIT CARD</div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* The Real Problem Section */}
-        <section className="neo-section neo-section-white" style={{ 
-          transform: `translateY(${Math.min(scrollY * 0.1, 50)}px)`,
-          transition: 'transform 0.1s ease-out'
-        }}>
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large">The Real Problem</h2>
-            <h3 className="neo-heading-medium">You Don't Need More Content.<br />You Need Better Understanding.</h3>
+      {/* ===== THE REAL PROBLEM (White Section) ===== */}
+      <section className="neo-ref-section neo-ref-section-white">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <div className="neo-ref-badge neo-ref-badge-small">THE PROBLEM</div>
+            <h2 className="neo-ref-heading-xl">THE REAL PROBLEM</h2>
+            <h3 className="neo-ref-heading-lg">You Don't Need More Content.<br />You Need Better Understanding.</h3>
           </div>
-          <div className="neo-card neo-card-lifted">
-            <p className="neo-text-large">
+
+          <div className="neo-ref-card neo-ref-card-main">
+            <p className="neo-ref-text-xl neo-ref-text-bold">
               The internet has more educational content than any human could consume in ten lifetimes.
             </p>
-            <p className="neo-text-body">
+            <p className="neo-ref-text-md">
               Khan Academy. YouTube. Coursera. Udemy. Brilliant. That random guy with a whiteboard who pronounces "integral" weird.
             </p>
-            <p className="neo-text-emphasis">
+            <p className="neo-ref-text-xl neo-ref-text-emphasis">
               You're not struggling because there's not enough out there. You're struggling because none of it was built for you.
             </p>
-            <p className="neo-text-body">
+            <p className="neo-ref-text-md">
               Generic explanations. One-size-fits-all pacing. Videos that assume you understood minute three when you got lost at minute one.
             </p>
-            <p className="neo-text-large neo-text-bold">
+            <p className="neo-ref-text-xl neo-ref-text-black">
               More content isn't the answer. Better teaching is.
             </p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* The Difference Section - Yellow background with texture */}
-        <section className="neo-section neo-section-yellow">
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large">The Difference</h2>
-            <h3 className="neo-heading-medium">Teaching vs. Content</h3>
+      {/* ===== THE DIFFERENCE (Yellow Section with Grid) ===== */}
+      <section className="neo-ref-section neo-ref-section-yellow">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <h2 className="neo-ref-heading-xl">THE DIFFERENCE</h2>
+            <h3 className="neo-ref-heading-lg">Teaching vs. Content</h3>
           </div>
-          <div className="neo-comparison-grid">
-            <div className="neo-card neo-card-comparison neo-card-red-border" style={{ transform: 'rotate(-1deg)' }}>
-              <div className="neo-badge neo-badge-card" style={{ transform: 'rotate(8deg)' }}>
-                CONTENT
-              </div>
-              <h4 className="neo-card-title" style={{ color: '#FF6B6B' }}>Content</h4>
-              <p className="neo-text-body">is a video you pause, rewind, pause again, then give up on.</p>
-              <p className="neo-text-body">moves at its own pace.</p>
-              <p className="neo-text-body">doesn't know if you understood.</p>
+
+          <div className="neo-ref-comparison-wrapper">
+            <div className="neo-ref-card neo-ref-card-rotate-left">
+              <div className="neo-ref-badge neo-ref-badge-red neo-ref-badge-corner">CONTENT</div>
+              <h4 className="neo-ref-card-title neo-ref-text-red">Content</h4>
+              <ul className="neo-ref-list-simple">
+                <li>is a video you pause, rewind, pause again, then give up on.</li>
+                <li>moves at its own pace.</li>
+                <li>doesn't know if you understood.</li>
+              </ul>
             </div>
-            <div className="neo-card neo-card-comparison" style={{ transform: 'rotate(1deg)' }}>
-              <div className="neo-badge neo-badge-card neo-badge-yellow" style={{ transform: 'rotate(-8deg)' }}>
-                TEACHING
-              </div>
-              <h4 className="neo-card-title">Teaching</h4>
-              <p className="neo-text-body">is someone who notices you're confused and tries a different angle.</p>
-              <p className="neo-text-body">moves at yours.</p>
-              <p className="neo-text-body">checks. And adjusts. And checks again.</p>
+
+            <div className="neo-ref-card neo-ref-card-rotate-right">
+              <div className="neo-ref-badge neo-ref-badge-yellow neo-ref-badge-corner">TEACHING</div>
+              <h4 className="neo-ref-card-title">Teaching</h4>
+              <ul className="neo-ref-list-simple">
+                <li>is someone who notices you're confused and tries a different angle.</li>
+                <li>moves at yours.</li>
+                <li>checks. And adjusts. And checks again.</li>
+              </ul>
             </div>
           </div>
-          <p className="neo-statement-large">
+
+          <p className="neo-ref-statement">
             teachr isn't content. It's teaching.
           </p>
-        </section>
+        </div>
+      </section>
 
-        {/* What Actually Changes Section */}
-        <section className="neo-section neo-section-cream">
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large">What Actually Changes</h2>
-            <h3 className="neo-heading-medium">When Learning Finally Works</h3>
+      {/* ===== WHAT ACTUALLY CHANGES (Cream Section) ===== */}
+      <section className="neo-ref-section neo-ref-section-cream">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <h2 className="neo-ref-heading-xl">WHAT ACTUALLY CHANGES</h2>
+            <h3 className="neo-ref-heading-lg">When Learning Finally Works</h3>
           </div>
-          <div className="neo-grid neo-grid-2">
+
+          <div className="neo-ref-grid neo-ref-grid-2">
             {[
               {
                 title: "You stop avoiding the subject.",
-                description: "That class you dread? The homework you leave until last? It's not because you're bad at it. It's because no one's taught you properly yet.",
-                rotation: -1
+                text: "That class you dread? The homework you leave until last? It's not because you're bad at it. It's because no one's taught you properly yet."
               },
               {
                 title: "You build real confidence.",
-                description: "Not the fake kind where you hope the test questions are easy. The kind where you walk in knowing you've got this.",
-                rotation: 1
+                text: "Not the fake kind where you hope the test questions are easy. The kind where you walk in knowing you've got this."
               },
               {
                 title: "You save time.",
-                description: "No more watching 45-minute videos for 3 minutes of relevance. No more hunting through forums for someone who had your exact question. Just direct answers to what you actually need.",
-                rotation: -1
+                text: "No more watching 45-minute videos for 3 minutes of relevance. No more hunting through forums for someone who had your exact question. Just direct answers to what you actually need."
               },
               {
                 title: "You start to like it.",
-                description: "Controversial opinion: most subjects are interesting when you actually understand them. Math isn't boring. Bad teaching is boring.",
-                rotation: 1
+                text: "Controversial opinion: most subjects are interesting when you actually understand them. Math isn't boring. Bad teaching is boring."
               }
             ].map((item, idx) => (
-              <div
-                key={idx}
-                className="neo-card neo-card-hover"
-                style={{ transform: `rotate(${item.rotation}deg)` }}
-              >
-                <h4 className="neo-card-title">{item.title}</h4>
-                <p className="neo-text-body">{item.description}</p>
+              <div key={idx} className={`neo-ref-card ${idx % 2 === 0 ? 'neo-ref-card-rotate-left' : 'neo-ref-card-rotate-right'}`}>
+                <h4 className="neo-ref-card-title">{item.title}</h4>
+                <p className="neo-ref-text-md">{item.text}</p>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* How It Works Section - Violet background */}
-        <section className="neo-section neo-section-violet">
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large">How It Works</h2>
-            <h3 className="neo-heading-medium">Simple. Like It Should Be.</h3>
+      {/* ===== HOW IT WORKS (Violet Section with Grid Pattern) ===== */}
+      <section className="neo-ref-section neo-ref-section-violet">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <div className="neo-ref-badge neo-ref-badge-yellow">PROCESS</div>
+            <h2 className="neo-ref-heading-xl">HOW IT WORKS</h2>
+            <h3 className="neo-ref-heading-lg">Simple. Like It Should Be.</h3>
           </div>
-          <div className="neo-grid neo-grid-3">
+
+          <div className="neo-ref-grid neo-ref-grid-3">
             {[
               {
-                number: '1',
-                title: 'Bring Your Problem',
-                description: 'A concept. A homework question. A "why does this even exist" rant. All valid starting points.',
-                rotation: -2
+                num: "1",
+                title: "Bring Your Problem",
+                text: 'A concept. A homework question. A "why does this even exist" rant. All valid starting points.'
               },
               {
-                number: '2',
-                title: 'Learn Your Way',
-                description: 'Visual learner? We\'ll draw it out. Need real-world examples? Got those. Want the formal proof? Sure, weirdo, we have that too.',
-                rotation: 0
+                num: "2",
+                title: "Learn Your Way",
+                text: "Visual learner? We'll draw it out. Need real-world examples? Got those. Want the formal proof? Sure, weirdo, we have that too."
               },
               {
-                number: '3',
-                title: 'Move On When You\'re Ready',
-                description: 'Not when the video ends. Not when the bell rings. When you actually get it.',
-                rotation: 2
+                num: "3",
+                title: "Move On When You're Ready",
+                text: "Not when the video ends. Not when the bell rings. When you actually get it."
               }
             ].map((step, idx) => (
-              <div
-                key={idx}
-                className="neo-card neo-card-step neo-card-hover"
-                style={{ transform: `rotate(${step.rotation}deg)` }}
-              >
-                <div className="neo-step-number">{step.number}</div>
-                <h4 className="neo-card-title">{step.title}</h4>
-                <p className="neo-text-body">{step.description}</p>
+              <div key={idx} className={`neo-ref-card neo-ref-card-step ${idx === 0 ? 'neo-ref-card-rotate-left' : idx === 2 ? 'neo-ref-card-rotate-right' : ''}`}>
+                <div className="neo-ref-step-badge">{step.num}</div>
+                <h4 className="neo-ref-card-title">{step.title}</h4>
+                <p className="neo-ref-text-md">{step.text}</p>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Currently Teaching Section */}
-        <section className="neo-section neo-section-white">
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large">Currently Teaching</h2>
-            <h3 className="neo-heading-medium">Math. All of It.</h3>
+      {/* ===== CURRENTLY TEACHING (White Section) ===== */}
+      <section className="neo-ref-section neo-ref-section-white">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <h2 className="neo-ref-heading-xl">CURRENTLY TEACHING</h2>
+            <h3 className="neo-ref-heading-lg">Math. All of It.</h3>
           </div>
-          <div className="neo-card neo-card-lifted" style={{ maxWidth: '800px', margin: '0 auto 40px' }}>
-            <ul className="neo-list">
-              {[
-                'Arithmetic (no shame)',
-                'Algebra',
-                'Geometry',
-                'Trigonometry',
-                'Calculus',
-                'Statistics',
-                'Whatever hybrid monster your curriculum invented'
-              ].map((subject, idx) => (
-                <li key={idx} className="neo-list-item">
-                  <span className="neo-list-bullet" />
-                  {subject}
-                </li>
-              ))}
-            </ul>
+
+          <div className="neo-ref-content-narrow">
+            <div className="neo-ref-card neo-ref-card-main">
+              <ul className="neo-ref-list-bullets">
+                <li><span className="neo-ref-bullet" />Arithmetic (no shame)</li>
+                <li><span className="neo-ref-bullet" />Algebra</li>
+                <li><span className="neo-ref-bullet" />Geometry</li>
+                <li><span className="neo-ref-bullet" />Trigonometry</li>
+                <li><span className="neo-ref-bullet" />Calculus</li>
+                <li><span className="neo-ref-bullet" />Statistics</li>
+                <li><span className="neo-ref-bullet" />Whatever hybrid monster your curriculum invented</li>
+              </ul>
+            </div>
+
+            <div className="neo-ref-card neo-ref-card-yellow" style={{ marginTop: '32px' }}>
+              <h4 className="neo-ref-card-title">Chemistry & Biology — Coming Soon</h4>
+              <p className="neo-ref-text-md">
+                We're building those out now. Want early access?{' '}
+                <a href="#" onClick={(e) => { e.preventDefault(); onGetStarted(); }} className="neo-ref-link">
+                  Get on the list.
+                </a>
+              </p>
+            </div>
           </div>
-          <div className="neo-card neo-card-yellow neo-card-lifted" style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <h4 className="neo-card-title">Chemistry & Biology — Coming Soon</h4>
-            <p className="neo-text-body">
-              We're building those out now. Want early access?{' '}
-              <a 
-                href="#" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  onGetStarted();
-                }}
-                className="neo-link"
-              >
-                Get on the list.
-              </a>
+        </div>
+      </section>
+
+      {/* ===== THE HONEST TRUTH (Black Section) ===== */}
+      <section className="neo-ref-section neo-ref-section-black">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <h2 className="neo-ref-heading-xl neo-ref-text-white">THE HONEST TRUTH</h2>
+            <h3 className="neo-ref-heading-lg neo-ref-text-white">This Works If You Work</h3>
+          </div>
+
+          <div className="neo-ref-card neo-ref-card-white neo-ref-content-narrow">
+            <p className="neo-ref-text-md">We're not selling magic. We're selling a better tool.</p>
+            <p className="neo-ref-text-md">You still have to show up. You still have to try. You still have to do the practice problems.</p>
+            <p className="neo-ref-text-md">But when you do? You'll actually understand them. Not just survive them.</p>
+            <p className="neo-ref-text-xl neo-ref-text-emphasis">
+              The difference between "I passed" and "I get it" is better teaching.
+            </p>
+            <p className="neo-ref-text-md">That's what we're here for.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== WHO GETS THE MOST OUT (Cream Section) ===== */}
+      <section className="neo-ref-section neo-ref-section-cream">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <h2 className="neo-ref-heading-xl">WHO GETS THE MOST OUT OF THIS</h2>
+            <h3 className="neo-ref-heading-lg">Be Honest. Is This You?</h3>
+          </div>
+
+          <div className="neo-ref-content-narrow">
+            <div className="neo-ref-card neo-ref-card-main">
+              <ul className="neo-ref-list-checks">
+                <li><span className="neo-ref-check">✓</span>You've told yourself you're "just not a math person"</li>
+                <li><span className="neo-ref-check">✓</span>You've watched the same concept explained 10 different ways and still don't get it</li>
+                <li><span className="neo-ref-check">✓</span>You're tired of feeling behind</li>
+                <li><span className="neo-ref-check">✓</span>You learn differently and regular classes don't work for you</li>
+                <li><span className="neo-ref-check">✓</span>You want to actually understand, not just pass</li>
+              </ul>
+            </div>
+
+            <p className="neo-ref-statement" style={{ marginTop: '48px' }}>
+              If you nodded at any of those, we built this for you.
             </p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* The Honest Truth Section - Black background */}
-        <section className="neo-section neo-section-black">
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large neo-heading-white">The Honest Truth</h2>
-            <h3 className="neo-heading-medium neo-heading-white">This Works If You Work</h3>
+      {/* ===== WHAT WE'RE NOT (White Section) ===== */}
+      <section className="neo-ref-section neo-ref-section-white">
+        <div className="neo-ref-container">
+          <div className="neo-ref-section-header">
+            <h2 className="neo-ref-heading-xl">WHAT WE'RE NOT</h2>
+            <h3 className="neo-ref-heading-lg">Clarity Is Kindness</h3>
           </div>
-          <div className="neo-card neo-card-white neo-card-lifted" style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <p className="neo-text-body">We're not selling magic. We're selling a better tool.</p>
-            <p className="neo-text-body">You still have to show up. You still have to try. You still have to do the practice problems.</p>
-            <p className="neo-text-body">But when you do? You'll actually understand them. Not just survive them.</p>
-            <p className="neo-text-emphasis">The difference between "I passed" and "I get it" is better teaching.</p>
-            <p className="neo-text-body">That's what we're here for.</p>
-          </div>
-        </section>
 
-        {/* Who Gets the Most Out of This Section */}
-        <section className="neo-section neo-section-cream">
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large">Who Gets the Most Out of This</h2>
-            <h3 className="neo-heading-medium">Be Honest. Is This You?</h3>
-          </div>
-          <div className="neo-card neo-card-lifted" style={{ maxWidth: '900px', margin: '0 auto 32px' }}>
-            <ul className="neo-list neo-list-check">
-              {[
-                'You\'ve told yourself you\'re "just not a math person"',
-                'You\'ve watched the same concept explained 10 different ways and still don\'t get it',
-                'You\'re tired of feeling behind',
-                'You learn differently and regular classes don\'t work for you',
-                'You want to actually understand, not just pass'
-              ].map((item, idx) => (
-                <li key={idx} className="neo-list-item neo-list-item-check">
-                  <span className="neo-checkbox" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <p className="neo-statement-large">
-            If you nodded at any of those, we built this for you.
-          </p>
-        </section>
-
-        {/* What We're Not Section */}
-        <section className="neo-section neo-section-white">
-          <div className="neo-section-header">
-            <h2 className="neo-heading-large">What We're Not</h2>
-            <h3 className="neo-heading-medium">Clarity Is Kindness</h3>
-          </div>
-          <div className="neo-grid neo-grid-3">
+          <div className="neo-ref-grid neo-ref-grid-3">
             {[
               {
                 title: "We're not a homework cheat code.",
-                description: "If you want answers without understanding, go somewhere else. We're not interested.",
-                rotation: -1
+                text: "If you want answers without understanding, go somewhere else. We're not interested."
               },
               {
                 title: "We're not replacing your teachers.",
-                description: "Good teachers are irreplaceable. We're the support system for when they're not available.",
-                rotation: 1
+                text: "Good teachers are irreplaceable. We're the support system for when they're not available."
               },
               {
                 title: "We're not a miracle.",
-                description: "We're a tool. A really good one. But you still have to use it.",
-                rotation: -1
+                text: "We're a tool. A really good one. But you still have to use it."
               }
             ].map((item, idx) => (
-              <div
-                key={idx}
-                className="neo-card neo-card-cream neo-card-hover"
-                style={{ transform: `rotate(${item.rotation}deg)` }}
-              >
-                <h4 className="neo-card-title">{item.title}</h4>
-                <p className="neo-text-body">{item.description}</p>
+              <div key={idx} className={`neo-ref-card neo-ref-card-cream ${idx % 2 === 0 ? 'neo-ref-card-rotate-left' : 'neo-ref-card-rotate-right'}`}>
+                <h4 className="neo-ref-card-title">{item.title}</h4>
+                <p className="neo-ref-text-md">{item.text}</p>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* The Pitch Section - CTA */}
-        <section className="landing-cta neo-section-cta">
-          <div className="neo-badge neo-badge-cta-large" style={{ transform: 'rotate(-3deg)' }}>
-            ONE SENTENCE
+      {/* ===== THE PITCH - FINAL CTA (Black Section with Coral Card) ===== */}
+      <section className="neo-ref-section neo-ref-section-black">
+        <div className="neo-ref-container">
+          <div className="neo-ref-cta-box">
+            <div className="neo-ref-badge neo-ref-badge-large neo-ref-badge-rotate">ONE SENTENCE</div>
+            
+            <h2 className="neo-ref-cta-title">THE PITCH</h2>
+            <h3 className="neo-ref-cta-subtitle">One Sentence. No Tricks.</h3>
+            
+            <p className="neo-ref-cta-text">
+              A personalized math tutor that's available 24/7, adapts to how you learn, and actually helps you understand.
+            </p>
+            
+            <p className="neo-ref-cta-subtext">
+              That's it. That's the product.
+            </p>
+            
+            <button onClick={onGetStarted} className="neo-ref-button neo-ref-button-massive">
+              START LEARNING NOW
+            </button>
           </div>
-          <h2 className="neo-heading-large">The Pitch</h2>
-          <h3 className="neo-heading-medium">One Sentence. No Tricks.</h3>
-          <p className="neo-text-large" style={{ maxWidth: '800px', margin: '0 auto 24px' }}>
-            A personalized math tutor that's available 24/7, adapts to how you learn, and actually helps you understand.
-          </p>
-          <p className="neo-text-body" style={{ marginBottom: '40px' }}>
-            That's it. That's the product.
-          </p>
-          <button 
-            onClick={onGetStarted}
-            className="cta-button cta-button-neo cta-button-large neo-button-press neo-button-pulse"
-          >
-            Start Learning Now
-          </button>
-        </section>
+        </div>
+      </section>
 
-        {/* Footer */}
-        <footer className="landing-footer neo-footer">
-          <h3 className="neo-footer-title">teachr.live</h3>
-          <p className="neo-footer-tagline">Finally, teaching that teaches.</p>
-          <p className="neo-footer-contact">
-            Questions?{' '}
-            <a 
-              href="mailto:contact@teachr.live" 
-              className="neo-link"
-            >
-              contact@teachr.live
-            </a>
-          </p>
-          <p className="neo-footer-quote">
-            Because understanding beats memorizing. Every time.
-          </p>
-        </footer>
-      </div>
+      {/* ===== FOOTER (Yellow Section) ===== */}
+      <footer className="neo-ref-footer">
+        <div className="neo-ref-container">
+          <div className="neo-ref-footer-content">
+            <div className="neo-ref-footer-brand">
+              <TeachrLogo size="large" />
+              <p className="neo-ref-footer-tagline">Finally, teaching that teaches.</p>
+            </div>
+            
+            <div className="neo-ref-footer-contact">
+              <p>Questions?</p>
+              <a href="mailto:contact@teachr.live" className="neo-ref-link-black">
+                contact@teachr.live
+              </a>
+            </div>
+          </div>
+          
+          <div className="neo-ref-footer-bottom">
+            <p className="neo-ref-footer-quote">
+              Because understanding beats memorizing. Every time.
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

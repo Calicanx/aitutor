@@ -94,6 +94,20 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
     };
   }, [onFrameCaptured]);
 
+  useEffect(() => {
+    if (captureRef.current) {
+      const rect = captureRef.current.getBoundingClientRect();
+      const style = window.getComputedStyle(captureRef.current);
+      console.log('📸 ScratchpadCapture Wrapper:', {
+        dimensions: { width: rect.width, height: rect.height },
+        pointerEvents: style.pointerEvents,
+        display: style.display,
+        position: style.position,
+        zIndex: style.zIndex
+      });
+    }
+  }, []);
+
   return (
     <div
       ref={captureRef}
@@ -102,7 +116,8 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
         width: '100%',
         height: '100%',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        pointerEvents: 'auto'
       }}
     >
       {children}

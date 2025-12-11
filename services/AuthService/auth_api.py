@@ -58,13 +58,7 @@ class CompleteSetupRequest(BaseModel):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    oauth_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
-    return {
-        "status": "healthy", 
-        "service": "AuthService",
-        "oauth_configured": oauth_configured,
-        "port": int(os.environ.get("PORT", 8003))
-    }
+    return {"status": "healthy", "service": "AuthService"}
 
 
 @app.get("/auth/google")
@@ -76,13 +70,6 @@ async def google_login():
             "authorization_url": authorization_url,
             "state": state
         }
-    except ValueError as e:
-        # Missing OAuth credentials
-        logger.error(f"OAuth configuration error: {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"OAuth not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables. Error: {str(e)}"
-        )
     except Exception as e:
         logger.error(f"Error initiating Google OAuth: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to initiate OAuth: {str(e)}")

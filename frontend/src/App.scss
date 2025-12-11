@@ -182,6 +182,8 @@ body {
   margin-top: 48px; // Reduced from 56px
   position: relative;
   background: var(--neo-bg);
+  overflow-y: auto; // Enable scrolling when content exceeds viewport
+  overflow-x: hidden;
 
   // Responsive layout
   @media (max-width: 768px) {
@@ -214,7 +216,7 @@ body {
     flex-grow: 1;
     gap: 0.75rem;
     width: 100%;
-    overflow: hidden;
+    overflow: visible; // Allow content to flow so parent can scroll
     transition: margin-right 300ms ease-in-out, margin-left 300ms ease-in-out;
     background: var(--neo-bg);
 
@@ -250,7 +252,6 @@ body {
     align-items: center;
     justify-content: flex-start;
     min-height: 100vh;
-    overflow-y: auto;
     overflow-x: hidden;
     background: var(--neo-bg);
 

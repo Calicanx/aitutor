@@ -8,26 +8,16 @@ if [[ -f ".env" ]]; then
     echo "Loading environment variables from .env file..."
     # Read .env file and export variables (works on Windows/Git Bash)
     while IFS='=' read -r key value; do
-        # Skip comments, empty lines, and lines that start with #
+        # Skip comments and empty lines
         [[ $key =~ ^[[:space:]]*#.*$ ]] && continue
         [[ -z "$key" ]] && continue
-        [[ $key =~ ^# ]] && continue
-        
         # Remove leading/trailing whitespace
         key=$(echo "$key" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-        
-        # Skip if key starts with # or is empty after trimming
-        [[ -z "$key" ]] && continue
-        [[ $key =~ ^# ]] && continue
-        
         # Remove quotes from value if present
         value=$(echo "$value" | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
-        
-        # Only export if key is valid (contains only alphanumeric and underscore)
-        if [[ $key =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
-            export "$key=$value"
-            echo "  Loaded: $key"
-        fi
+        # Export the variable
+        export "$key=$value"
+        echo "  Loaded: $key"
     done < .env
     echo "✅ Environment variables loaded from .env"
 else
@@ -107,46 +97,6 @@ cleanup() {
 # Trap the INT signal (sent by Ctrl+C) to run the cleanup function
 trap cleanup INT
 
-# Function to check if a port is in use and kill the process
-check_and_free_port() {
-    local port=$1
-    local service_name=$2
-    if lsof -ti:$port > /dev/null 2>&1 || fuser $port/tcp > /dev/null 2>&1; then
-        echo "⚠️  Port $port is already in use. Freeing it for $service_name..."
-        lsof -ti:$port 2>/dev/null | xargs kill -9 2>/dev/null || true
-        fuser -k $port/tcp 2>/dev/null || true
-        sleep 1
-    fi
-}
-
-# Function to wait for a service to be ready
-wait_for_service() {
-    local url=$1
-    local service_name=$2
-    local max_attempts=30
-    local attempt=0
-    
-    echo "Waiting for $service_name to be ready..."
-    while [ $attempt -lt $max_attempts ]; do
-        if curl -s "$url" > /dev/null 2>&1; then
-            echo "✅ $service_name is ready"
-            return 0
-        fi
-        attempt=$((attempt + 1))
-        sleep 1
-    done
-    echo "⚠️  $service_name may not be ready yet (checked $max_attempts times)"
-    return 1
-}
-
-# Free up ports before starting services
-echo "Checking and freeing ports..."
-check_and_free_port 8000 "DASH API"
-check_and_free_port 8001 "SherlockED API"
-check_and_free_port 8002 "TeachingAssistant"
-check_and_free_port 8003 "Auth Service"
-check_and_free_port 8767 "Tutor Service"
-check_and_free_port 3000 "Frontend"
 
 # Start the FastAPI server in the background
 echo "Starting DASH API server... Logs -> logs/dash_api.log"
@@ -173,22 +123,37 @@ echo "Starting Auth Service API server... Logs -> logs/auth_service.log"
 (cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/AuthService/auth_api.py) > "$SCRIPT_DIR/logs/auth_service.log" 2>&1 &
 pids+=($!)
 
-# Give the backend servers a moment to start
-echo "Waiting for backend services to initialize..."
-sleep 5
-
-# Wait for critical services to be ready (with timeout)
-echo "Verifying services are ready..."
-wait_for_service "http://localhost:8000/health" "DASH API" || echo "⚠️  DASH API health check failed, but continuing..."
-wait_for_service "http://localhost:8002/health" "TeachingAssistant" || echo "⚠️  TeachingAssistant health check failed, but continuing..."
-wait_for_service "http://localhost:8003/health" "Auth Service" || echo "⚠️  Auth Service health check failed, but continuing..."
-wait_for_service "http://localhost:8001/health" "SherlockED API" || echo "⚠️  SherlockED API health check failed, but continuing..."
-
 # Extract ports dynamically from configuration files
 FRONTEND_PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "$SCRIPT_DIR/frontend/vite.config.ts" 2>/dev/null | grep -o '[0-9]*' || echo "3000")
 DASH_API_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/DashSystem/dash_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8000")
+
+# Give the backend servers a moment to start
+echo "Waiting for backend services to initialize..."
+sleep 2
+
+# Wait for DASH API to be ready (it takes time to load questions from MongoDB)
+echo "Waiting for DASH API to initialize (this may take a few seconds)..."
+MAX_WAIT=60
+WAIT_COUNT=0
+
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    # Check if DASH API health endpoint returns ready status
+    if curl -s "http://localhost:$DASH_API_PORT/health" 2>/dev/null | grep -q '"ready":true'; then
+        echo "✅ DASH API is ready"
+        break
+    fi
+    sleep 1
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    if [ $((WAIT_COUNT % 5)) -eq 0 ]; then
+        echo "  Still waiting for DASH API... ($WAIT_COUNT seconds)"
+    fi
+done
+
+if [ $WAIT_COUNT -eq $MAX_WAIT ]; then
+    echo "⚠️  Warning: DASH API may not be fully ready, but continuing..."
+fi
 SHERLOCKED_API_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/SherlockEDApi/run_backend.py" 2>/dev/null | grep -o '[0-9]*' || echo "8001")
-TEACHING_ASSISTANT_PORT=$(grep -o '"8002"' "$SCRIPT_DIR/services/TeachingAssistant/api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8002")
+TEACHING_ASSISTANT_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/TeachingAssistant/api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8002")
 AUTH_SERVICE_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/AuthService/auth_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8003")
 
 # Ensure all port variables are properly set (fallback to defaults if extraction failed)
