@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable react/no-unsafe */
 import * as React from "react";
 

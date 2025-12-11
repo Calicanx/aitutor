@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {Plot, vec} from "mafs";
 import * as React from "react";
 

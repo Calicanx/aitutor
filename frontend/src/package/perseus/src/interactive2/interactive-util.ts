@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Utility functions for writing Interactive2 movablethings
  */

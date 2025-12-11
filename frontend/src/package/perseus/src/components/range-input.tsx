@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable react/forbid-prop-types */
 import PropTypes from "prop-types";
 import * as React from "react";

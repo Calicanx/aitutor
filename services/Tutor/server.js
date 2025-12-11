@@ -77,27 +77,10 @@ const server = http.createServer((req, res) => {
 });
 
 // Create WebSocket server attached to HTTP server
+// NOTE: perMessageDeflate disabled to reduce audio latency - compression adds overhead
 const wss = new WebSocketServer({
   noServer: true,
-  perMessageDeflate: {
-    zlibDeflateOptions: {
-      // See zlib defaults.
-      chunkSize: 1024,
-      memLevel: 7,
-      level: 3
-    },
-    zlibInflateOptions: {
-      chunkSize: 10 * 1024
-    },
-    // Other options settable:
-    clientNoContextTakeover: true, // Defaults to negotiated value.
-    serverNoContextTakeover: true, // Defaults to negotiated value.
-    serverMaxWindowBits: 10, // Defaults to negotiated value.
-    // Below options specified as default values.
-    concurrencyLimit: 10, // Limits zlib concurrency for perf.
-    threshold: 1024 // Size (in bytes) below which messages
-    // should not be compressed.
-  }
+  perMessageDeflate: false // Disabled for low-latency audio streaming
 });
 
 // Handle WebSocket upgrade requests
@@ -120,20 +103,28 @@ server.on('upgrade', (request, socket, head) => {
 
   // Verify JWT token with audience and issuer validation
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, {
-      algorithms: ['HS256'],
-      audience: JWT_AUDIENCE,
-      issuer: JWT_ISSUER
-    });
-    const user_id = decoded.sub;
+    let user_id;
 
-    if (!user_id) {
-      throw new Error('Invalid token: missing user_id');
+    // DEV MODE: Allow mock token for local development
+    if (token === 'mock-jwt-token' && process.env.NODE_ENV !== 'production') {
+      user_id = 'dev_user_123';
+      console.log(`🔧 [DEV] WebSocket connection using mock token for user: ${user_id}`);
+    } else {
+      const decoded = jwt.verify(token, JWT_SECRET, {
+        algorithms: ['HS256'],
+        audience: JWT_AUDIENCE,
+        issuer: JWT_ISSUER
+      });
+      user_id = decoded.sub;
+
+      if (!user_id) {
+        throw new Error('Invalid token: missing user_id');
+      }
+      console.log(`✅ WebSocket connection authenticated for user: ${user_id}`);
     }
 
     // Store user_id in request for later use
     request.user_id = user_id;
-    console.log(`✅ WebSocket connection authenticated for user: ${user_id}`);
 
     // Accept WebSocket upgrade
     wss.handleUpgrade(request, socket, head, (ws) => {

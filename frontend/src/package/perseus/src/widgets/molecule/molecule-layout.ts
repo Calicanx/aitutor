@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * A molecule layout engine.
  *

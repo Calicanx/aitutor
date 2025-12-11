@@ -6,7 +6,16 @@ const TOKEN_KEY = 'jwt_token';
 
 export const jwtUtils = {
   getToken: (): string | null => {
-    return localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
+
+    // Development fallback: use mock token if no real token exists
+    // This allows testing without Google OAuth setup
+    if (!token && import.meta.env.DEV) {
+      console.log('[DEV] Using mock JWT token for unauthenticated development');
+      return 'mock-jwt-token';
+    }
+
+    return token;
   },
 
   setToken: (token: string): void => {

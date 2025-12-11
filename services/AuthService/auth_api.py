@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -18,6 +18,8 @@ from services.AuthService.jwt_utils import create_jwt_token, create_setup_token,
 from managers.user_manager import UserManager
 from managers.user_manager import calculate_grade_from_age
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
+from shared.timing_middleware import UnpluggedTimingMiddleware
+from shared.cache_middleware import CacheControlMiddleware
 
 from shared.logging_config import get_logger
 
@@ -33,6 +35,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Auth Service")
+
+# Add timing middleware for performance monitoring (Phase 1)
+app.add_middleware(UnpluggedTimingMiddleware)
+
+# Cache Control (Phase 7)
+app.add_middleware(CacheControlMiddleware)
 
 # Configure CORS with secure origins from environment
 app.add_middleware(
@@ -59,6 +67,10 @@ class CompleteSetupRequest(BaseModel):
     setup_token: str
     user_type: str  # "student" or "parent" (but always stored as "student")
     age: int
+    subjects: List[str] = []
+    learning_goals: List[str] = []
+    interests: List[str] = []
+    learning_style: str = "visual"
 
 
 @app.get("/health")
@@ -164,7 +176,11 @@ async def complete_setup(request: CompleteSetupRequest):
             name=google_user_data["name"],
             age=request.age,
             picture=google_user_data.get("picture", ""),
-            user_type="student"  # Always "student" for now
+            user_type="student",  # Always "student" for now
+            subjects=request.subjects,
+            learning_goals=request.learning_goals,
+            interests=request.interests,
+            learning_style=request.learning_style
         )
         
         # Create JWT token
@@ -223,10 +239,18 @@ async def get_current_user(request: Request):
     from managers.mongodb_manager import mongo_db
     user_data = mongo_db.users.find_one({"user_id": user_profile.user_id})
     
+    # Get name with fallback for dev users
+    name = ""
+    if user_data:
+        name = user_data.get("google_name", "") or user_data.get("name", "")
+    # Fallback for dev/test users without a name
+    if not name and user_profile.user_id.startswith("dev_"):
+        name = "Student"
+
     return {
         "user_id": user_profile.user_id,
         "email": user_data.get("google_email", "") if user_data else "",
-        "name": user_data.get("google_name", "") if user_data else "",
+        "name": name,
         "age": user_profile.age,
         "current_grade": user_profile.current_grade,
         "user_type": user_data.get("user_type", "student") if user_data else "student"

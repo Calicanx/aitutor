@@ -13,6 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from services.TeachingAssistant.teaching_assistant import TeachingAssistant
 from shared.auth_middleware import get_current_user
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
+from shared.timing_middleware import UnpluggedTimingMiddleware
+from shared.cache_middleware import CacheControlMiddleware
 
 from shared.logging_config import get_logger
 
@@ -20,6 +22,12 @@ logger = get_logger(__name__)
 
 
 app = FastAPI(title="Teaching Assistant API")
+
+# Add timing middleware for performance monitoring (Phase 1)
+app.add_middleware(UnpluggedTimingMiddleware)
+
+# Cache Control (Phase 7)
+app.add_middleware(CacheControlMiddleware)
 
 # Add GZip compression middleware (Phase 7)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)

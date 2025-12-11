@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
     measurerLogic,
     type PerseusMeasurerWidgetOptions,

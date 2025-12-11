@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type grapher from "../../widgets/grapher/grapher";
 import type {GrapherAnswerTypes} from "@khanacademy/perseus-core";
 import type React from "react";

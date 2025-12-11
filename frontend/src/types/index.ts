@@ -332,7 +332,6 @@ export interface FormState<T extends Record<string, unknown>> {
 // EXPORT ALL
 // ============================================================================
 
-export type {
-    // Re-export for convenience
-    React,
-};
+// Export React for UMD global compatibility
+import * as React from 'react';
+export { React };

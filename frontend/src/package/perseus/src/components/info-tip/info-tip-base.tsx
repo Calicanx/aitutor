@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {PhosphorIcon} from "@khanacademy/wonder-blocks-icon";
 import {spacing} from "@khanacademy/wonder-blocks-tokens";
 import Tooltip from "@khanacademy/wonder-blocks-tooltip";

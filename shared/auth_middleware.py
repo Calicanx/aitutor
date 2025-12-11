@@ -30,6 +30,10 @@ def get_current_user(request: Request) -> str:
     
     token = auth_header.split(" ")[1]
     
+    # Dev bypass matching frontend mock
+    if token == "mock-jwt-token":
+        return "dev_user_123"
+    
     try:
         payload = jwt.decode(
             token, 

@@ -13,6 +13,7 @@ interface AuthUser {
   age: number;
   current_grade: string;
   user_type: string;
+  learning_style?: string;
 }
 
 interface AuthContextType {

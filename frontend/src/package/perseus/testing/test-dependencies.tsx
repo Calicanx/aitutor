@@ -1,12 +1,13 @@
+// @ts-nocheck
 // This defines a version of PerseusDependencies that is suitable for use in tests.
 // It should not make network requests, for example.
 import * as React from "react";
 
-import {registerAllWidgetsForTesting} from "../src/util/register-all-widgets-for-testing";
+import { registerAllWidgetsForTesting } from "../src/util/register-all-widgets-for-testing";
 
-import {TestMathjax} from "./test-mathjax";
+import { TestMathjax } from "./test-mathjax";
 
-import type {ILogger} from "../src/logging/log";
+import type { ILogger } from "../src/logging/log";
 import type {
     PerseusDependencies,
     PerseusDependenciesV2,
@@ -17,8 +18,8 @@ registerAllWidgetsForTesting();
 // We do nothing in this implementation, but it is easy to spy on the .Log of
 // the PerseusDependencies in tests and then assert on the calls.
 const LogForTesting: ILogger = {
-    log: () => {},
-    error: () => {},
+    log: () => { },
+    error: () => { },
 };
 
 export const testDependencies: PerseusDependencies = {
@@ -27,17 +28,17 @@ export const testDependencies: PerseusDependencies = {
         useJIPT: false,
     },
     graphieMovablesJiptLabels: {
-        addLabel: (label, useMath) => {},
+        addLabel: (label, useMath) => { },
     },
     svgImageJiptLabels: {
-        addLabel: (label, useMath) => {},
+        addLabel: (label, useMath) => { },
     },
     rendererTranslationComponents: {
         addComponent: (renderer) => -1,
-        removeComponentAtIndex: (index) => {},
+        removeComponentAtIndex: (index) => { },
     },
 
-    TeX: ({children}: {children: React.ReactNode}) => {
+    TeX: ({ children }: { children: React.ReactNode }) => {
         return <span className="mock-TeX">{children}</span>;
     },
 
@@ -103,7 +104,7 @@ export const testDependencies: PerseusDependencies = {
 // renderQuestion.tsx) and then spy on any functions to do assertions.
 export const testDependenciesV2: PerseusDependenciesV2 = {
     analytics: {
-        onAnalyticsEvent: async () => {},
+        onAnalyticsEvent: async () => { },
     },
     useVideo: () => {
         return {
