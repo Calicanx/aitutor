@@ -123,13 +123,35 @@ echo "Starting Auth Service API server... Logs -> logs/auth_service.log"
 (cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/AuthService/auth_api.py) > "$SCRIPT_DIR/logs/auth_service.log" 2>&1 &
 pids+=($!)
 
-# Give the backend servers a moment to start
-echo "Waiting for backend services to initialize..."
-sleep 3
-
 # Extract ports dynamically from configuration files
 FRONTEND_PORT=$(grep -o '"port":[[:space:]]*[0-9]*' "$SCRIPT_DIR/frontend/vite.config.ts" 2>/dev/null | grep -o '[0-9]*' || echo "3000")
 DASH_API_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/DashSystem/dash_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8000")
+
+# Give the backend servers a moment to start
+echo "Waiting for backend services to initialize..."
+sleep 2
+
+# Wait for DASH API to be ready (it takes time to load questions from MongoDB)
+echo "Waiting for DASH API to initialize (this may take a few seconds)..."
+MAX_WAIT=60
+WAIT_COUNT=0
+
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    # Check if DASH API health endpoint returns ready status
+    if curl -s "http://localhost:$DASH_API_PORT/health" 2>/dev/null | grep -q '"ready":true'; then
+        echo "✅ DASH API is ready"
+        break
+    fi
+    sleep 1
+    WAIT_COUNT=$((WAIT_COUNT + 1))
+    if [ $((WAIT_COUNT % 5)) -eq 0 ]; then
+        echo "  Still waiting for DASH API... ($WAIT_COUNT seconds)"
+    fi
+done
+
+if [ $WAIT_COUNT -eq $MAX_WAIT ]; then
+    echo "⚠️  Warning: DASH API may not be fully ready, but continuing..."
+fi
 SHERLOCKED_API_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/SherlockEDApi/run_backend.py" 2>/dev/null | grep -o '[0-9]*' || echo "8001")
 TEACHING_ASSISTANT_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/TeachingAssistant/api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8002")
 AUTH_SERVICE_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/AuthService/auth_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8003")

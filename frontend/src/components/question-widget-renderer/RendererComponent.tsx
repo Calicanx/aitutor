@@ -42,6 +42,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isError, setIsError] = useState(false);
     const [error, setError] = useState<Error | null>(null);
+    const [isLoadingNextBatch, setIsLoadingNextBatch] = useState(false);
     const rendererRef = useRef<ServerItemRenderer>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -60,19 +61,66 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
             setIsError(false);
             setError(null);
 
-            try {
-                const response = await apiUtils.get(`${DASH_API_URL}/api/questions/16`);
-                
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch questions: ${response.status}`);
-                }
+            // Retry logic for connection errors with exponential backoff
+            const maxRetries = 3;
+            let retryCount = 0;
+            
+            const attemptFetch = async (): Promise<void> => {
+                try {
+                    // First, check for pre-loaded questions
+                    const preloadedResponse = await apiUtils.get(`${DASH_API_URL}/api/questions/preloaded`);
+                    if (preloadedResponse.ok) {
+                        const preloadedData = await preloadedResponse.json();
+                        if (preloadedData && preloadedData.length > 0) {
+                            setPerseusItems(preloadedData);
+                            setItem(0);
+                            setEndOfTest(false);
+                            setIsAnswered(false);
+                            setStartTime(Date.now());
+                            setIsLoading(false);
+                            return; // Use pre-loaded questions
+                        }
+                    } else if (preloadedResponse.status === 422) {
+                        // 422 means validation error, but we can still try fallback
+                        console.warn('Pre-loaded questions endpoint returned 422, using fallback');
+                    }
+                    
+                    // Fallback: Load initial 5 questions
+                    const response = await apiUtils.get(`${DASH_API_URL}/api/questions/5`);
+                    
+                    if (!response.ok) {
+                        // Don't retry on HTTP error codes (401, 403, 404, 500, etc.)
+                        throw new Error(`Failed to fetch questions: ${response.status}`);
+                    }
 
-                const data = await response.json();
-                setPerseusItems(data);
-                setItem(0);
-                setEndOfTest(false);
-                setIsAnswered(false);
-                setStartTime(Date.now());
+                    const data = await response.json();
+                    setPerseusItems(data);
+                    setItem(0);
+                    setEndOfTest(false);
+                    setIsAnswered(false);
+                    setStartTime(Date.now());
+                } catch (err) {
+                    // Check if it's a network/connection error that we should retry
+                    const isNetworkError = err instanceof TypeError && 
+                        (err.message.includes('Failed to fetch') || 
+                         err.message.includes('NetworkError') ||
+                         err.message.includes('ERR_CONNECTION_REFUSED'));
+                    
+                    if (isNetworkError && retryCount < maxRetries) {
+                        retryCount++;
+                        const backoffDelay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 2s, 4s, 8s
+                        console.log(`Retrying fetch (attempt ${retryCount}/${maxRetries}) after ${backoffDelay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, backoffDelay));
+                        return attemptFetch(); // Retry
+                    }
+                    
+                    // Not a retryable error or max retries reached
+                    throw err;
+                }
+            };
+
+            try {
+                await attemptFetch();
             } catch (err) {
                 console.error('Error fetching questions:', err);
                 setIsError(true);
@@ -144,6 +192,53 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         }
     }, [showFeedback]);
 
+    // Load next batch of questions when approaching end
+    const loadNextBatch = async () => {
+        if (perseusItems.length === 0) return;
+        
+        // Prevent concurrent calls
+        if (isLoadingNextBatch) {
+            return;
+        }
+        
+        setIsLoadingNextBatch(true);
+        
+        try {
+            // Get current question IDs
+            const currentQuestionIds = perseusItems.map(
+                (item: any) => item.dash_metadata?.dash_question_id || ''
+            ).filter(Boolean);
+            
+            if (currentQuestionIds.length === 0) {
+                setIsLoadingNextBatch(false);
+                return; // No valid question IDs
+            }
+            
+            // Request next 5 questions
+            const response = await apiUtils.post(`${DASH_API_URL}/api/questions/recommend-next`, {
+                current_question_ids: currentQuestionIds,
+                count: 5
+            });
+            
+            if (!response.ok) {
+                console.warn('Failed to fetch next batch:', response.status);
+                setIsLoadingNextBatch(false);
+                return;
+            }
+            
+            const newQuestions = await response.json();
+            
+            // Only update if we got new questions (non-empty response means questions changed)
+            if (newQuestions.length > 0) {
+                setPerseusItems(prev => [...prev, ...newQuestions]);
+            }
+        } catch (err) {
+            console.error('Error loading next batch:', err);
+        } finally {
+            setIsLoadingNextBatch(false);
+        }
+    };
+
     const handleNext = () => {
         setItem((prev) => {
             const index = prev + 1;
@@ -151,6 +246,11 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
             if (index >= perseusItems.length) {
                 setEndOfTest(true);
                 return prev; // stay at last valid index
+            }
+
+            // Load next batch when 2 questions remaining
+            if (index === perseusItems.length - 2) {
+                loadNextBatch();
             }
 
             if (index === perseusItems.length - 1) {

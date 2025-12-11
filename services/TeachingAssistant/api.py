@@ -1,5 +1,7 @@
 import sys
 import os
+import threading
+import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -38,6 +40,9 @@ async def options_handler(full_path: str):
 
 ta = TeachingAssistant()
 
+# DASH API URL for pre-loading questions
+DASH_API_URL = os.getenv("DASH_API_URL", "http://localhost:8000")
+
 
 class StartSessionRequest(BaseModel):
     pass  # user_id now comes from JWT
@@ -74,12 +79,74 @@ def start_session(http_request: Request, request: Optional[StartSessionRequest] 
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _preload_questions_background(user_id: str, token: str):
+    """Background function to pre-load questions for next session"""
+    try:
+        # Call DASH API to get 5 questions for next session
+        dash_response = requests.get(
+            f"{DASH_API_URL}/api/questions/5",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            },
+            timeout=10
+        )
+        
+        if dash_response.status_code == 200:
+            preloaded_questions = dash_response.json()
+            # Extract question IDs
+            question_ids = [
+                q.get('dash_metadata', {}).get('dash_question_id', '')
+                for q in preloaded_questions
+                if q.get('dash_metadata', {}).get('dash_question_id')
+            ]
+            
+            if question_ids:
+                # Store in MongoDB user profile
+                from managers.mongodb_manager import mongo_db
+                mongo_db.users.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"preloaded_question_ids": question_ids}}
+                )
+                print(f"[PRELOAD] Stored {len(question_ids)} question IDs for next session (user: {user_id})")
+    except Exception as e:
+        # Don't fail session end if pre-loading fails
+        print(f"[PRELOAD] Failed to pre-load questions: {e}")
+
 @app.post("/session/end", response_model=PromptResponse)
 def end_session(http_request: Request, request: Optional[EndSessionRequest] = None):
     # Get user_id from JWT token (will raise 401 if invalid)
     user_id = get_current_user(http_request)
     try:
         prompt = ta.end_session()
+        
+        # Pre-load next session questions in background (non-blocking)
+        try:
+            auth_header = http_request.headers.get("Authorization", "")
+            if not auth_header:
+                # Try alternative header name (some clients use different casing)
+                auth_header = http_request.headers.get("authorization", "")
+            
+            token = ""
+            if auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "", 1)
+            elif auth_header.startswith("bearer "):
+                token = auth_header.replace("bearer ", "", 1)
+            
+            if token and len(token) > 0:
+                # Start background thread to pre-load questions
+                preload_thread = threading.Thread(
+                    target=_preload_questions_background,
+                    args=(user_id, token),
+                    daemon=True
+                )
+                preload_thread.start()
+            else:
+                print(f"[PRELOAD] No valid token found in Authorization header, skipping pre-load")
+        except Exception as e:
+            # Don't fail session end if pre-loading setup fails
+            print(f"[PRELOAD] Failed to start pre-loading thread: {e}")
+        
         if not prompt:
             # Return a proper response for no active session instead of raising 400
             session_info = {

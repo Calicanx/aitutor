@@ -80,7 +80,7 @@ class UserProfile:
     current_grade: str = "K"  # Calculated from age
     
     def to_dict(self):
-        return {
+        result = {
             'user_id': self.user_id,
             'created_at': self.created_at,
             'last_updated': self.last_updated,
@@ -90,13 +90,17 @@ class UserProfile:
             'age': self.age,
             'current_grade': self.current_grade
         }
+        # Include preloaded_question_ids if it exists (for MongoDB storage)
+        if hasattr(self, 'preloaded_question_ids'):
+            result['preloaded_question_ids'] = self.preloaded_question_ids
+        return result
     
     @classmethod
     def from_dict(cls, data):
         skill_states = {k: SkillState.from_dict(v) for k, v in data['skill_states'].items()}
         question_history = [QuestionAttempt(**attempt) for attempt in data['question_history']]
         
-        return cls(
+        user_profile = cls(
             user_id=data['user_id'],
             created_at=data['created_at'],
             last_updated=data['last_updated'],
@@ -106,6 +110,10 @@ class UserProfile:
             age=data.get('age', 5),
             current_grade=data.get('current_grade', 'K')
         )
+        # Handle preloaded_question_ids if present (optional field)
+        if 'preloaded_question_ids' in data:
+            user_profile.preloaded_question_ids = data['preloaded_question_ids']
+        return user_profile
 
 class UserManager:
     def __init__(self, users_folder: str = "Users", use_mongodb: bool = True):

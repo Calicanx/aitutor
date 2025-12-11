@@ -75,7 +75,16 @@ class DASHSystem:
 
         self.skills: Dict[str, Skill] = {}
         self.student_states: Dict[str, Dict[str, StudentSkillState]] = {}
-        self.questions: Dict[str, Question] = {}
+        # Lightweight index structures for efficient question loading
+        self.question_index: Dict[str, str] = {}  # Maps question_id → skill_id (exerciseDirName)
+        self.skill_question_index: Dict[str, List[str]] = {}  # Maps skill_id → [question_ids]
+        self.question_cache: Dict[str, Question] = {}  # LRU cache for created Question objects
+        self._cache_max_size = 10000  # LRU cache limit
+        # Cache statistics for monitoring
+        self._cache_hits = 0
+        self._cache_misses = 0
+        # Keep questions dict for backward compatibility (will be populated on-demand)
+        self.questions: Dict[str, Question] = {}  # Deprecated: use _get_or_create_question() instead
         self.curriculum: Dict = {}
         self.user_manager = UserManager(users_folder="Users")
         
@@ -118,11 +127,31 @@ class DASHSystem:
             
             log_print(f"[MONGODB] Loaded {len(self.skills)} skills from MongoDB")
             
-            # Load questions from scraped_questions collection
-            questions_docs = list(self.mongo.scraped_questions.find())
-            self.questions.clear()
+            # Get valid exerciseDirNames (skill_ids) from loaded skills for MongoDB-level filtering
+            valid_skill_ids = list(self.skills.keys())
+            log_print(f"[MONGODB] Filtering questions by {len(valid_skill_ids)} valid skills at database level...")
             
-            for q_doc in questions_docs:
+            # Load lightweight question index from scraped_questions collection
+            # Filter at MongoDB level using $in operator to only get questions with valid skills
+            # This reduces documents processed from ~38,158 to ~1,623 (23x reduction)
+            log_print("[MONGODB] Loading question index from scraped_questions collection (lightweight projection with skill filter)...")
+            questions_cursor = self.mongo.scraped_questions.find(
+                {"exerciseDirName": {"$in": valid_skill_ids}},  # Filter at DB level using $in operator
+                {"questionId": 1, "exerciseDirName": 1}  # Projection: only needed fields
+            ).batch_size(1000)
+            
+            # Initialize index structures
+            self.question_index.clear()
+            self.skill_question_index.clear()
+            
+            question_count = 0
+            processed_count = 0
+            
+            for q_doc in questions_cursor:
+                question_count += 1
+                if question_count % 1000 == 0:
+                    log_print(f"[MONGODB] Processed {question_count} questions so far...")
+                
                 try:
                     # Extract questionId (includes fabricated prefix: e.g., "41.1.2.1.9_x338f5e1fbc6cafdf")
                     # Format: {course_idx}.{unit_idx}.{lesson_idx}.{exercise_idx}.{question_idx}_{item_id}
@@ -136,37 +165,90 @@ class DASHSystem:
                         log_print(f"[WARNING] Skipping question {question_id}: missing exerciseDirName")
                         continue
                     
-                    # Verify skill exists in generated_skills
-                    skill = self.skills.get(exercise_dir_name)
-                    if not skill:
-                        # Silently skip questions whose skills aren't in generated_skills
-                        # (These are expected: old questions from non-math subjects or test data)
+                    # Note: Skill validation already done at MongoDB level via $in filter
+                    # But double-check for safety (should always pass now)
+                    if exercise_dir_name not in self.skills:
+                        log_print(f"[WARNING] Question {question_id} has skill {exercise_dir_name} not in skills (unexpected after DB filter)")
                         continue
                     
-                    # Get difficulty from skill (not from question document)
-                    difficulty = skill.difficulty
-                    
-                    # Create Question object
-                    # Note: content is empty string since Perseus data is loaded separately
-                    question = Question(
-                        question_id=question_id,
-                        skill_ids=[exercise_dir_name],  # Single skill per question
-                        content="",  # Not used, Perseus data loaded separately
-                        difficulty=difficulty,
-                        expected_time_seconds=60.0  # Default value
-                    )
-                    self.questions[question.question_id] = question
+                    # Build lightweight indexes
+                    self.question_index[question_id] = exercise_dir_name
+                    if exercise_dir_name not in self.skill_question_index:
+                        self.skill_question_index[exercise_dir_name] = []
+                    self.skill_question_index[exercise_dir_name].append(question_id)
+                    processed_count += 1
                     
                 except KeyError as e:
                     log_print(f"[WARNING] Skipping question {q_doc.get('questionId', 'unknown')}: missing field {e}")
                 except Exception as e:
                     log_print(f"[WARNING] Skipping question {q_doc.get('questionId', 'unknown')}: error {e}")
             
-            log_print(f"[MONGODB] Loaded {len(self.questions)} questions from scraped_questions collection")
+            log_print(f"[MONGODB] Loaded {len(self.question_index)} questions into index (processed {processed_count} out of {question_count} total documents)")
+            log_print(f"[MONGODB] Index covers {len(self.skill_question_index)} skills")
             
         except Exception as e:
             log_print(f"[ERROR] Error loading from MongoDB: {e}")
             raise RuntimeError(f"Failed to load data from MongoDB: {e}. Local fallback disabled.")
+    
+    def _get_or_create_question(self, question_id: str) -> Optional[Question]:
+        """
+        Get Question object from cache or create on-demand from index.
+        This method implements lazy loading of Question objects for memory efficiency.
+        
+        Args:
+            question_id: The question identifier
+            
+        Returns:
+            Question object if found, None otherwise
+        """
+        # Check cache first (fast path)
+        if question_id in self.question_cache:
+            self._cache_hits += 1
+            return self.question_cache[question_id]
+        
+        # Cache miss - will create new Question object
+        self._cache_misses += 1
+        
+        # Check if question exists in index
+        if question_id not in self.question_index:
+            return None
+        
+        # Get skill_id from index
+        skill_id = self.question_index[question_id]
+        if skill_id not in self.skills:
+            return None
+        
+        # Get difficulty from skill
+        skill = self.skills[skill_id]
+        difficulty = skill.difficulty
+        
+        # Create Question object on-demand
+        question = Question(
+            question_id=question_id,
+            skill_ids=[skill_id],
+            content="",  # Always empty, Perseus data loaded separately
+            difficulty=difficulty,
+            expected_time_seconds=60.0  # Default value
+        )
+        
+        # Cache with LRU eviction (FIFO when cache is full)
+        if len(self.question_cache) >= self._cache_max_size:
+            # Remove oldest entry (FIFO eviction)
+            oldest_key = next(iter(self.question_cache))
+            del self.question_cache[oldest_key]
+        
+        self.question_cache[question_id] = question
+        
+        # Also update backward-compatible questions dict for existing code
+        self.questions[question_id] = question
+        
+        # Log cache statistics periodically (every 100 misses)
+        if self._cache_misses % 100 == 0:
+            total_requests = self._cache_hits + self._cache_misses
+            hit_rate = (self._cache_hits / total_requests * 100) if total_requests > 0 else 0
+            log_print(f"[CACHE_STATS] Hits: {self._cache_hits}, Misses: {self._cache_misses}, Hit Rate: {hit_rate:.1f}%, Cache Size: {len(self.question_cache)}")
+        
+        return question
     
     def _load_from_files(self, skills_file: str, curriculum_file: str):
         """Load skills and curriculum from JSON files"""
@@ -301,17 +383,31 @@ class DASHSystem:
         return self.student_states[student_id][skill_id]
     
     def calculate_memory_strength(self, student_id: str, skill_id: str, current_time: float) -> float:
-        """Calculate current memory strength with decay"""
+        """Calculate current memory strength with decay.
+        Mastered skills (probability >= 0.7) do not decay to preserve their score.
+        """
         state = self.get_student_state(student_id, skill_id)
         skill = self.skills[skill_id]
         
         if state.last_practice_time is None:
             return state.memory_strength
         
+        # Check if skill is mastered using stored strength (not decayed) to determine mastery
+        # This prevents circular dependency: we need to check mastery before applying decay
+        stored_strength = state.memory_strength
+        logit = stored_strength - skill.difficulty
+        probability = 1 / (1 + math.exp(-logit))
+        
+        # If skill is mastered (probability >= 0.7), return stored strength without decay
+        # This preserves the score when moving to the next skill
+        if probability >= 0.7:
+            return stored_strength
+        
+        # Apply decay for non-mastered skills
         time_elapsed = current_time - state.last_practice_time
         decay_factor = math.exp(-skill.forgetting_rate * time_elapsed)
         
-        return state.memory_strength * decay_factor
+        return stored_strength * decay_factor
     
     def get_all_prerequisites(self, skill_id: str) -> List[str]:
         """Get all prerequisite skills recursively"""
@@ -481,8 +577,8 @@ class DASHSystem:
         current_time = time.time()
         time_penalty_applied = self.calculate_time_penalty(response_time_seconds) < 1.0
         
-        # Get question details for logging
-        question = self.questions.get(question_id)
+        # Get question details for logging (on-demand creation)
+        question = self._get_or_create_question(question_id)
         question_difficulty = question.difficulty if question else "unknown"
         expected_time = question.expected_time_seconds if question else 0.0
         time_ratio = response_time_seconds / expected_time if expected_time > 0 else 0.0
@@ -590,7 +686,16 @@ class DASHSystem:
         
         # Log grade filtering if applied
         if skipped_grade_filter and cold_start_grade_filter:
-            logger.info(f"[FILTER] Skipped {len(skipped_grade_filter)} skills outside grade range {cold_start_grade_filter}+-{grade_range}")
+            log_print(f"[FILTER] Skipped {len(skipped_grade_filter)} skills outside grade range {cold_start_grade_filter}+-{grade_range}")
+        
+        # Log skill recommendation details for investigation
+        if skipped_above_threshold:
+            log_print(f"[SKILL_RECOMMEND] Skipped {len(skipped_above_threshold)} skills above threshold (>= {threshold}):")
+            for skill_id, skill_name, prob in skipped_above_threshold[:5]:  # Show top 5
+                log_print(f"  - {skill_name[:30]:<30} (prob: {prob:.3f})")
+        
+        if skipped_prerequisites:
+            log_print(f"[SKILL_RECOMMEND] Skipped {len(skipped_prerequisites)} skills with unmet prerequisites")
         
         # Sort by learning journey: grade level (ascending) -> order (ascending) -> probability (ascending)
         # This ensures students follow a structured learning path
@@ -600,8 +705,14 @@ class DASHSystem:
             x[2]                       # Probability (lower = needs more practice)
         ))
         
-        # Log detailed information about skill recommendations
-        # Only log detailed learning journey once per batch request, not for every question
+        # Log recommended skills for investigation
+        if recommendations:
+            log_print(f"[SKILL_RECOMMEND] Found {len(recommendations)} skills needing practice (prob < {threshold}):")
+            for skill_id, skill, prob in recommendations[:5]:  # Show top 5
+                log_print(f"  - {skill.name[:30]:<30} (prob: {prob:.3f}, grade: {skill.grade_level.name}, order: {skill.order})")
+        else:
+            log_print(f"[SKILL_RECOMMEND] No skills found needing practice (all above threshold {threshold} or prerequisites unmet)")
+        
         result = [skill_id for skill_id, _, _ in recommendations]
         return result
     
@@ -633,11 +744,11 @@ class DASHSystem:
         correctness_rate = correct_count / len(recent_attempts)
         
         # Calculate average response time ratio
-        # Get expected time from questions
+        # Get expected time from questions (on-demand creation)
         time_ratios = []
         time_details = []
         for attempt in recent_attempts:
-            question = self.questions.get(attempt.question_id)
+            question = self._get_or_create_question(attempt.question_id)
             if question and attempt.response_time_seconds > 0:
                 expected_time = question.expected_time_seconds
                 if expected_time > 0:
@@ -718,11 +829,23 @@ class DASHSystem:
         grade_min = max(0, student_grade.value - 1)
         grade_max = student_grade.value + 1
         
-        # Get all skills in grade range
-        grade_appropriate_skills = [
-            skill for skill in self.skills.values()
-            if grade_min <= skill.grade_level.value <= grade_max
-        ]
+        # Get all skills in grade range, but exclude mastered skills (above threshold)
+        # This ensures we don't fall back to skills that are already mastered
+        current_time_for_check = time.time()
+        threshold = 0.7  # Same threshold as get_recommended_skills
+        grade_appropriate_skills = []
+        for skill in self.skills.values():
+            if grade_min <= skill.grade_level.value <= grade_max:
+                # Check if skill is mastered (probability >= threshold)
+                probability = self.predict_correctness(student_id, skill.skill_id, current_time_for_check)
+                if probability < threshold:  # Only include skills that need practice
+                    grade_appropriate_skills.append(skill)
+                else:
+                    log_print(f"[FLEXIBLE_SELECT] Skipping mastered skill: {skill.name} (prob: {probability:.3f} >= {threshold})")
+        
+        if not grade_appropriate_skills:
+            log_print(f"[FLEXIBLE_SELECT] No grade-appropriate skills need practice (all mastered)")
+            return None
         
         # Sort by learning journey (grade -> order -> current probability)
         skill_probabilities = []
@@ -750,11 +873,22 @@ class DASHSystem:
             min_difficulty = max(0.0, target_difficulty - 0.2)
             max_difficulty = target_difficulty + 0.2
             
-            # Get candidate questions for this skill
-            all_candidates = [
-                q for q in self.questions.values()
-                if skill_id in q.skill_ids and q.question_id not in answered_question_ids
-            ]
+            # Get question IDs for this skill from index (fast lookup)
+            skill_question_ids = self.skill_question_index.get(skill_id, [])
+            if not skill_question_ids:
+                continue
+            
+            # Filter out answered questions
+            candidate_ids = [qid for qid in skill_question_ids if qid not in answered_question_ids]
+            if not candidate_ids:
+                continue
+            
+            # Create Question objects on-demand from index
+            all_candidates = []
+            for qid in candidate_ids:
+                question = self._get_or_create_question(qid)
+                if question:
+                    all_candidates.append(question)
             
             if not all_candidates:
                 continue
@@ -809,7 +943,10 @@ class DASHSystem:
         )
         
         if not recommended_skills:
+            log_print(f"[GET_NEXT_QUESTION] No recommended skills found for student {student_id}")
             return None
+        
+        log_print(f"[GET_NEXT_QUESTION] Found {len(recommended_skills)} recommended skills for student {student_id}")
         
         answered_question_ids = {attempt.question_id for attempt in user_profile.question_history}
         
@@ -837,11 +974,22 @@ class DASHSystem:
             
             # Reduced verbosity - only log when selecting a question
             
-            # Get all candidate questions for this skill
-            all_candidates = [
-                q for q in self.questions.values() 
-                if skill_id in q.skill_ids and q.question_id not in answered_question_ids
-            ]
+            # Get question IDs for this skill from index (fast lookup)
+            skill_question_ids = self.skill_question_index.get(skill_id, [])
+            if not skill_question_ids:
+                continue  # Skip silently if no questions for this skill
+            
+            # Filter out answered questions
+            candidate_ids = [qid for qid in skill_question_ids if qid not in answered_question_ids]
+            if not candidate_ids:
+                continue  # Skip silently if all questions already answered
+            
+            # Create Question objects on-demand from index
+            all_candidates = []
+            for qid in candidate_ids:
+                question = self._get_or_create_question(qid)
+                if question:
+                    all_candidates.append(question)
             
             if not all_candidates:
                 continue  # Skip silently
