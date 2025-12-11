@@ -33,8 +33,8 @@ The AI Tutor platform is deployed on **Google Cloud Platform (GCP)** using **Clo
 1. **DASH API** - Adaptive learning system
 2. **SherlockED API** - Question rendering engine
 3. **TeachingAssistant API** - Session management
-4. **Tutor Service** - Gemini Live API bridge (WebSocket)
-5. **Frontend** - React application (Nginx)
+4. **Auth Service** - Google OAuth, JWT tokens, Gemini API key endpoint
+5. **Frontend** - React application (Nginx) with integrated Tutor Service (direct Gemini connection)
 
 ---
 
@@ -97,7 +97,7 @@ The AI Tutor platform is deployed on **Google Cloud Platform (GCP)** using **Clo
 │  ├── dash-api-staging → https://dash-api-staging-...        │
 │  ├── sherlocked-api-staging → https://sherlocked-api-...    │
 │  ├── teaching-assistant-staging → https://teaching-...      │
-│  ├── tutor-staging → https://tutor-staging-...              │
+│  ├── auth-service-staging → https://auth-service-staging-...│
 │  └── tutor-frontend-staging → https://tutor-frontend-...    │
 │                                                              │
 │  Production Environment:                                     │
@@ -256,17 +256,12 @@ All services follow a consistent naming pattern:
 - **Purpose**: Session management, conversation tracking
 
 #### 4. Tutor Service
-- **Base Name**: `tutor`
-- **Port**: 8080
-- **Protocol**: WebSocket (HTTP upgrade)
-- **Environment Variables**:
-  - `GEMINI_API_KEY`
-  - `GEMINI_MODEL`
-- **Special Configuration**:
-  - `--timeout`: 3600 seconds (1 hour)
-  - `--min-instances`: 1 (always warm)
-  - `--max-instances`: 10
-- **Purpose**: Gemini Live API bridge, real-time AI tutoring
+- **Location**: Frontend (`frontend/src/services/tutor/`)
+- **Type**: Frontend service component (not a backend service)
+- **Protocol**: Direct WebSocket to Gemini Live API
+- **API Key**: Fetched securely from AuthService `/auth/gemini-key` endpoint
+- **Purpose**: Direct Gemini Live API integration for real-time AI tutoring
+- **Note**: No longer a backend service - integrated directly into frontend
 
 #### 5. Frontend
 - **Base Name**: `tutor-frontend`
@@ -276,7 +271,8 @@ All services follow a consistent naming pattern:
   - `VITE_DASH_API_URL`
   - `VITE_SHERLOCKED_API_URL`
   - `VITE_TEACHING_ASSISTANT_API_URL`
-  - `VITE_TUTOR_WS`
+  - `VITE_AUTH_SERVICE_URL`
+- **Note**: Tutor service is now part of frontend, connecting directly to Gemini Live API
 - **Purpose**: React application UI
 
 ---
@@ -342,15 +338,13 @@ Generated URL: https://dash-api-staging-utmfhquz6a-uc.a.run.app
 5. Frontend deployed with hardcoded backend URLs
 ```
 
-### WebSocket URL Conversion
+### Tutor Service (Frontend)
 
-Tutor service uses WebSocket protocol:
-```
-HTTPS URL: https://tutor-staging-{hash}-uc.a.run.app
-WSS URL:   wss://tutor-staging-{hash}-uc.a.run.app
-```
-
-Conversion is done automatically in `deploy.sh`:
+Tutor service is now integrated into the frontend and connects directly to Gemini Live API:
+- No separate backend service needed
+- Direct WebSocket connection from browser to Gemini Live API
+- API key fetched securely from AuthService at runtime
+- Reduced latency and improved performance
 ```bash
 TUTOR_WS_URL=$(echo $TUTOR_URL | sed 's/https/wss/')
 ```
@@ -473,12 +467,11 @@ All substitutions are passed from `deploy.sh`:
 | `_MONGODB_URI` | MongoDB connection string | `mongodb://...` | `mongodb://...` |
 | `_MONGODB_DB_NAME` | Database name | `ai_tutor` | `ai_tutor` |
 | `_OPENROUTER_API_KEY` | OpenRouter API key | `sk-...` | `sk-...` |
-| `_GEMINI_API_KEY` | Gemini API key | `AIza...` | `AIza...` |
+| `_GEMINI_API_KEY` | Gemini API key (for AuthService) | `AIza...` | `AIza...` |
 | `_GEMINI_MODEL` | Gemini model name | `models/gemini-...` | `models/gemini-...` |
 | `_DASH_API_URL` | DASH API URL | `https://dash-api-staging-...` | `https://dash-api-...` |
 | `_SHERLOCKED_API_URL` | SherlockED API URL | `https://sherlocked-api-staging-...` | `https://sherlocked-api-...` |
 | `_TEACHING_ASSISTANT_API_URL` | TeachingAssistant URL | `https://teaching-assistant-staging-...` | `https://teaching-assistant-...` |
-| `_TUTOR_WS` | Tutor WebSocket URL | `wss://tutor-staging-...` | `wss://tutor-...` |
 
 ### Build Options
 
@@ -674,46 +667,37 @@ Displays all service URLs and provides update instructions.
 
 ---
 
-### Tutor Service
+### Tutor Service (Frontend)
 
-**Technology:** Node.js 18, WebSocket
+**Technology:** TypeScript, `@google/genai` SDK
 
-**Dockerfile:** `services/Tutor/Dockerfile`
+**Location:** `frontend/src/services/tutor/`
 
-**Build Process:**
-1. Base image: `node:18-alpine`
-2. Copy `package.json` and `package-lock.json`
-3. Install dependencies: `npm install`
-4. Copy `server.js`
-5. Copy `system_prompts/` directory
-6. Verify system prompts exist
-7. Expose port 8080
-8. Run: `node server.js`
+**Components:**
+1. `tutor-service.ts` - Main service class managing Gemini Live API connection
+2. `api-key-fetcher.ts` - Utility to fetch API key from AuthService
+
+**Architecture:**
+- Direct WebSocket connection from frontend to Gemini Live API
+- No backend proxy - eliminates double WebSocket hop
+- API key fetched securely from AuthService `/auth/gemini-key` endpoint
+- System prompt loaded from `frontend/public/ai_tutor_system_prompt.md`
 
 **Environment Variables:**
-- `PORT`: Server port (default: 8080, Cloud Run sets to 8080)
-- `GEMINI_API_KEY`: Google Gemini API key
-- `GEMINI_MODEL`: Gemini model name (default: `models/gemini-2.5-flash-native-audio-preview-09-2025`)
+- `VITE_AUTH_SERVICE_URL` - AuthService URL for API key retrieval
+- `GEMINI_API_KEY` - Stored in AuthService environment (not in frontend)
+- `GEMINI_MODEL` - Stored in AuthService environment (default: `models/gemini-2.5-flash-native-audio-preview-09-2025`)
 
-**Special Configuration:**
-- **Timeout**: 3600 seconds (1 hour) - for long WebSocket connections
-- **Min Instances**: 1 - keeps instance warm to avoid cold starts
-- **Max Instances**: 10 - scales up for multiple users
+**Security:**
+- API key never exposed in frontend code
+- Protected by JWT authentication via AuthService
+- Can be further restricted via Google Cloud Console (HTTP referrer, IP restrictions)
 
-**Protocol:**
-- HTTP: Health check endpoint (`GET /health`)
-- WebSocket: Upgraded on any path (frontend connects to root)
-
-**WebSocket Message Types:**
-- `connect`: Initialize Gemini Live API connection
-- `disconnect`: Close Gemini session
-- `realtimeInput`: Send audio/video frames to Gemini
-- `send`: Send text messages to Gemini
-- `toolResponse`: Send tool responses
-
-**Origin Validation:**
-- Validates WebSocket origin header
-- Allows: `http://localhost:3000`, `http://localhost:5173`, `https://tutor-frontend-staging-...`
+**Benefits:**
+- Reduced latency (eliminates backend proxy hop)
+- No event loop blocking from large video frames
+- Better audio streaming performance
+- Lower server costs (no backend service needed)
 
 ---
 
@@ -977,8 +961,10 @@ Frontend:           https://tutor-frontend-staging-{hash}-uc.a.run.app
 DASH API:           https://dash-api-staging-{hash}-uc.a.run.app
 SherlockED API:     https://sherlocked-api-staging-{hash}-uc.a.run.app
 TeachingAssistant:  https://teaching-assistant-staging-{hash}-uc.a.run.app
-Tutor (WebSocket):  wss://tutor-staging-{hash}-uc.a.run.app
+Auth Service:       https://auth-service-staging-{hash}-uc.a.run.app
 ```
+
+**Note:** Tutor service is now part of the frontend and connects directly to Gemini Live API (no separate service URL).
 
 ### Production Environment
 
@@ -989,10 +975,10 @@ Frontend:           https://tutor-frontend-{hash}-uc.a.run.app
 DASH API:           https://dash-api-{hash}-uc.a.run.app
 SherlockED API:     https://sherlocked-api-{hash}-uc.a.run.app
 TeachingAssistant:  https://teaching-assistant-{hash}-uc.a.run.app
-Tutor (WebSocket):  wss://tutor-{hash}-uc.a.run.app
+Auth Service:       https://auth-service-{hash}-uc.a.run.app
 ```
 
-**Note:** `{hash}` is a unique identifier generated by Cloud Run and remains stable for each service.
+**Note:** `{hash}` is a unique identifier generated by Cloud Run and remains stable for each service. Tutor service connects directly from frontend to Gemini Live API.
 
 ---
 

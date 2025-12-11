@@ -1,6 +1,6 @@
 /**
- * Proxy client for Adam Tutor backend service
- * Connects to local backend instead of directly to Gemini
+ * Direct Gemini Live API client
+ * Connects directly to Gemini Live API from frontend
  */
 
 import { EventEmitter } from "eventemitter3";
@@ -16,10 +16,7 @@ import {
 import { StreamingLog } from "../types";
 import { base64ToArrayBuffer } from "./utils";
 import { difference } from "lodash";
-import { jwtUtils } from "./jwt-utils";
-
-// Get tutor WebSocket URL from environment
-const TUTOR_WS_URL = import.meta.env.VITE_TUTOR_WS || 'ws://localhost:8767';
+import { TutorService } from "../services/tutor/tutor-service";
 
 /**
  * Event types that can be emitted by the proxy client.
@@ -53,7 +50,7 @@ export interface LiveClientEventTypes {
 }
 
 export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
-  private ws: WebSocket | null = null;
+  private tutorService: TutorService | null = null;
   private _status: "connected" | "disconnected" | "connecting" = "disconnected";
   private config: LiveConnectConfig | null = null;
 
@@ -63,7 +60,7 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
 
   public get session() {
     // Return a proxy session object for compatibility
-    return this.ws ? {} : null;
+    return this.tutorService?.isConnected() ? {} : null;
   }
 
   public getConfig() {
@@ -92,73 +89,49 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     this._status = "connecting";
     this.config = config;
 
-    // Get JWT token for authentication
-    const token = jwtUtils.getToken();
-    if (!token) {
-      console.error("No JWT token available for WebSocket connection");
-      this._status = "disconnected";
-      const errorEvent = new ErrorEvent("error", { message: "Authentication required" });
-      this.emit("error", errorEvent);
-      return false;
-    }
+    try {
+      // Initialize Tutor Service
+      this.tutorService = new TutorService();
+      await this.tutorService.initialize();
 
-    // Connect to local backend with JWT token in query parameter
-    const wsUrl = `${TUTOR_WS_URL}?token=${encodeURIComponent(token)}`;
-    this.ws = new WebSocket(wsUrl);
-
-    this.ws.onopen = () => {
-      console.log("Connected to Tutor backend");
-      // Send connection request to backend (model is determined by backend)
-      this.ws!.send(
-        JSON.stringify({
-          type: "connect",
-          config,
-        })
-      );
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.type === "open") {
+      // Connect directly to Gemini Live API
+      await this.tutorService.connect(config, {
+        onopen: () => {
           this._status = "connected";
           this.log("client.open", "Connected");
           this.emit("open");
-        } else if (message.type === "close") {
+        },
+        onmessage: (message: LiveServerMessage) => {
+          // Process Gemini message directly
+          this.processGeminiMessage(message);
+        },
+        onerror: (error: Error) => {
           this._status = "disconnected";
-          const closeEvent = new CloseEvent("close", { reason: message.reason });
+          const errorEvent = new ErrorEvent("error", { message: error.message });
+          this.log("server.error", error.message);
+          this.emit("error", errorEvent);
+        },
+        onclose: (event: { reason?: string }) => {
+          this._status = "disconnected";
+          const closeEvent = new CloseEvent("close", { reason: event.reason });
           this.log(
             "server.close",
-            `disconnected ${message.reason ? `with reason: ${message.reason}` : ""}`
+            `disconnected ${event.reason ? `with reason: ${event.reason}` : ""}`
           );
           this.emit("close", closeEvent);
-        } else if (message.type === "error") {
-          const errorEvent = new ErrorEvent("error", { message: message.error });
-          this.log("server.error", message.error);
-          this.emit("error", errorEvent);
-        } else if (message.type === "message") {
-          // Process Gemini message
-          this.processGeminiMessage(message.data);
-        }
-      } catch (error) {
-        console.error("Error processing backend message:", error);
-      }
-    };
+        },
+      });
 
-    this.ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      return true;
+    } catch (error) {
+      console.error("Error connecting to Gemini:", error);
       this._status = "disconnected";
-    };
-
-    this.ws.onclose = () => {
-      if (this._status !== "disconnected") {
-        this._status = "disconnected";
-        this.emit("close", new CloseEvent("close"));
-      }
-    };
-
-    return true;
+      const errorEvent = new ErrorEvent("error", {
+        message: error instanceof Error ? error.message : "Failed to connect to Gemini",
+      });
+      this.emit("error", errorEvent);
+      return false;
+    }
   }
 
   private processGeminiMessage(message: LiveServerMessage) {
@@ -223,20 +196,19 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
   }
 
   public disconnect() {
-    if (!this.ws) {
+    if (!this.tutorService) {
       return false;
     }
 
-    this.ws.send(JSON.stringify({ type: "disconnect" }));
-    this.ws.close();
-    this.ws = null;
+    this.tutorService.disconnect();
+    this.tutorService = null;
     this._status = "disconnected";
     this.log("client.close", "Disconnected");
     return true;
   }
 
   sendRealtimeInput(chunks: Array<{ mimeType: string; data: string }>) {
-    if (!this.ws || this._status !== "connected") {
+    if (!this.tutorService || this._status !== "connected") {
       return;
     }
 
@@ -244,12 +216,8 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
     let hasVideo = false;
 
     for (const ch of chunks) {
-      this.ws.send(
-        JSON.stringify({
-          type: "realtimeInput",
-          data: ch,
-        })
-      );
+      // Send directly to Gemini
+      this.tutorService.sendRealtimeInput(ch);
 
       if (ch.mimeType.includes("audio")) {
         hasAudio = true;
@@ -274,7 +242,7 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
   }
 
   sendToolResponse(toolResponse: LiveClientToolResponse) {
-    if (!this.ws || this._status !== "connected") {
+    if (!this.tutorService || this._status !== "connected") {
       return;
     }
 
@@ -282,27 +250,21 @@ export class GenAIProxyClient extends EventEmitter<LiveClientEventTypes> {
       toolResponse.functionResponses &&
       toolResponse.functionResponses.length
     ) {
-      this.ws.send(
-        JSON.stringify({
-          type: "toolResponse",
-          data: toolResponse,
-        })
-      );
+      // Send directly to Gemini
+      this.tutorService.sendToolResponse(toolResponse);
       this.log(`client.toolResponse`, toolResponse);
     }
   }
 
   send(parts: Part | Part[], turnComplete: boolean = true) {
-    if (!this.ws || this._status !== "connected") {
+    if (!this.tutorService || this._status !== "connected") {
       return;
     }
 
-    this.ws.send(
-      JSON.stringify({
-        type: "send",
-        parts: Array.isArray(parts) ? parts : [parts],
-        turnComplete,
-      })
+    // Send directly to Gemini
+    this.tutorService.sendClientContent(
+      Array.isArray(parts) ? parts : [parts],
+      turnComplete
     );
 
     this.log(`client.send`, {

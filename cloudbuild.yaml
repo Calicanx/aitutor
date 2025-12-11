@@ -71,14 +71,12 @@ steps:
       - --build-arg
       - VITE_TEACHING_ASSISTANT_API_URL=${_TEACHING_ASSISTANT_API_URL}
       - --build-arg
-      - VITE_TUTOR_WS=${_TUTOR_WS}
-      - --build-arg
       - VITE_AUTH_SERVICE_URL=${_AUTH_SERVICE_URL}
       - --build-arg
       - VITE_GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID}
       - '.'
     id: 'build-frontend'
-    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant', 'build-tutor', 'build-auth-service']
+    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant', 'build-auth-service']
 
   # Push all images
   - name: 'gcr.io/cloud-builders/docker'

@@ -156,12 +156,14 @@ function ControlTray({
       videoRef.current.srcObject = activeVideoStream;
     }
 
-    let timeoutId = -1;
+    let timeoutId: number | null = null;
+    let rafId: number | null = null;
+    let isRunning = false; // Track if loop is running to prevent multiple concurrent loops
 
     function sendVideoFrame() {
       const canvas = renderCanvasRef.current;
 
-      if (!canvas) {
+      if (!canvas || !connected || !isRunning) {
         return;
       }
 
@@ -170,17 +172,30 @@ function ControlTray({
         const data = base64.slice(base64.indexOf(",") + 1, Infinity);
         client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
       }
-      if (connected) {
+      
+      // Schedule next frame only if still connected and running
+      if (connected && isRunning) {
         timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
       }
     }
-    if (connected) {
-      requestAnimationFrame(sendVideoFrame);
+    
+    // Start sending frames when connected
+    if (connected && !isRunning) {
+      isRunning = true;
+      // Send first frame immediately, then schedule subsequent frames
+      rafId = requestAnimationFrame(sendVideoFrame);
     }
+    
     return () => {
-      clearTimeout(timeoutId);
+      isRunning = false; // Stop the loop
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
     };
-  }, [connected, activeVideoStream, client, videoRef, renderCanvasRef]);
+  }, [connected, activeVideoStream, client]); // Removed refs from dependencies - they don't trigger re-renders
 
   const handleToggleWebcam = async () => {
     await onToggleCamera(!cameraEnabled);

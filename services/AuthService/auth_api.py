@@ -17,6 +17,7 @@ from services.AuthService.oauth_handler import GoogleOAuthHandler
 from services.AuthService.jwt_utils import create_jwt_token, create_setup_token, verify_setup_token, verify_token
 from managers.user_manager import UserManager
 from managers.user_manager import calculate_grade_from_age
+from shared.auth_middleware import get_current_user
 
 # Configure logging
 logging.basicConfig(
@@ -231,6 +232,32 @@ async def get_current_user(request: Request):
 async def logout():
     """Logout endpoint (frontend clears token)"""
     return {"message": "Logged out successfully"}
+
+
+@app.get("/auth/gemini-key")
+async def get_gemini_key(request: Request):
+    """Get Gemini API key for authenticated user"""
+    try:
+        # Verify JWT token
+        user_id = get_current_user(request)
+        
+        # Get API key and model from environment variables
+        api_key = os.getenv("GEMINI_API_KEY")
+        model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash-native-audio-preview-09-2025")
+        
+        if not api_key:
+            logger.error("GEMINI_API_KEY not configured in environment")
+            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+        
+        return {
+            "api_key": api_key,
+            "model": model
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting Gemini API key: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get API key: {str(e)}")
 
 
 if __name__ == "__main__":

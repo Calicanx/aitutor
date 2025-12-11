@@ -106,8 +106,9 @@ The platform follows a microservices architecture with the following components:
 │                      Frontend (React)                        │
 │  - Question Display                                         │
 │  - Progress Tracking                                        │
-│  - Real-time AI Chat                                        │
+│  - Real-time AI Chat (Direct Gemini Connection)            │
 │  - Authentication UI                                        │
+│  - Tutor Service (Frontend)                                │
 └──────────────┬──────────────────────────────────────────────┘
                │
                ├──────────────────────────────────────────────┐
@@ -122,18 +123,20 @@ The platform follows a microservices architecture with the following components:
                ├──────────────────────────────────────────────┐
                │                                              │
 ┌──────────────▼──────────────┐    ┌─────────────────────────▼──┐
-│   SherlockED API (FastAPI)   │    │    Tutor Service (Node.js)  │
-│  - Perseus question loading  │    │  - Gemini Live API bridge   │
-│  - Widget rendering          │    │  - WebSocket server         │
-└──────────────┬───────────────┘    └───────────────────────────┘
+│   SherlockED API (FastAPI)   │    │   Auth Service (FastAPI)   │
+│  - Perseus question loading  │    │  - Google OAuth            │
+│  - Widget rendering          │    │  - JWT token generation    │
+└──────────────┬───────────────┘    │  - User profile management │
+               │                    │  - Gemini API key endpoint │
+               │                    └───────────────────────────┘
                │
                ├──────────────────────────────────────────────┐
                │                                              │
 ┌──────────────▼──────────────┐    ┌─────────────────────────▼──┐
-│   Auth Service (FastAPI)     │    │      MongoDB Database      │
-│  - Google OAuth              │    │  - Users                   │
-│  - JWT token generation      │    │  - Skills (generated_skills)│
-│  - User profile management   │    │  - Questions (scraped_questions)│
+│      MongoDB Database        │    │   Gemini Live API (Google)  │
+│  - Users                     │    │  - Real-time AI tutoring    │
+│  - Skills (generated_skills) │    │  - Voice interaction        │
+│  - Questions (scraped_questions)│  │  - Multimodal input        │
 └──────────────────────────────┘    └───────────────────────────┘
 ```
 
@@ -142,7 +145,7 @@ The platform follows a microservices architecture with the following components:
 1. **User Authentication**: User logs in via Google OAuth → Auth Service generates JWT → Frontend stores token
 2. **Question Request**: Frontend requests questions → DASH API selects adaptive questions → Loads Perseus data from MongoDB
 3. **Answer Submission**: User submits answer → DASH API updates skill states → Returns updated progress
-4. **AI Tutoring**: Frontend connects via WebSocket → Tutor Service bridges to Gemini Live API → Real-time voice interaction
+4. **AI Tutoring**: Frontend connects directly to Gemini Live API via WebSocket → Real-time voice interaction (no backend proxy)
 5. **Progress Tracking**: Frontend fetches skill scores → DASH API calculates memory strength → Displays progress
 
 ---
@@ -359,28 +362,29 @@ aitutor/
 
 **Dependencies**: MongoDB (`scraped_questions` collection)
 
-### 5. Tutor Service (`services/Tutor/`)
+### 5. Tutor Service (`frontend/src/services/tutor/`)
 
-**Purpose**: WebSocket bridge to Google Gemini Live API for real-time AI tutoring.
+**Purpose**: Direct integration with Google Gemini Live API from frontend for real-time AI tutoring.
 
 **Key Features**:
-- WebSocket server for real-time communication
-- Gemini Live API integration
+- Direct WebSocket connection to Gemini Live API (no backend proxy)
+- System prompt management
 - Audio/video frame processing
-- JWT authentication for WebSocket connections
+- JWT-authenticated API key retrieval from AuthService
+- Error handling and reconnection logic
 
-**Protocol**: WebSocket (WSS in production)
+**Location**: Frontend service component (separate from UI components)
 
-**Port**: 8767 (local), 8080 (Cloud Run)
+**Protocol**: Direct WebSocket to Gemini Live API
 
-**Dependencies**: Google Gemini API
+**Dependencies**: 
+- Google Gemini API (via `@google/genai` SDK)
+- AuthService for secure API key retrieval
 
-**WebSocket Message Types**:
-- `connect` - Initialize Gemini Live API connection
-- `disconnect` - Close Gemini session
-- `realtimeInput` - Send audio/video frames to Gemini
-- `send` - Send text messages to Gemini
-- `toolResponse` - Send tool responses
+**Architecture**:
+- Frontend → Direct WebSocket → Gemini Live API
+- API key fetched securely from AuthService `/auth/gemini-key` endpoint
+- System prompt loaded from `frontend/public/ai_tutor_system_prompt.md`
 
 ---
 
@@ -422,7 +426,9 @@ Frontend uses build-time environment variables (injected during Docker build):
 - `VITE_DASH_API_URL` - DASH API endpoint
 - `VITE_SHERLOCKED_API_URL` - SherlockED API endpoint
 - `VITE_TEACHING_ASSISTANT_API_URL` - Teaching Assistant API endpoint
-- `VITE_TUTOR_WS` - Tutor WebSocket URL (WSS)
+- `VITE_AUTH_SERVICE_URL` - Auth Service endpoint (for API key retrieval)
+
+**Note**: Tutor service connects directly to Gemini Live API. API key is fetched securely from AuthService at runtime (not baked into frontend).
 
 For local development, these default to localhost URLs.
 
