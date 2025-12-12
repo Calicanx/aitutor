@@ -79,6 +79,8 @@ The platform is designed for K-12 math education, with support for grades Kinder
    - Inactivity detection and prompts
    - Question answer tracking
    - Conversation turn tracking
+   - Real-time feed webhook (media, audio, transcript)
+   - Dynamic instruction injection to tutor based on feed analysis
 
 7. **Question Bank Management**
    - Automated Khan Academy question scraping
@@ -88,6 +90,8 @@ The platform is designed for K-12 math education, with support for grades Kinder
 
 ### Advanced Features
 
+- **Real-time Feed Integration**: Continuous feed of media mixer, audio input, and transcripts to Teaching Assistant via webhooks
+- **Instruction Injection**: Dynamic prompt injection to tutor based on feed analysis for context-aware responses
 - **Multi-environment Deployment**: Staging and production environments
 - **MongoDB Integration**: Centralized data storage
 - **CORS Support**: Cross-origin resource sharing for frontend-backend communication
@@ -146,7 +150,9 @@ The platform follows a microservices architecture with the following components:
 2. **Question Request**: Frontend requests questions → DASH API selects adaptive questions → Loads Perseus data from MongoDB
 3. **Answer Submission**: User submits answer → DASH API updates skill states → Returns updated progress
 4. **AI Tutoring**: Frontend connects directly to Gemini Live API via WebSocket → Real-time voice interaction (no backend proxy)
-5. **Progress Tracking**: Frontend fetches skill scores → DASH API calculates memory strength → Displays progress
+5. **Feed Webhook**: Frontend continuously sends media mixer frames, audio input, and transcripts → Teaching Assistant webhook endpoint
+6. **Instruction Injection**: Frontend requests instructions from Teaching Assistant → Receives context-aware prompts → Injects into tutor conversation
+7. **Progress Tracking**: Frontend fetches skill scores → DASH API calculates memory strength → Displays progress
 
 ---
 
@@ -156,10 +162,9 @@ The platform follows a microservices architecture with the following components:
 
 - **Python 3.11**: Main backend language
 - **FastAPI**: Web framework for REST APIs
-- **Node.js 18**: Tutor service (WebSocket server)
 - **MongoDB**: Primary database (via PyMongo)
 - **JWT**: Authentication tokens (PyJWT)
-- **Google Gemini Live API**: Real-time AI tutoring
+- **Google Gemini Live API**: Real-time AI tutoring (accessed directly from frontend)
 - **OpenRouter**: LLM API for question generation and teaching assistant
 
 ### Frontend
@@ -204,6 +209,8 @@ aitutor/
 │   │   ├── contexts/           # React contexts
 │   │   ├── hooks/              # Custom React hooks
 │   │   ├── lib/                # Utility libraries
+│   │   ├── services/           # Frontend services
+│   │   │   └── tutor/          # Tutor service (direct Gemini Live API integration)
 │   │   └── App.tsx             # Main app component
 │   ├── package.json
 │   └── Dockerfile              # Frontend Docker image
@@ -235,8 +242,8 @@ aitutor/
 │   │   │   └── widget_renderer.py # Widget rendering
 │   │   └── Dockerfile
 │   │
-│   ├── Tutor/                   # Gemini Live API bridge
-│   │   ├── server.js           # WebSocket server
+│   ├── Tutor/                   # Legacy backend Tutor service (kept for reference)
+│   │   ├── server.js           # WebSocket server (not used - Tutor is now in frontend)
 │   │   ├── system_prompts/     # AI tutor prompts
 │   │   ├── package.json
 │   │   └── Dockerfile
@@ -331,6 +338,8 @@ aitutor/
 - Inactivity detection
 - Question answer tracking
 - Conversation turn tracking
+- Real-time feed webhook for media, audio, and transcript data
+- Dynamic instruction generation and injection to tutor
 
 **Endpoints**:
 - `POST /session/start` - Start tutoring session
@@ -339,6 +348,8 @@ aitutor/
 - `POST /question/answered` - Record question answer
 - `POST /conversation/turn` - Record conversation turn
 - `GET /inactivity/check` - Check for inactivity (returns prompt if needed)
+- `POST /webhook/feed` - Receive feed data (media, audio, transcript) from frontend
+- `POST /send_instruction_to_tutor` - Get instruction prompt for tutor injection
 - `GET /health` - Health check
 
 **Port**: 8002 (local), 8080 (Cloud Run)
@@ -545,15 +556,7 @@ npm install
 cd ..
 ```
 
-### Step 5: Install Tutor Service Dependencies
-
-```bash
-cd services/Tutor
-npm install
-cd ../..
-```
-
-### Step 6: Set Up MongoDB Collections
+### Step 5: Set Up MongoDB Collections
 
 The collections will be created automatically when the services start. However, you need to:
 
@@ -619,8 +622,9 @@ Frontend configuration is done via environment variables during build (see [Depl
 - **SherlockED API**: `http://localhost:8001`
 - **Teaching Assistant API**: `http://localhost:8002`
 - **Auth Service**: `http://localhost:8003`
-- **Tutor Service**: `ws://localhost:8767`
 - **Frontend**: `http://localhost:3000` (or Vite default port)
+
+**Note**: Tutor service is integrated in the frontend and connects directly to Gemini Live API (no separate backend service).
 
 ---
 
@@ -668,14 +672,9 @@ python services/SherlockEDApi/run_backend.py
 # Or: uvicorn services.SherlockEDApi.app.main:app --port 8001
 ```
 
-#### Start Tutor Service
-
-```bash
-cd services/Tutor
-node server.js
-```
-
 #### Start Frontend
+
+**Note**: Tutor service is integrated in the frontend and connects directly to Gemini Live API. No separate backend service is needed.
 
 ```bash
 cd frontend
@@ -863,6 +862,54 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
+#### Receive Feed Webhook
+
+```http
+POST /webhook/feed
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "type": "media" | "audio" | "transcript" | "combined",
+  "timestamp": "2025-01-27T12:00:00.000Z",
+  "data": {
+    "media": "base64_encoded_image",  // Optional: Media mixer frame
+    "audio": "base64_encoded_audio",   // Optional: Audio input
+    "transcript": "User said something" // Optional: Gemini transcript
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "status": "received",
+  "type": "media"
+}
+```
+
+#### Get Instruction for Tutor
+
+```http
+POST /send_instruction_to_tutor
+Authorization: Bearer <jwt_token>
+```
+
+**Response**:
+```json
+{
+  "prompt": "Instruction text to inject into tutor conversation",
+  "session_info": {
+    "session_active": true,
+    "user_id": "user_...",
+    "duration_minutes": 15.5,
+    "total_questions": 3
+  }
+}
+```
+
+**Note**: The frontend calls this endpoint after receiving a transcript and injects the returned prompt into the tutor conversation if provided.
+
 ---
 
 ## Deployment
@@ -952,8 +999,9 @@ Log files are stored in `logs/` directory:
 - `dash_api.log`
 - `auth_service.log`
 - `teaching_assistant.log`
-- `tutor.log`
 - `frontend.log`
+
+**Note**: Tutor service logs are now in browser console (frontend-based service).
 
 ### Database Migrations
 
@@ -1018,10 +1066,11 @@ python generate_skills_from_scraped.py
    - Verify backend URLs in frontend environment variables
    - Check browser console for CORS errors
 
-3. **WebSocket Connection Fails**
-   - Verify Tutor service is running
-   - Check WebSocket URL (should be `wss://` in production)
-   - Check origin validation in `services/Tutor/server.js`
+3. **Tutor Connection Fails**
+   - Verify Gemini API key is accessible via AuthService `/auth/gemini-key` endpoint
+   - Check browser console for connection errors
+   - Verify system prompt file exists at `frontend/public/ai_tutor_system_prompt.md`
+   - Check network connectivity to Gemini Live API
 
 4. **No Questions Available**
    - Verify `scraped_questions` collection has data
@@ -1067,5 +1116,13 @@ For issues and questions:
 ---
 
 **Last Updated**: 2025-01-27
-**Version**: 1.0.0
+**Version**: 1.1.0
+
+## Recent Updates
+
+### Version 1.1.0 (2025-01-27)
+- **Tutor Service Migration**: Moved from backend WebSocket proxy to frontend direct integration with Gemini Live API
+- **Feed Webhook System**: Added real-time feed webhook for media mixer, audio input, and transcripts
+- **Instruction Injection**: Added dynamic instruction injection to tutor based on feed analysis
+- **Architecture Simplification**: Removed backend Tutor service from deployment pipeline
 
