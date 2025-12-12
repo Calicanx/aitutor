@@ -8,6 +8,7 @@ import { apiUtils } from "../../lib/api-utils";
 import AudioPulse from "../audio-pulse/AudioPulse";
 import "./control-tray.scss";
 import SettingsDialog from "../settings-dialog/SettingsDialog";
+import { feedWebhookService, extractTranscriptFromContent } from "../../services/feed-webhook-service";
 
 const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
 
@@ -97,12 +98,18 @@ function ControlTray({
 
   useEffect(() => {
     const onData = (base64: string) => {
+      // Send to Gemini (existing functionality)
       client.sendRealtimeInput([
         {
           mimeType: "audio/pcm;rate=16000",
           data: base64,
         },
       ]);
+      
+      // Also send to webhook (batched, non-blocking)
+      feedWebhookService.sendAudio(base64).catch((error) => {
+        console.error('Failed to send audio to webhook:', error);
+      });
     };
     if (connected && !muted && audioRecorder) {
       audioRecorder.on("data", onData).on("volume", setInVolume).start();
@@ -151,6 +158,41 @@ function ControlTray({
     };
   }, [client, connected]);
 
+  // Handle content events (transcript) and request instructions
+  useEffect(() => {
+    const onContent = async (content: any) => {
+      if (!connected) return;
+
+      // Extract transcript from content
+      const transcript = extractTranscriptFromContent(content);
+      if (transcript) {
+        // Send transcript to webhook (fire-and-forget)
+        feedWebhookService.sendTranscript(transcript).catch((error) => {
+          console.error('Failed to send transcript to webhook:', error);
+        });
+
+        // Request instruction after sending transcript
+        try {
+          const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/send_instruction_to_tutor`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.prompt && client.status === "connected") {
+              client.send({ text: data.prompt });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to get instruction from TeachingAssistant:', error);
+        }
+      }
+    };
+
+    client.on("content", onContent);
+
+    return () => {
+      client.off("content", onContent);
+    };
+  }, [client, connected]);
+
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.srcObject = activeVideoStream;
@@ -170,7 +212,14 @@ function ControlTray({
       if (canvas.width + canvas.height > 0) {
         const base64 = canvas.toDataURL("image/jpeg", 1.0);
         const data = base64.slice(base64.indexOf(",") + 1, Infinity);
+        
+        // Send to Gemini (existing functionality)
         client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
+        
+        // Also send to webhook (fire-and-forget, non-blocking)
+        feedWebhookService.sendMedia(data).catch((error) => {
+          console.error('Failed to send media to webhook:', error);
+        });
       }
       
       // Schedule next frame only if still connected and running

@@ -62,6 +62,12 @@ class PromptResponse(BaseModel):
     session_info: dict
 
 
+class FeedWebhookRequest(BaseModel):
+    type: str  # "media" | "audio" | "transcript" | "combined"
+    timestamp: str  # ISO 8601 timestamp
+    data: dict  # Contains optional: media, audio, transcript
+
+
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "service": "TeachingAssistant"}
@@ -205,6 +211,34 @@ def check_inactivity(http_request: Request):
             session_info = ta.get_session_info()
             return PromptResponse(prompt=prompt, session_info=session_info)
         return PromptResponse(prompt="", session_info=ta.get_session_info())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/webhook/feed")
+def receive_feed(http_request: Request, request: FeedWebhookRequest):
+    # Get user_id from JWT token (will raise 401 if invalid)
+    user_id = get_current_user(http_request)
+    try:
+        # For now: just log and acknowledge the feed (no analysis yet)
+        # Later: analyze feed and generate instructions
+        print(f"[FEED] Received {request.type} from user {user_id} at {request.timestamp}")
+        # TODO: Store feed data for future analysis
+        return {"status": "received", "type": request.type}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/send_instruction_to_tutor", response_model=PromptResponse)
+def send_instruction_to_tutor(http_request: Request):
+    # Get user_id from JWT token (will raise 401 if invalid)
+    user_id = get_current_user(http_request)
+    try:
+        # For now: return empty prompt (no analysis yet)
+        # Later: analyze stored feed and generate instruction
+        instruction = ""  # TODO: Generate instruction based on feed analysis
+        session_info = ta.get_session_info()
+        return PromptResponse(prompt=instruction, session_info=session_info)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
