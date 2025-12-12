@@ -21,7 +21,7 @@ import {
 
 export class AudioStreamer {
   private sampleRate: number = 24000;
-  private bufferSize: number = 7680;
+  private bufferSize: number = 2400; // Smaller chunks (100ms) for more granular scheduling
   // A queue of audio buffers to be played. Each buffer is a Float32Array.
   private audioQueue: Float32Array[] = [];
   private isPlaying: boolean = false;
@@ -29,7 +29,8 @@ export class AudioStreamer {
   private isStreamComplete: boolean = false;
   private checkInterval: number | null = null;
   private scheduledTime: number = 0;
-  private initialBufferTime: number = 0.1; //0.1 // 100ms initial buffer
+  private initialBufferTime: number = 0.4; // 400ms initial buffer for network jitter
+  private minBufferSize: number = 3; // Minimum number of chunks before starting playback
   // Web Audio API nodes. source => gain => destination
   public gainNode: GainNode;
   public source: AudioBufferSourceNode;
@@ -115,8 +116,9 @@ export class AudioStreamer {
     if (processingBuffer.length > 0) {
       this.audioQueue.push(processingBuffer);
     }
-    // Start playing if not already playing.
-    if (!this.isPlaying) {
+    // Start playing only if not already playing AND we have enough buffered audio
+    // This prevents glitchy playback from starting too early
+    if (!this.isPlaying && this.audioQueue.length >= this.minBufferSize) {
       this.isPlaying = true;
       // Initialize scheduledTime only when we start playing
       this.scheduledTime = this.context.currentTime + this.initialBufferTime;
@@ -135,7 +137,7 @@ export class AudioStreamer {
   }
 
   private scheduleNextBuffer() {
-    const SCHEDULE_AHEAD_TIME = 0.2;
+    const SCHEDULE_AHEAD_TIME = 0.5; // Increased from 0.2 to 0.5 seconds for smoother streaming
 
     while (
       this.audioQueue.length > 0 &&
@@ -199,7 +201,7 @@ export class AudioStreamer {
             if (this.audioQueue.length > 0) {
               this.scheduleNextBuffer();
             }
-          }, 100) as unknown as number;
+          }, 50) as unknown as number; // Reduced from 100ms to 50ms for faster buffer refill
         }
       }
     } else {
