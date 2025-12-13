@@ -2,12 +2,19 @@
   color: var(--gray-300);
   width: 100%;
   max-width: 100%;
+  height: 100%;
   display: block;
 
   .logger-list {
     padding: 0 0px 0 25px;
     overflow-x: hidden;
     width: calc(100% - 45px);
+  }
+
+  .logger-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--Neutral-50);
   }
 
   .user h4 {

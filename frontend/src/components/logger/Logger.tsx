@@ -17,7 +17,7 @@
 import "./logger.scss";
 
 import cn from "classnames";
-import { memo, ReactNode, useMemo, lazy, Suspense } from "react";
+import { memo, ReactNode, useMemo, lazy, Suspense, useRef, useState, useLayoutEffect } from "react";
 import { useLoggerStore } from "../../lib/store-logger";
 import { VariableSizeList as List } from "react-window";
 import {
@@ -273,12 +273,44 @@ const component = (log: StreamingLog) => {
 
 export default function Logger({ filter = "none" }: LoggerProps) {
   const { logs } = useLoggerStore();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = useState(400); // Default height
 
   // Memoize filtered logs to avoid recalculating on every render
   const filteredLogs = useMemo(() => {
     const filterFn = filters[filter];
     return logs.filter(filterFn);
   }, [logs, filter]);
+
+  // Use ResizeObserver to track container size
+  useLayoutEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        const height = containerRef.current.clientHeight;
+        setContainerHeight(height);
+      }
+    };
+
+    // Initial height calculation
+    updateHeight();
+
+    // Create ResizeObserver for dynamic updates
+    const observer = new ResizeObserver(() => {
+      updateHeight();
+    });
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    // Also listen to window resize as a fallback
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
 
   // Virtualized row renderer
   const Row = memo(({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -301,10 +333,10 @@ export default function Logger({ filter = "none" }: LoggerProps) {
   };
 
   return (
-    <div className="logger">
+    <div className="logger" ref={containerRef}>
       {filteredLogs.length > 0 ? (
         <List
-          height={600} // Adjust based on your layout
+          height={containerHeight}
           itemCount={filteredLogs.length}
           itemSize={getItemSize}
           width="100%"

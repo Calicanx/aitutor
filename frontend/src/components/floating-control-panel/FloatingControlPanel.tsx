@@ -15,6 +15,7 @@ import { apiUtils } from "../../lib/api-utils";
 import SettingsDialog from "../settings-dialog/SettingsDialog";
 import cn from "classnames";
 import MediaMixerDisplay from "../media-mixer-display/MediaMixerDisplay";
+import { useTheme } from "../theme/theme-provier";
 import {
   Mic,
   MicOff,
@@ -69,6 +70,7 @@ function FloatingControlPanel({
   mediaMixerCanvasRef,
 }: FloatingControlPanelProps) {
   const { client, connected, connect, disconnect, interruptAudio } = useLiveAPIContext();
+  const { theme } = useTheme();
   const dragControls = useDragControls();
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("");
@@ -88,6 +90,34 @@ function FloatingControlPanel({
     error: string | null;
   }>({ isConnected: true, error: null }); // Default to connected since it's frontend-based now
   const turnCompleteRef = useRef(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Dark mode detection for logo
+  useEffect(() => {
+    const checkDarkMode = () => {
+      if (theme === 'dark') {
+        setIsDarkMode(true);
+      } else if (theme === 'light') {
+        setIsDarkMode(false);
+      } else if (theme === 'system') {
+        // Check if dark class is applied to document root
+        setIsDarkMode(document.documentElement.classList.contains('dark'));
+      }
+    };
+
+    checkDarkMode();
+
+    // Listen for theme changes when using system theme
+    if (theme === 'system') {
+      const observer = new MutationObserver(checkDarkMode);
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+
+      return () => observer.disconnect();
+    }
+  }, [theme]);
 
   // Timer for session duration
   useEffect(() => {
@@ -499,7 +529,7 @@ function FloatingControlPanel({
           {!isCollapsed && (
             <div className="flex items-center gap-1.5 md:gap-2">
               <img 
-                src="/logo.png" 
+                src={isDarkMode ? '/logo_white.png' : '/logo.png'} 
                 alt="teachr" 
                 className="h-6 md:h-7 w-auto"
               />
@@ -824,7 +854,7 @@ function FloatingControlPanel({
             <button
               onClick={handleConnect}
               className={cn(
-                "w-full py-2.5 md:py-3 font-black text-white transition-all transform active:translate-x-1 active:translate-y-1 active:shadow-none flex items-center justify-center gap-2 mt-1 border-[2px] md:border-[3px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] uppercase text-[10px] md:text-xs",
+                "w-full py-2.5 md:py-3 font-black text-black transition-all transform active:translate-x-1 active:translate-y-1 active:shadow-none flex items-center justify-center gap-2 mt-1 border-[2px] md:border-[3px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] uppercase text-[10px] md:text-xs",
                 connected
                   ? "bg-[#FF6B6B] hover:bg-[#FF6B6B]"
                   : "bg-[#4ADE80] hover:bg-[#4ADE80]",
@@ -927,7 +957,7 @@ function FloatingControlPanel({
                 <div className="p-1.5 md:p-2 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-[#000000]">
                   <ImageIcon className="w-4 h-4 md:w-5 md:h-5 text-black dark:text-white font-bold" />
                 </div>
-                <h3 className="font-black text-black dark:text-white uppercase text-xs md:text-sm">
+                <h3 className="font-black text-black uppercase text-xs md:text-sm">
                   ADAM'S VIEW
                 </h3>
                 <span
@@ -958,7 +988,7 @@ function FloatingControlPanel({
                 <X className="w-4 h-4 md:w-5 md:h-5 font-bold" />
               </button>
             </div>
-            <div className="p-0 m-0 bg-[#FFFDF5] dark:bg-[#000000] min-h-[500px] md:min-h-[500px] overflow-hidden">
+            <div className="flex-1 min-h-0 bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden">
               <MediaMixerDisplay
                 canvasRef={mediaMixerCanvasRef}
                 onStatusChange={setMediaMixerStatus}

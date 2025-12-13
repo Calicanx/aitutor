@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import cn from "classnames";
 import { Moon, Sun, User, Settings, LogOut } from "lucide-react";
 import { useTheme } from "../theme/theme-provier";
+import { useEffect, useState } from "react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -41,13 +42,42 @@ interface HeaderProps {
 
 export default function Header({ sidebarOpen, onToggleSidebar }: HeaderProps) {
     const { theme, setTheme } = useTheme();
+    const [isDarkMode, setIsDarkMode] = useState(false);
+
+    useEffect(() => {
+        const checkDarkMode = () => {
+            if (theme === 'dark') {
+                setIsDarkMode(true);
+            } else if (theme === 'light') {
+                setIsDarkMode(false);
+            } else if (theme === 'system') {
+                // Check if dark class is applied to document root
+                setIsDarkMode(document.documentElement.classList.contains('dark'));
+            }
+        };
+
+        checkDarkMode();
+
+        // Listen for theme changes when using system theme
+        if (theme === 'system') {
+            const observer = new MutationObserver(checkDarkMode);
+            observer.observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ['class']
+            });
+
+            return () => observer.disconnect();
+        }
+    }, [theme]);
+
+    const logoSource = isDarkMode ? '/logo_white.png' : '/logo.png';
 
     return (
         <header className="fixed top-0 left-0 right-0 h-[44px] lg:h-[48px] bg-[#FFFDF5] dark:bg-[#000000] border-b-[3px] lg:border-b-[4px] border-black dark:border-white z-40 flex items-center justify-between px-2 md:px-4 lg:px-5 shadow-[0_2px_0_0_rgba(0,0,0,1)] lg:shadow-[0_2px_0_0_rgba(0,0,0,1)] dark:shadow-[0_2px_0_0_rgba(255,255,255,0.3)]">
             {/* Left side - Logo */}
             <div className="flex items-center gap-1.5 md:gap-2 group cursor-pointer">
                 <img 
-                    src="/logo.png" 
+                    src={logoSource} 
                     alt="teachr" 
                     className="h-7 md:h-8 lg:h-9 w-auto group-hover:translate-x-0.5 group-hover:translate-y-0.5 transition-transform duration-100"
                 />

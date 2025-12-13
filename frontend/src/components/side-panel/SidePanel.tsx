@@ -16,8 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Commented out - not using tabs anymore
+// import { ScrollArea } from "@/components/ui/scroll-area"; // Commented out - not using ScrollArea for Journey tab
 import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
 import { useLoggerStore } from "../../lib/store-logger";
 import Logger, { LoggerFilterType } from "../logger/Logger";
@@ -53,6 +53,7 @@ export default function SidePanel({ open }: SidePanelProps) {
 
   const [textInput, setTextInput] = useState("");
   const [filter, setFilter] = useState<LoggerFilterType>("none");
+  const [isPaused, setIsPaused] = useState(false);
   const [learningPath, setLearningPath] = useState<any[]>(NEXT_STEPS); // Initialize with mock data to avoid "Loading..." state
 
   useEffect(() => {
@@ -127,32 +128,19 @@ export default function SidePanel({ open }: SidePanelProps) {
         "max-md:hidden"
       )}
     >
-      <Tabs defaultValue="learning" className="flex flex-col h-full w-full">
-        {/* Header with Tabs */}
-        <header className="flex items-center justify-between h-[56px] px-2 border-b-[3px] border-black dark:border-white bg-[#C4B5FD] shrink-0">
-          <TabsList className="grid w-full grid-cols-2 bg-transparent gap-2">
-            <TabsTrigger
-              value="learning"
-              className="border-[2px] border-transparent data-[state=active]:border-black data-[state=active]:bg-[#FFFDF5] data-[state=active]:text-black data-[state=active]:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-black font-bold uppercase tracking-tight transition-all"
-            >
-              <BookOpen className="w-4 h-4 mr-2" />
-              Journey
-            </TabsTrigger>
-            <TabsTrigger
-              value="console"
-              className="border-[2px] border-transparent data-[state=active]:border-black data-[state=active]:bg-[#FFFDF5] data-[state=active]:text-black data-[state=active]:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-black font-bold uppercase tracking-tight transition-all"
-            >
-              <Terminal className="w-4 h-4 mr-2" />
-              Console
-            </TabsTrigger>
-          </TabsList>
+      <div className="flex flex-col h-full w-full">
+        {/* Header - Simple Console Header */}
+        <header className="flex items-center h-[56px] px-4 border-b-[3px] border-black dark:border-white bg-[#C4B5FD] shrink-0">
+          <div className="w-6 h-6 border-2 border-black bg-white flex items-center justify-center mr-3">
+            <span className="text-black font-mono text-xs font-bold">&gt;_</span>
+          </div>
+          <span className="text-black font-bold uppercase tracking-tight text-base">CONSOLE</span>
         </header>
 
-        {/* Learning Journey Tab */}
-        <TabsContent value="learning" className="flex-grow flex flex-col overflow-hidden data-[state=active]:flex mt-0">
+        {/* Learning Journey Tab - Commented Out */}
+        {/* <TabsContent value="learning" className="flex-grow flex flex-col overflow-hidden data-[state=active]:flex mt-0">
           <ScrollArea className="flex-grow p-4">
             <div className="space-y-6">
-              {/* Current Goal */}
               <div className="rounded-xl border-[3px] border-black bg-[#FFD93D] p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
                 <h3 className="text-xs font-black uppercase tracking-wider text-black/70 mb-1">Current Subject</h3>
                 <h2 className="text-xl font-black text-black">Algebra I</h2>
@@ -163,8 +151,6 @@ export default function SidePanel({ open }: SidePanelProps) {
                   <span className="text-xs font-bold text-black">65%</span>
                 </div>
               </div>
-
-              {/* Learning Path */}
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider mb-3 px-1">Your Path</h3>
                 <div className="relative border-l-[3px] border-dashed border-gray-300 ml-3 space-y-6 pb-2">
@@ -172,7 +158,6 @@ export default function SidePanel({ open }: SidePanelProps) {
                     <div className="pl-6 text-sm text-gray-500">Loading path...</div>
                   ) : learningPath.map((step) => (
                     <div key={step.id} className="relative pl-6">
-                      {/* Connector Node */}
                       <div className={cn(
                         "absolute -left-[10px] top-1 w-5 h-5 rounded-full border-[2px] border-black flex items-center justify-center",
                         step.status === 'completed' ? "bg-[#4ADE80]" :
@@ -182,8 +167,6 @@ export default function SidePanel({ open }: SidePanelProps) {
                         {step.status === 'in-progress' && <div className="w-2 h-2 rounded-full bg-black animate-pulse" />}
                         {step.status === 'locked' && <Lock className="w-2.5 h-2.5 text-gray-400" />}
                       </div>
-
-                      {/* Content */}
                       <div className={cn(
                         "p-3 rounded-lg border-[2px] transition-all",
                         step.status === 'in-progress'
@@ -200,31 +183,33 @@ export default function SidePanel({ open }: SidePanelProps) {
               </div>
             </div>
           </ScrollArea>
-        </TabsContent>
+        </TabsContent> */}
 
-        {/* Console Tab (Existing Functionality) */}
-        <TabsContent value="console" className="flex-grow flex flex-col overflow-hidden data-[state=active]:flex mt-0 h-full">
+        {/* Console Content (Existing Functionality) */}
+        <div className="flex-grow flex flex-col overflow-hidden h-full">
           <div className="flex items-center justify-between px-4 py-3 shrink-0 border-b-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
             <Select value={filter} onValueChange={(value) => setFilter(value as LoggerFilterType)}>
-              <SelectTrigger className="w-[140px] h-8 text-xs font-bold uppercase border-2 border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
-                <SelectValue placeholder="Filter" />
+              <SelectTrigger className="w-[140px] h-8 text-xs font-bold uppercase border-2 border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] rounded">
+                <SelectValue placeholder="Filter">
+                  {filter === "none" ? "ALL" : filterOptions.find(opt => opt.value === filter)?.label || "ALL"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {filterOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value} className="text-xs font-bold">
-                    {option.label}
+                    {option.value === "none" ? "ALL" : option.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <div className={cn(
-              "flex items-center gap-1.5 px-2 py-1 rounded border-2 border-black text-[10px] font-bold uppercase",
-              connected ? "bg-[#4ADE80]" : "bg-gray-100"
-            )}>
-              <div className={cn("w-2 h-2 rounded-full bg-black", connected && "animate-pulse")} />
-              {connected ? "Live" : "Offline"}
-            </div>
+            <Button
+              onClick={() => setIsPaused(!isPaused)}
+              className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded border-2 border-black text-[10px] font-bold uppercase shadow-[2px_2px_0_0_rgba(0,0,0,1)] bg-[#C4B5FD] text-black hover:bg-[#A78BFA]"
+            >
+              <div className="w-2 h-2 rounded-sm bg-black" />
+              PAUSED
+            </Button>
           </div>
 
           <div
@@ -240,8 +225,8 @@ export default function SidePanel({ open }: SidePanelProps) {
           )}>
             <div className="flex gap-2">
               <Textarea
-                className="min-h-[40px] h-[40px] resize-none border-2 border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs font-medium py-2"
-                placeholder="Type command..."
+                className="min-h-[40px] h-[40px] resize-none border-2 border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs font-medium py-2 rounded"
+                placeholder="Type a message..."
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -261,9 +246,9 @@ export default function SidePanel({ open }: SidePanelProps) {
               </Button>
             </div>
           </div>
-        </TabsContent>
+        </div>
 
-      </Tabs>
+      </div>
     </div>
   );
 }
