@@ -53,8 +53,10 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
             }
             return res.json();
         },
-        staleTime: 10_000, // Refresh every 10 seconds
-        refetchInterval: 10_000, // Auto-refresh every 10 seconds
+        staleTime: 60_000, // Consider data fresh for 60 seconds
+        refetchOnWindowFocus: false, // Don't refetch when window regains focus
+        refetchOnMount: true, // Only refetch when component mounts
+        // Removed refetchInterval - we'll manually invalidate on answer submission
     });
     
     const skillStates = (skillScoresData?.skill_states || {}) as Record<

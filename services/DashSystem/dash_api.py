@@ -508,8 +508,8 @@ def get_skill_scores(request: Request):
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
-    # Get user profile to ensure it exists
-    user_profile = dash_system.user_manager.load_user(user_id)
+    # Get user profile to ensure it exists and sync skill states
+    user_profile = dash_system.load_user_or_create(user_id)
     if not user_profile:
         raise HTTPException(status_code=404, detail="User not found")
     

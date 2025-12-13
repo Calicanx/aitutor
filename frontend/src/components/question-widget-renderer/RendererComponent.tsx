@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -32,6 +33,7 @@ interface RendererComponentProps {
 
 const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     const { user } = useAuth();
+    const queryClient = useQueryClient();
     const [perseusItems, setPerseusItems] = useState<PerseusItem[]>([]);
     const [item, setItem] = useState(0);
     const [endOfTest, setEndOfTest] = useState(false);
@@ -293,6 +295,9 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     is_correct: keScore.correct,
                     response_time_seconds: responseTimeSeconds
                 });
+                
+                // Invalidate skill-scores cache to trigger refetch with updated data
+                queryClient.invalidateQueries({ queryKey: ["skill-scores"] });
             } catch (err) {
                 console.error("Failed to submit answer to DASH:", err);
             }
