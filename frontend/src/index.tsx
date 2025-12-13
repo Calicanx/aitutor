@@ -23,6 +23,7 @@ import reportWebVitals from "./reportWebVitals";
 import "./package/perseus/testing/perseus-init.tsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import ComingSoonGuard from "./components/coming-soon/ComingSoonGuard";
 
 const LoginPage = lazy(() => import("./components/auth/LoginPage"));
 const LandingPageWrapper = lazy(() => import("./components/landing/LandingPageWrapper"));
@@ -79,14 +80,16 @@ root.render(
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <AuthProvider>
-        <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-          <Switch>
-            <Route path="/auth/setup" component={LoginPage} />
-            <Route path="/login" component={LoginPage} />
-            <Route path="/" exact component={LandingPageOrApp} />
-            <Route path="/" component={App} />
-          </Switch>
-        </Suspense>
+        <ComingSoonGuard>
+          <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+            <Switch>
+              <Route path="/app/auth/setup" component={LoginPage} />
+              <Route path="/app/login" component={LoginPage} />
+              <Route path="/app" exact component={LandingPageOrApp} />
+              <Route path="/app" component={App} />
+            </Switch>
+          </Suspense>
+        </ComingSoonGuard>
       </AuthProvider>
     </BrowserRouter>
   </QueryClientProvider>,

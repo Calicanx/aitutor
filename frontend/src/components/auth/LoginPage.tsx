@@ -13,13 +13,13 @@ const LoginPage: React.FC = () => {
   // If already authenticated, redirect to home
   React.useEffect(() => {
     if (isAuthenticated) {
-      history.replace('/');
+      history.replace('/app');
     }
   }, [isAuthenticated, history]);
 
   const handleAuthSuccess = (token: string, user: any) => {
     login(token, user);
-    history.replace('/');
+    history.replace('/app');
   };
 
   return <GoogleSignIn onAuthSuccess={handleAuthSuccess} />;
