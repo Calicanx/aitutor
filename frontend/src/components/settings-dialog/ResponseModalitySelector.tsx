@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useTutorContext } from "../../features/tutor";
 import { Modality } from "@google/genai";
 
 const responseOptions = [
@@ -16,7 +16,7 @@ const responseOptions = [
 ];
 
 export default function ResponseModalitySelector() {
-  const { config, setConfig } = useLiveAPIContext();
+  const { config, setConfig } = useTutorContext();
 
   const [value, setValue] = useState<"audio" | "text">("audio");
 

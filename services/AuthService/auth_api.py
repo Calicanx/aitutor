@@ -209,7 +209,7 @@ async def complete_setup(request: CompleteSetupRequest):
 
 
 @app.get("/auth/me")
-async def get_current_user(request: Request):
+async def get_current_user_info(request: Request):
     """Get current user info from JWT token"""
     auth_header = request.headers.get("Authorization")
     
@@ -250,19 +250,19 @@ async def logout():
 
 @app.get("/auth/gemini-key")
 async def get_gemini_key(request: Request):
-    """Get Gemini API key for authenticated user"""
+    """Get Gemini API key for authenticated user (DEPRECATED - use /auth/gemini-token instead)"""
     try:
         # Verify JWT token
         user_id = get_current_user(request)
-        
+
         # Get API key and model from environment variables
         api_key = os.getenv("GEMINI_API_KEY")
         model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash-native-audio-preview-09-2025")
-        
+
         if not api_key:
             logger.error("GEMINI_API_KEY not configured in environment")
             raise HTTPException(status_code=500, detail="Gemini API key not configured")
-        
+
         return {
             "api_key": api_key,
             "model": model
@@ -272,6 +272,56 @@ async def get_gemini_key(request: Request):
     except Exception as e:
         logger.error(f"Error getting Gemini API key: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get API key: {str(e)}")
+
+
+@app.get("/auth/gemini-token")
+async def get_gemini_token(request: Request):
+    """Get ephemeral token for Gemini Live API (secure - single use)"""
+    try:
+        # Verify JWT token
+        user_id = get_current_user(request)
+
+        # Get API key and model from environment variables
+        api_key = os.getenv("GEMINI_API_KEY")
+        model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash-native-audio-preview-09-2025")
+
+        if not api_key:
+            logger.error("GEMINI_API_KEY not configured in environment")
+            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+
+        if not model:
+            logger.error("GEMINI_MODEL not configured in environment")
+            raise HTTPException(status_code=500, detail="Gemini model not configured")
+
+        # Create ephemeral token using Google GenAI SDK
+        # IMPORTANT: Ephemeral tokens require v1alpha API version
+        from google import genai
+
+        client = genai.Client(
+            api_key=api_key,
+            http_options={'api_version': 'v1alpha'}
+        )
+
+        # Create single-use ephemeral token
+        token = client.auth_tokens.create(
+            config={
+                'uses': 1,  # Single use only - expires after one connection
+            }
+        )
+
+        logger.info(f"Created ephemeral token for user {user_id}")
+        logger.info(f"Token name: {token.name}")
+        logger.info(f"Token object: {token}")
+
+        return {
+            "token": token.name,
+            "model": model
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating ephemeral token: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create token: {str(e)}")
 
 
 if __name__ == "__main__":

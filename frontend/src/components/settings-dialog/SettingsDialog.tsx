@@ -1,6 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import "./settings-dialog.scss";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useTutorContext } from "../../features/tutor";
 import VoiceSelector from "./VoiceSelector";
 import ResponseModalitySelector from "./ResponseModalitySelector";
 import {
@@ -32,7 +32,7 @@ export default function SettingsDialog({
   trigger?: React.ReactNode;
   className?: string;
 }) {
-  const { config, setConfig, connected } = useLiveAPIContext();
+  const { config, setConfig, connected } = useTutorContext();
   const [userPrompt, setUserPrompt] = useState("");
 
   const functionDeclarations: FunctionDeclaration[] = useMemo(() => {

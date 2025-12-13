@@ -45,3 +45,6 @@ frontend_old/
 aitutor-chore-ui-revamp_v2/
 
 questionbankscrapper/
+
+# Build output
+frontend/build/

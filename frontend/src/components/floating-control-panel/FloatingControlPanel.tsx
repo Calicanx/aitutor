@@ -8,8 +8,7 @@ import React, {
   useMemo,
 } from "react";
 import Draggable from "react-draggable";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
-import { AudioRecorder } from "../../lib/audio-recorder";
+import { useTutorContext, AudioRecorder } from "../../features/tutor";
 import { jwtUtils } from "../../lib/jwt-utils";
 import { apiUtils } from "../../lib/api-utils";
 import SettingsDialog from "../settings-dialog/SettingsDialog";
@@ -69,7 +68,7 @@ function FloatingControlPanel({
   onToggleScreen,
   mediaMixerCanvasRef,
 }: FloatingControlPanelProps) {
-  const { client, connected, connect, disconnect, interruptAudio } = useLiveAPIContext();
+  const { client, connected, connect, disconnect, interruptAudio } = useTutorContext();
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("");
   const [audioRecorder] = useState(() => new AudioRecorder());

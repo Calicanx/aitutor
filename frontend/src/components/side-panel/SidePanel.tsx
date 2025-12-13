@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useTutorContext } from "../../features/tutor";
 import { useLoggerStore } from "../../lib/store-logger";
 import Logger, { LoggerFilterType } from "../logger/Logger";
 import { ArrowRight, Terminal } from "lucide-react";
@@ -42,7 +42,7 @@ interface SidePanelProps {
 }
 
 export default function SidePanel({ open }: SidePanelProps) {
-  const { connected, client } = useLiveAPIContext();
+  const { connected, client } = useTutorContext();
   const loggerRef = useRef<HTMLDivElement>(null);
   const loggerLastHeightRef = useRef<number>(-1);
   const { log, logs } = useLoggerStore();

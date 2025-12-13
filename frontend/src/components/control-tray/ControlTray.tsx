@@ -1,8 +1,7 @@
 import cn from "classnames";
 import { memo, ReactNode, RefObject, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
-import { AudioRecorder } from "../../lib/audio-recorder";
+import { useTutorContext, AudioRecorder } from "../../features/tutor";
 import { jwtUtils } from "../../lib/jwt-utils";
 import { apiUtils } from "../../lib/api-utils";
 import AudioPulse from "../audio-pulse/AudioPulse";
@@ -74,7 +73,7 @@ function ControlTray({
   onToggleScreen,
 }: ControlTrayProps) {
   const { client, connected, connect, disconnect, interruptAudio, volume } =
-    useLiveAPIContext();
+    useTutorContext();
   const [activeVideoStream, setActiveVideoStream] =
     useState<MediaStream | null>(null);
   const [inVolume, setInVolume] = useState(0);
