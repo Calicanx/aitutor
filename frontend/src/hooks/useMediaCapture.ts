@@ -54,8 +54,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
   const startCamera = useCallback(async () => {
     try {
       console.log('Starting camera capture...');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 }
       });
 
       cameraStreamRef.current = stream;
@@ -73,32 +73,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
         };
       });
 
-      // Start the capture loop
-      const captureLoop = () => {
-        if (!cameraStreamRef.current) return;
-
-        const canvas = cameraCanvasRef.current!;
-        const ctx = canvas.getContext('2d')!;
-
-        ctx.drawImage(video, 0, 0);
-
-        // Resize to section dimensions and get ImageData
-        const sectionCanvas = document.createElement('canvas');
-        sectionCanvas.width = 1280;
-        sectionCanvas.height = 720;
-        const sectionCtx = sectionCanvas.getContext('2d');
-
-        if (sectionCtx) {
-          sectionCtx.drawImage(canvas, 0, 0, 1280, 720);
-          const imageData = sectionCtx.getImageData(0, 0, 1280, 720);
-          onCameraFrame?.(imageData);
-        }
-
-        // Continue loop - reduced to ~5 FPS for better performance
-        setTimeout(() => requestAnimationFrame(captureLoop), 200);
-      };
-
-      captureLoop();
+      // Capture loop removed for performance. MediaMixer will read directly from video element.
+      console.log('Camera started');
       console.log('Camera started');
 
     } catch (error) {
@@ -110,8 +86,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
   const startScreen = useCallback(async () => {
     try {
       console.log('Starting screen capture...');
-      const stream = await navigator.mediaDevices.getDisplayMedia({ 
-        video: { width: 1280, height: 720 } 
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1280, height: 720 }
       });
 
       screenStreamRef.current = stream;
@@ -136,32 +112,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
         };
       });
 
-      // Start the capture loop
-      const captureLoop = () => {
-        if (!screenStreamRef.current) return;
-
-        const canvas = screenCanvasRef.current!;
-        const ctx = canvas.getContext('2d')!;
-
-        ctx.drawImage(video, 0, 0);
-
-        // Resize to section dimensions and get ImageData
-        const sectionCanvas = document.createElement('canvas');
-        sectionCanvas.width = 1280;
-        sectionCanvas.height = 720;
-        const sectionCtx = sectionCanvas.getContext('2d');
-
-        if (sectionCtx) {
-          sectionCtx.drawImage(canvas, 0, 0, 1280, 720);
-          const imageData = sectionCtx.getImageData(0, 0, 1280, 720);
-          onScreenFrame?.(imageData);
-        }
-
-        // Continue loop - reduced to ~5 FPS for better performance
-        setTimeout(() => requestAnimationFrame(captureLoop), 200);
-      };
-
-      captureLoop();
+      // Capture loop removed for performance. MediaMixer will read directly from video element.
+      console.log('Screen share started');
       console.log('Screen share started');
 
     } catch (error) {
@@ -194,10 +146,13 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
     }
   }, [startScreen, stopScreen]);
 
+  // Expose video refs for direct consumption by MediaMixer
   return {
     cameraEnabled,
     screenEnabled,
     toggleCamera,
-    toggleScreen
+    toggleScreen,
+    cameraVideoRef,
+    screenVideoRef
   };
 };

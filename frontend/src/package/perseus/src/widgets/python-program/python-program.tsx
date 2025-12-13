@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * This widget is for embedding Khan Academy Python programs.
  */

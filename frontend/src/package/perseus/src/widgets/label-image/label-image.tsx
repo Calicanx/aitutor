@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Direct image labeling widget.
  *

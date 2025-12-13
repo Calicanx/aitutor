@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -18,6 +18,14 @@ from services.AuthService.jwt_utils import create_jwt_token, create_setup_token,
 from managers.user_manager import UserManager
 from managers.user_manager import calculate_grade_from_age
 from shared.auth_middleware import get_current_user
+from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
+from shared.timing_middleware import UnpluggedTimingMiddleware
+from shared.cache_middleware import CacheControlMiddleware
+
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 # Configure logging
 logging.basicConfig(
@@ -29,13 +37,19 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Auth Service")
 
-# Configure CORS - allow all origins
+# Add timing middleware for performance monitoring (Phase 1)
+app.add_middleware(UnpluggedTimingMiddleware)
+
+# Cache Control (Phase 7)
+app.add_middleware(CacheControlMiddleware)
+
+# Configure CORS with secure origins from environment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
     expose_headers=["*"],
 )
 

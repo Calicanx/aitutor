@@ -46,13 +46,13 @@ const LandingPage1: React.FC<LandingPage1Props> = ({ onGetStarted }) => {
               Teachr adapts to your learning style, providing personalized practice questions that match your skill level. Get real-time help from our AI tutor, track your progress, and master any subject at your own pace.
             </p>
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '32px' }}>
-              <button 
+              <button
                 onClick={onGetStarted}
                 className="cta-button cta-button-neo"
               >
                 Start Learning Free
               </button>
-              <button 
+              <button
                 onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
                 style={{
                   padding: '16px 32px',
@@ -80,8 +80,8 @@ const LandingPage1: React.FC<LandingPage1Props> = ({ onGetStarted }) => {
             </div>
           </div>
           <div className="hero-image">
-            <img 
-              src="/landing-screenshots/home-screen-placeholder.png" 
+            <img
+              src="/landing-screenshots/home-screen-placeholder.png"
               alt="Teachr Learning Interface"
               style={{ width: '100%', height: 'auto', borderRadius: '0' }}
             />
@@ -149,12 +149,16 @@ const LandingPage1: React.FC<LandingPage1Props> = ({ onGetStarted }) => {
                   lineHeight: 1,
                   marginBottom: '20px',
                   WebkitTextStroke: '4px #000000',
-                  textStroke: '4px #000000'
+
+                  // For future standard compliance or if browsers drop prefix:
+                  // textStroke: '4px #000000' 
+                  // But 'textStroke' is not in standard React CSSProperties yet.
                 }}>
                   {step.number}
                 </div>
                 <h3 style={{
                   fontSize: '24px',
+                  WebkitTextStroke: "2px black",
                   fontWeight: 900,
                   marginBottom: '16px',
                   textTransform: 'uppercase',
@@ -301,7 +305,7 @@ const LandingPage1: React.FC<LandingPage1Props> = ({ onGetStarted }) => {
         <section className="landing-cta">
           <h2>Ready to Transform Your Learning?</h2>
           <p>Join thousands of students who are mastering new skills and building confidence every day with Teachr.</p>
-          <button 
+          <button
             onClick={onGetStarted}
             className="cta-button cta-button-neo cta-button-large"
           >

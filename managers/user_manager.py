@@ -7,6 +7,11 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable max-lines */
 import type {ErrorCodes} from "@khanacademy/perseus-score";
 

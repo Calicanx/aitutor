@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * This widget is used for freeform text input. It is configured with a question
  * as an option and renders the question text along with a text input area where

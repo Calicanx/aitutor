@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable max-lines */
 /* eslint-disable @typescript-eslint/no-invalid-this */
 /**

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Draw some text into a 2D canvas drawing context.
  *

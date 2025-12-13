@@ -307,7 +307,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                 const currentItem = perseusItems[item];
                 const metadata = (currentItem as any).dash_metadata || {};
                 const questionId = metadata.dash_question_id || `q_${item}_${Date.now()}`;
-                
+
                 await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/question/answered`, {
                     question_id: questionId,
                     is_correct: keScore.correct || false
@@ -389,9 +389,36 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                     <p className="text-base md:text-lg font-bold text-black mb-3 md:mb-4">
                                         You've successfully completed your test!
                                     </p>
-                                    <p className="text-xs md:text-sm font-bold text-black uppercase tracking-wide">
+                                    <p className="text-xs md:text-sm font-bold text-black uppercase tracking-wide mb-6">
                                         Review questions or restart session
                                     </p>
+                                    <div className="flex gap-3 justify-center">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => {
+                                                setItem(0);
+                                                setEndOfTest(false);
+                                                setScore(undefined);
+                                                setIsAnswered(false);
+                                                setIsError(false);
+                                            }}
+                                            className="border-[2px] border-black bg-white hover:bg-[#FFD93D] text-black font-black uppercase tracking-wide shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)] transition-all"
+                                        >
+                                            Restart
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={() => {
+                                                setItem(0);
+                                                setEndOfTest(false);
+                                            }}
+                                            className="border-[2px] border-black bg-[#C4B5FD] hover:bg-[#A78BFA] text-black font-black uppercase tracking-wide shadow-[2px_2px_0_0_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_0_rgba(0,0,0,1)] transition-all"
+                                        >
+                                            Review
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         ) : isLoading ? (
@@ -429,32 +456,29 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                     </PerseusI18nContextProvider>
                                 </div>
 
-                                {/* Neo-Brutalist feedback */}
-                                {isAnswered && (
+                                {/* Neo-Brutalist feedback - FIXED POSITION below header for visibility */}
+                                {isAnswered && showFeedback && (
                                     <div
-                                        className={`transform transition-all duration-300 ${showFeedback
-                                            ? 'translate-y-0 opacity-100'
-                                            : 'translate-y-4 opacity-0'
-                                            }`}
+                                        className="fixed top-[60px] lg:top-[64px] left-1/2 transform -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 duration-300"
                                     >
-                                        <div className={`flex items-center gap-2 md:gap-3 px-4 md:px-5 py-3 md:py-4 border-[3px] md:border-[4px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] ${score?.correct
+                                        <div className={`flex items-center gap-2 md:gap-3 px-5 md:px-6 py-3 md:py-4 border-[3px] md:border-[4px] border-black dark:border-white shadow-[4px_4px_0_0_rgba(0,0,0,1)] md:shadow-[6px_6px_0_0_rgba(0,0,0,1)] dark:shadow-[4px_4px_0_0_rgba(255,255,255,0.3)] ${score?.correct
                                             ? "bg-[#ADFF2F]"
                                             : "bg-[#FF006E]"
                                             }`}>
                                             {score?.correct ? (
-                                                <div className="p-1 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-900">
-                                                    <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-black dark:text-white flex-shrink-0 font-bold" />
+                                                <div className="p-1.5 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-900">
+                                                    <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6 text-black dark:text-white flex-shrink-0 font-bold" />
                                                 </div>
                                             ) : (
-                                                <div className="p-1 border-[2px] md:border-[3px] border-black dark:border-white bg-white">
-                                                    <XCircle className="w-4 h-4 md:w-5 md:h-5 text-black flex-shrink-0 font-bold" />
+                                                <div className="p-1.5 border-[2px] md:border-[3px] border-black dark:border-white bg-white">
+                                                    <XCircle className="w-5 h-5 md:w-6 md:h-6 text-black flex-shrink-0 font-bold" />
                                                 </div>
                                             )}
-                                            <span className={`text-sm md:text-base font-black uppercase tracking-tight ${score?.correct
+                                            <span className={`text-base md:text-lg font-black uppercase tracking-tight ${score?.correct
                                                 ? "text-black"
                                                 : "text-white"
                                                 }`}>
-                                                {score?.correct ? "🎯 Excellent! That's correct!" : "📚 Not quite. Keep trying!"}
+                                                {score?.correct ? "🎯 Correct!" : "📚 Not quite!"}
                                             </span>
                                         </div>
                                     </div>

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {approximateDeepEqual, Errors} from "@khanacademy/perseus-core";
 import $ from "jquery";
 import * as React from "react";

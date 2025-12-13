@@ -3,7 +3,7 @@ import * as htmlToImage from 'html-to-image';
 
 interface ScratchpadCaptureProps {
   children: ReactNode;
-  onFrameCaptured: (imageData: ImageData) => void;
+  onFrameCaptured: (canvas: HTMLCanvasElement) => void;
 }
 
 const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrameCaptured }) => {
@@ -17,12 +17,15 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
 
       if (questionPanel) {
         htmlToImage.toCanvas(questionPanel, {
-          quality: 0.9,  // Increased quality for better image clarity
+          quality: 0.9,
           skipFonts: true,
-          pixelRatio: 1.5  // Balanced quality and size (1.5x instead of 2x for better performance)
+          pixelRatio: 1.5
         })
           .then((canvas) => {
             // Resize canvas to 1280×720 section size
+            // We create a new canvas here because html-to-image gives us a new one anyway.
+            // Ideally we'd reuse a canvas for resizing to avoid GC, but let's keep it simple for now as it's 1 FPS.
+            // Optimization: Reuse a single canvas for resizing if this becomes a bottleneck.
             const resizedCanvas = document.createElement('canvas');
             resizedCanvas.width = 1280;
             resizedCanvas.height = 720;
@@ -30,15 +33,15 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
 
             if (resizedCtx) {
               resizedCtx.drawImage(canvas, 0, 0, 1280, 720);
-              const imageData = resizedCtx.getImageData(0, 0, 1280, 720);
-              onFrameCaptured(imageData);
+              // Pass the canvas directly instead of ImageData
+              onFrameCaptured(resizedCanvas);
             }
           })
           .catch(error => {
             console.error('html-to-image failed:', error);
           });
       } else {
-        // Create error message as ImageData
+        // Create error message on a canvas
         const canvas = document.createElement('canvas');
         canvas.width = 1280;
         canvas.height = 720;
@@ -50,8 +53,7 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
           ctx.font = '24px Arial';
           ctx.fillText('ERROR: .question-panel not found!', 50, 100);
 
-          const imageData = ctx.getImageData(0, 0, 1280, 720);
-          onFrameCaptured(imageData);
+          onFrameCaptured(canvas);
         }
       }
     };

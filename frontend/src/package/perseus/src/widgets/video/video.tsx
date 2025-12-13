@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * This is a video widget for embedding videos in articles.
  */
