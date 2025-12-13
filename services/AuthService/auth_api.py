@@ -131,7 +131,7 @@ async def google_callback(code: Optional[str] = Query(None), state: Optional[str
             # Redirect to frontend with token
             frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
             return RedirectResponse(
-                url=f"{frontend_url}/login?token={jwt_token}&is_new_user=false"
+                url=f"{frontend_url}/app/login?token={jwt_token}&is_new_user=false"
             )
         else:
             # New user - need to complete setup
@@ -140,7 +140,7 @@ async def google_callback(code: Optional[str] = Query(None), state: Optional[str
             # Redirect to frontend setup page
             frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
             return RedirectResponse(
-                url=f"{frontend_url}/login?setup_token={setup_token}"
+                url=f"{frontend_url}/app/login?setup_token={setup_token}"
             )
             
     except Exception as e:
