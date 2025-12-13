@@ -10,6 +10,11 @@ from enum import Enum
 
 from managers.user_manager import UserManager, UserProfile, SkillState
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -799,30 +804,32 @@ class DASHSystem:
             'avg_time_ratio': avg_time_ratio
         }
 
-    def get_next_question_flexible(self, student_id: str, current_time: float, exclude_question_ids: Optional[List[str]] = None, force_grade_range: bool = False) -> Optional[Question]:
+    def get_next_question_flexible(self, student_id: str, current_time: float, exclude_question_ids: Optional[List[str]] = None, force_grade_range: bool = False, user_profile: Optional['UserProfile'] = None) -> Optional[Question]:
         """
         Flexible question selection that expands search when primary skills exhausted.
         Maintains full DASH intelligence (adaptive difficulty, learning journey).
-        
+
         Args:
             student_id: Student identifier
             current_time: Current timestamp
             exclude_question_ids: Question IDs to exclude
             force_grade_range: If True, search all grade-appropriate skills (not just recommended)
-        
+            user_profile: Optional pre-loaded user profile to avoid redundant MongoDB calls
+
         Returns:
             Question with full DASH intelligence, or None if truly no questions available
         """
-        # First try normal DASH selection (recommended skills only)
-        if not force_grade_range:
-            question = self.get_next_question(student_id, current_time, is_retry=False, exclude_question_ids=exclude_question_ids)
-            if question:
-                return question
-        
-        # If no question found from recommended skills, expand to all grade-appropriate skills
-        user_profile = self.user_manager.load_user(student_id)
+        # Load user profile once and reuse throughout
+        if user_profile is None:
+            user_profile = self.user_manager.load_user(student_id)
         if not user_profile:
             return None
+
+        # First try normal DASH selection (recommended skills only)
+        if not force_grade_range:
+            question = self.get_next_question(student_id, current_time, is_retry=False, exclude_question_ids=exclude_question_ids, user_profile=user_profile)
+            if question:
+                return question
         
         # Get grade range (same as cold-start filtering)
         student_grade = GradeLevel[user_profile.current_grade]
@@ -917,14 +924,18 @@ class DASHSystem:
         # Truly no questions available in grade range
         return None
     
-    def get_next_question(self, student_id: str, current_time: float, is_retry: bool = False, exclude_question_ids: Optional[List[str]] = None) -> Optional[Question]:
+    def get_next_question(self, student_id: str, current_time: float, is_retry: bool = False, exclude_question_ids: Optional[List[str]] = None, user_profile: Optional['UserProfile'] = None) -> Optional[Question]:
         """
         Get the next best question for the student, avoiding repeats.
         Intelligently selects question difficulty based on recent performance.
         If no questions are available, try to generate one.
+
+        Args:
+            user_profile: Optional pre-loaded user profile to avoid redundant MongoDB calls
         """
-        # Load user profile first to check cold-start status
-        user_profile = self.user_manager.load_user(student_id)
+        # Use provided user_profile or load from DB (avoids redundant MongoDB calls)
+        if user_profile is None:
+            user_profile = self.user_manager.load_user(student_id)
         if not user_profile:
             return None
         

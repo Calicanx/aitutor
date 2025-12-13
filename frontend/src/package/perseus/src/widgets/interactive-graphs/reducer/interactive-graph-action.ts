@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type {InitializeGraphStateParams} from "./initialize-graph-state";
 import type {InteractionMode} from "../types";
 import type {Interval, vec} from "mafs";

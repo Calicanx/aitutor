@@ -54,8 +54,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
   const startCamera = useCallback(async () => {
     try {
       console.log('Starting camera capture...');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 }
       });
 
       cameraStreamRef.current = stream;
@@ -110,8 +110,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
   const startScreen = useCallback(async () => {
     try {
       console.log('Starting screen capture...');
-      const stream = await navigator.mediaDevices.getDisplayMedia({ 
-        video: { width: 1280, height: 720 } 
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1280, height: 720 }
       });
 
       screenStreamRef.current = stream;
@@ -194,10 +194,13 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
     }
   }, [startScreen, stopScreen]);
 
+  // Expose video refs for direct consumption by MediaMixer
   return {
     cameraEnabled,
     screenEnabled,
     toggleCamera,
-    toggleScreen
+    toggleScreen,
+    cameraVideoRef,
+    screenVideoRef
   };
 };

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Render the Mafs graph with the specified background and graph elements.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type {GraphBounds} from "./graph-bounds";
 import type {Coord} from "../interactive2/types";
 

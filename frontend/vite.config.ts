@@ -11,6 +11,28 @@ export default defineConfig({
   },
   build: {
     outDir: 'build', // match CRA's output directory
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          genai: ['@google/genai'],
+          khan: [
+            '@khanacademy/perseus',
+            '@khanacademy/math-input',
+            '@khanacademy/mathjax-renderer',
+            '@khanacademy/wonder-blocks-core',
+            '@khanacademy/wonder-blocks-layout',
+          ],
+        },
+      },
+    },
   },
   resolve: {
     alias: {

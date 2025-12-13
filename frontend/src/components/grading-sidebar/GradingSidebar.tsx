@@ -208,13 +208,19 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                 )}
             </header>
 
-            <div className="flex-grow overflow-hidden relative" onClick={handleContainerClick}>
+            <div className="flex-grow overflow-hidden relative">
                 {open ? (
                     <div
                         ref={scrollContainerRef}
                         className="h-full overflow-y-auto overflow-x-hidden animate-in fade-in duration-500 px-4 py-4"
+                        onClick={handleContainerClick}
                     >
-                        <Accordion type="single" collapsible className="w-full space-y-3">
+                        <Accordion
+                            type="single"
+                            collapsible
+                            className="w-full space-y-3"
+                            onClick={(e) => e.stopPropagation()} // Prevent handleContainerClick from intercepting accordion clicks
+                        >
                             {isLoading ? (
                                 <div className="text-center py-8 text-sm text-gray-500">
                                     Loading skills...

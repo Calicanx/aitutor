@@ -41,7 +41,17 @@ class AuthAPI {
     return response.json();
   }
 
-  async completeSetup(setupToken: string, userType: string, age: number): Promise<AuthResponse> {
+  async completeSetup(
+    setupToken: string,
+    userType: string,
+    age: number,
+    profileData: {
+      subjects: string[];
+      learningGoals: string[];
+      interests: string[];
+      learningStyle: string;
+    }
+  ): Promise<AuthResponse> {
     const response = await fetch(`${AUTH_SERVICE_URL}/auth/complete-setup`, {
       method: 'POST',
       headers: {
@@ -51,6 +61,10 @@ class AuthAPI {
         setup_token: setupToken,
         user_type: userType,
         age: age,
+        subjects: profileData.subjects,
+        learning_goals: profileData.learningGoals,
+        interests: profileData.interests,
+        learning_style: profileData.learningStyle
       }),
     });
 

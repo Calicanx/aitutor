@@ -9,6 +9,11 @@ import os
 import logging
 from dotenv import load_dotenv
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 # Load environment variables from .env file
 load_dotenv()
 

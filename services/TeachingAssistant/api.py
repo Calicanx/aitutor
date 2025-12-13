@@ -4,36 +4,81 @@ import threading
 import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+import asyncio
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from services.TeachingAssistant.teaching_assistant import TeachingAssistant
 from shared.auth_middleware import get_current_user
+from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
+from shared.timing_middleware import UnpluggedTimingMiddleware
+from shared.cache_middleware import CacheControlMiddleware
+
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 app = FastAPI(title="Teaching Assistant API")
 
-# Configure CORS - allow all origins
+# Add timing middleware for performance monitoring (Phase 1)
+app.add_middleware(UnpluggedTimingMiddleware)
+
+# Cache Control (Phase 7)
+app.add_middleware(CacheControlMiddleware)
+
+# Add GZip compression middleware (Phase 7)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
+
+# Configure CORS with secure origins from environment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly include OPTIONS
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
     expose_headers=["*"],
 )
+
+# Request timeout middleware (Phase 3)
+@app.middleware("http")
+async def timeout_middleware(request: Request, call_next):
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=30.0)
+    except asyncio.TimeoutError:
+        return JSONResponse(
+            status_code=504,
+            content={"detail": "Request timeout"}
+        )
+
+# Cache control middleware for static responses (Phase 7)
+@app.middleware("http")
+async def cache_control_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/health":
+        response.headers["Cache-Control"] = "public, max-age=60"
+    elif request.url.path.startswith("/session/info"):
+        response.headers["Cache-Control"] = "private, max-age=10"
+    else:
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 # Explicit OPTIONS handler for Cloud Run compatibility (backup)
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
     """Handle OPTIONS preflight requests explicitly for Cloud Run"""
     from fastapi.responses import Response
+    # Use first allowed origin or * if none configured
+    origin = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "*"
     return Response(
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": ", ".join(ALLOWED_METHODS),
             "Access-Control-Allow-Headers": "*",
         }
     )
@@ -161,7 +206,7 @@ def end_session(http_request: Request, request: Optional[EndSessionRequest] = No
         return PromptResponse(prompt=prompt, session_info=session_info)
     except Exception as e:
         # Log the actual error for debugging
-        print(f"Error in end_session: {e}")
+        logger.error(f"Error in end_session: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

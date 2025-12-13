@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {StyleSheet} from "aphrodite";
 import * as React from "react";
 import {

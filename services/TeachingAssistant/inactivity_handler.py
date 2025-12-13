@@ -2,6 +2,11 @@ import time
 import threading
 from typing import Optional
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 
 class InactivityHandler:
     SYSTEM_PROMPT_PREFIX = "[SYSTEM PROMPT FOR ADAM]"
@@ -88,7 +93,7 @@ class InactivityHandler:
                 self._check_inactivity()
                 time.sleep(self.CHECK_INTERVAL_SECONDS)
             except Exception as e:
-                print(f"Error in inactivity monitor: {e}")
+                logger.error(f"Error in inactivity monitor: {e}")
                 time.sleep(self.CHECK_INTERVAL_SECONDS)
     
     def _check_inactivity(self):

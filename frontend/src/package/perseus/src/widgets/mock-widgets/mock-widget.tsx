@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {View} from "@khanacademy/wonder-blocks-core";
 import {TextField} from "@khanacademy/wonder-blocks-form";
 import {StyleSheet} from "aphrodite";

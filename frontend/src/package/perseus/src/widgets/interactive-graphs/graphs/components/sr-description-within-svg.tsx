@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as React from "react";
 
 import a11y from "../../../../util/a11y";

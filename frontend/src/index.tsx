@@ -13,17 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Route, Switch } from "react-router-dom";
 import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
+// @ts-ignore
 import "./package/perseus/testing/perseus-init.tsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import LoginPage from "./components/auth/LoginPage";
-import LandingPageWrapper from "./components/landing/LandingPageWrapper";
+
+const LoginPage = lazy(() => import("./components/auth/LoginPage"));
+const LandingPageWrapper = lazy(() => import("./components/landing/LandingPageWrapper"));
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
@@ -34,7 +36,7 @@ const queryClient = new QueryClient();
 // Component to decide between landing page and app
 const LandingPageOrApp: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
-  
+
   if (isLoading) {
     return (
       <div style={{
@@ -48,11 +50,11 @@ const LandingPageOrApp: React.FC = () => {
       </div>
     );
   }
-  
+
   if (!isAuthenticated) {
     return <LandingPageWrapper />;
   }
-  
+
   return <App />;
 };
 
@@ -60,12 +62,14 @@ root.render(
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <AuthProvider>
-        <Switch>
-          <Route path="/auth/setup" component={LoginPage} />
-          <Route path="/login" component={LoginPage} />
-          <Route path="/" exact component={LandingPageOrApp} />
-          <Route path="/" component={App} />
-        </Switch>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+          <Switch>
+            <Route path="/auth/setup" component={LoginPage} />
+            <Route path="/login" component={LoginPage} />
+            <Route path="/" exact component={LandingPageOrApp} />
+            <Route path="/" component={App} />
+          </Switch>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   </QueryClientProvider>,
@@ -74,4 +78,4 @@ root.render(
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
+reportWebVitals(console.log);

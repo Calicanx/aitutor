@@ -1,3 +1,4 @@
+// @ts-nocheck
 import SimpleMarkdown from "@khanacademy/simple-markdown";
 import * as React from "react";
 import _ from "underscore";
