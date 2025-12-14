@@ -30,6 +30,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy managers directory (needed for MongoDB)
 COPY managers/ ./managers/
 
+# Copy shared directory (needed for CORS and other shared utilities)
+COPY shared/ ./shared/
+
 # Copy services directory
 COPY services/ ./services/
 
@@ -42,5 +45,7 @@ COPY config.json .
 EXPOSE 8080
 ENV PORT=8080
 
-CMD ["python", "services/SherlockEDApi/run_backend.py"]
+# Change to the service directory so imports work correctly
+WORKDIR /app/services/SherlockEDApi
+CMD ["python", "run_backend.py"]
 
