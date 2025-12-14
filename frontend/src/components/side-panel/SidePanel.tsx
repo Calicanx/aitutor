@@ -15,7 +15,7 @@
  */
 
 import cn from "classnames";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -43,24 +43,10 @@ interface SidePanelProps {
 
 export default function SidePanel({ open }: SidePanelProps) {
   const { connected, client } = useTutorContext();
-  const loggerRef = useRef<HTMLDivElement>(null);
-  const loggerLastHeightRef = useRef<number>(-1);
-  const { log, logs } = useLoggerStore();
+  const { log } = useLoggerStore();
 
   const [textInput, setTextInput] = useState("");
   const [filter, setFilter] = useState<LoggerFilterType>("none");
-
-  //scroll the log to the bottom when new logs come in
-  useEffect(() => {
-    if (loggerRef.current) {
-      const el = loggerRef.current;
-      const scrollHeight = el.scrollHeight;
-      if (scrollHeight !== loggerLastHeightRef.current) {
-        el.scrollTop = scrollHeight;
-        loggerLastHeightRef.current = scrollHeight;
-      }
-    }
-  }, [logs]);
 
   // listen for log events and store them
   useEffect(() => {
@@ -138,10 +124,7 @@ export default function SidePanel({ open }: SidePanelProps) {
           </div>
         </section>
 
-        <div
-          className="flex-grow overflow-y-auto overflow-x-hidden px-6 py-4 scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
-          ref={loggerRef}
-        >
+        <div className="flex-grow overflow-hidden px-4 py-3">
           <Logger filter={filter} />
         </div>
 

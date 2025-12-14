@@ -17,9 +17,8 @@
 import "./logger.scss";
 
 import cn from "classnames";
-import { memo, ReactNode, useMemo, lazy, Suspense } from "react";
+import { memo, ReactNode, useMemo, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { useLoggerStore } from "../../lib/store-logger";
-import { VariableSizeList as List } from "react-window";
 import {
   ClientContentLog as ClientContentLogType,
   StreamingLog,
@@ -273,6 +272,9 @@ const component = (log: StreamingLog) => {
 
 export default function Logger({ filter = "none" }: LoggerProps) {
   const { logs } = useLoggerStore();
+  const listRef = useRef<HTMLUListElement>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
 
   // Memoize filtered logs to avoid recalculating on every render
   const filteredLogs = useMemo(() => {
@@ -280,38 +282,47 @@ export default function Logger({ filter = "none" }: LoggerProps) {
     return logs.filter(filterFn);
   }, [logs, filter]);
 
-  // Virtualized row renderer
-  const Row = memo(({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const log = filteredLogs[index];
-    return (
-      <div style={style}>
-        <LogEntry MessageComponent={component(log)} log={log} key={index} />
-      </div>
-    );
-  });
+  // Handle scroll events to determine if user is reading history
+  const handleScroll = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
 
-  // Estimate row height (can be refined for better accuracy)
-  const getItemSize = (index: number) => {
-    const log = filteredLogs[index];
-    // Simple heuristic: plain text logs are shorter, rich logs are taller
-    if (typeof log.message === "string") {
-      return 40;
+    const { scrollTop, scrollHeight, clientHeight } = list;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+    // If user scrolled up (away from bottom), disable auto-scroll
+    // If user scrolled back to bottom (within 100px), re-enable auto-scroll
+    if (scrollTop < lastScrollTopRef.current && distanceFromBottom > 100) {
+      // User scrolled up
+      shouldAutoScrollRef.current = false;
+    } else if (distanceFromBottom < 50) {
+      // User is at or near bottom
+      shouldAutoScrollRef.current = true;
     }
-    return 120; // Rich log entries
-  };
+
+    lastScrollTopRef.current = scrollTop;
+  }, []);
+
+  // Auto-scroll to bottom when new logs arrive, but only if enabled
+  useEffect(() => {
+    if (listRef.current && shouldAutoScrollRef.current) {
+      const list = listRef.current;
+      list.scrollTop = list.scrollHeight;
+    }
+  }, [filteredLogs.length]);
 
   return (
     <div className="logger">
       {filteredLogs.length > 0 ? (
-        <List
-          height={600} // Adjust based on your layout
-          itemCount={filteredLogs.length}
-          itemSize={getItemSize}
-          width="100%"
-          className="logger-list"
-        >
-          {Row}
-        </List>
+        <ul className="logger-list" ref={listRef} onScroll={handleScroll}>
+          {filteredLogs.map((log, index) => (
+            <LogEntry
+              MessageComponent={component(log)}
+              log={log}
+              key={`${log.date.getTime()}-${index}`}
+            />
+          ))}
+        </ul>
       ) : (
         <div className="logger-empty">No logs to display</div>
       )}
