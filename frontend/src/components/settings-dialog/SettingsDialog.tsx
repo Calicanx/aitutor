@@ -61,6 +61,10 @@ export default function SettingsDialog({
           },
         },
       },
+      // Enable input audio transcription for real-time user speech-to-text
+      inputAudioTranscription: {},
+      // Enable output audio transcription for model speech-to-text
+      outputAudioTranscription: {},
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

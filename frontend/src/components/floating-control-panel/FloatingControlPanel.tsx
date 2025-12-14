@@ -8,13 +8,26 @@ import React, {
   useMemo,
 } from "react";
 import Draggable from "react-draggable";
-import { useTutorContext, AudioRecorder } from "../../features/tutor";
+import { useTutorContext, AudioRecorder, TranscriptionData } from "../../features/tutor";
 import { jwtUtils } from "../../lib/jwt-utils";
 import { apiUtils } from "../../lib/api-utils";
 import SettingsDialog from "../settings-dialog/SettingsDialog";
 import cn from "classnames";
 import MediaMixerDisplay from "../media-mixer-display/MediaMixerDisplay";
-import { feedWebhookService, extractTranscriptFromContent } from "../../services/feed-webhook-service";
+import { feedWebSocketService } from "../../services/feed-websocket-service";
+import { instructionSSEService } from "../../services/instruction-sse-service";
+import { LiveServerContent } from '@google/genai';
+
+/**
+ * Extract transcript text from Gemini content event
+ */
+function extractTranscriptFromContent(content: LiveServerContent): string | null {
+  const parts = content.modelTurn?.parts || [];
+  const textParts = parts
+    .filter((p: any) => p.text && p.text.trim().length > 0)
+    .map((p: any) => p.text.trim());
+  return textParts.length > 0 ? textParts.join(' ') : null;
+}
 import {
   Mic,
   MicOff,
@@ -130,11 +143,9 @@ function FloatingControlPanel({
           data: base64,
         },
       ]);
-      
-      // Also send to webhook (batched, non-blocking)
-      feedWebhookService.sendAudio(base64).catch((error) => {
-        console.error('Failed to send audio to webhook:', error);
-      });
+
+      // Also send via WebSocket (batched, non-blocking)
+      feedWebSocketService.sendAudio(base64);
     };
     if (connected && !muted && audioRecorder) {
       audioRecorder.on("data", onData).start(selectedAudioDevice);
@@ -145,6 +156,20 @@ function FloatingControlPanel({
       audioRecorder.off("data", onData);
     };
   }, [connected, client, muted, audioRecorder, selectedAudioDevice]);
+
+  // Subscribe to SSE instructions from TeachingAssistant
+  useEffect(() => {
+    const unsubscribe = instructionSSEService.onInstruction((instruction) => {
+      if (client && client.status === "connected") {
+        // Send instruction to Gemini tutor
+        client.send({ text: instruction });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [client]);
 
   // Record conversation turns for TeachingAssistant
   useEffect(() => {
@@ -183,31 +208,16 @@ function FloatingControlPanel({
     };
   }, [client, connected]);
 
-  // Handle content events (transcript) and request instructions
+  // Handle content events (transcript) - send via WebSocket
   useEffect(() => {
-    const onContent = async (content: any) => {
+    const onContent = (content: any) => {
       if (!connected) return;
 
       // Extract transcript from content
       const transcript = extractTranscriptFromContent(content);
       if (transcript) {
-        // Send transcript to webhook (fire-and-forget)
-        feedWebhookService.sendTranscript(transcript).catch((error) => {
-          console.error('Failed to send transcript to webhook:', error);
-        });
-
-        // Request instruction after sending transcript
-        try {
-          const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/send_instruction_to_tutor`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.prompt && client.status === 'connected') {
-              client.send({ text: data.prompt });
-            }
-          }
-        } catch (error) {
-          console.error('Failed to get instruction from TeachingAssistant:', error);
-        }
+        // Send transcript via WebSocket (fire-and-forget)
+        feedWebSocketService.sendTranscript(transcript, 'tutor');
       }
     };
 
@@ -215,6 +225,42 @@ function FloatingControlPanel({
 
     return () => {
       client.off('content', onContent);
+    };
+  }, [client, connected]);
+
+  // Handle input audio transcription (user's speech) - send via WebSocket
+  useEffect(() => {
+    const onInputTranscript = (data: TranscriptionData) => {
+      if (!connected) return;
+
+      // Send user's speech transcript via WebSocket
+      if (data.text) {
+        feedWebSocketService.sendTranscript(data.text, 'user');
+      }
+    };
+
+    client.on('inputTranscript', onInputTranscript);
+
+    return () => {
+      client.off('inputTranscript', onInputTranscript);
+    };
+  }, [client, connected]);
+
+  // Handle output audio transcription (tutor's speech) - send via WebSocket
+  useEffect(() => {
+    const onOutputTranscript = (data: TranscriptionData) => {
+      if (!connected) return;
+
+      // Send tutor's speech transcript via WebSocket
+      if (data.text) {
+        feedWebSocketService.sendTranscript(data.text, 'tutor');
+      }
+    };
+
+    client.on('outputTranscript', onOutputTranscript);
+
+    return () => {
+      client.off('outputTranscript', onOutputTranscript);
     };
   }, [client, connected]);
 
@@ -241,11 +287,9 @@ function FloatingControlPanel({
         
         // Send to Gemini (existing functionality)
         client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
-        
-        // Also send to webhook (fire-and-forget, non-blocking)
-        feedWebhookService.sendMedia(data).catch((error) => {
-          console.error('Failed to send media to webhook:', error);
-        });
+
+        // Also send via WebSocket (fire-and-forget, non-blocking)
+        feedWebSocketService.sendMedia(data);
       }
       
       // Schedule next frame only if still connected and running
@@ -277,7 +321,11 @@ function FloatingControlPanel({
       // Handle disconnect with TeachingAssistant session end
       try {
         interruptAudio();
-        
+
+        // Disconnect WebSocket and SSE first
+        feedWebSocketService.disconnect();
+        instructionSSEService.disconnect();
+
         await new Promise((resolve) => setTimeout(resolve, 300));
 
         const token = jwtUtils.getToken();
@@ -400,10 +448,19 @@ function FloatingControlPanel({
           return;
         }
 
+        // Start TeachingAssistant session (creates MongoDB session)
         const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/session/start`);
 
         if (response.ok) {
           const data = await response.json();
+
+          // Connect WebSocket for feed streaming
+          await feedWebSocketService.connect();
+
+          // Connect SSE for receiving instructions
+          instructionSSEService.connect();
+
+          // Send greeting if available
           if (data.prompt && client.status === 'connected') {
             client.send({ text: data.prompt });
           }

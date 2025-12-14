@@ -19,6 +19,14 @@ import { difference } from "lodash";
 import { TutorService } from "./tutor-service";
 
 /**
+ * Transcription data from Gemini input/output audio transcription
+ */
+export interface TranscriptionData {
+  text: string;
+  isFinal: boolean;
+}
+
+/**
  * Event types that can be emitted by the tutor client.
  * Each event corresponds to a specific message from Gemini or client state change.
  */
@@ -33,10 +41,14 @@ export interface TutorClientEventTypes {
   error: (error: ErrorEvent) => void;
   // Emitted when the server interrupts the current generation
   interrupted: () => void;
+  // Emitted when user's speech is transcribed (input audio transcription)
+  inputTranscript: (data: TranscriptionData) => void;
   // Emitted for logging events
   log: (log: StreamingLog) => void;
   // Emitted when the connection opens
   open: () => void;
+  // Emitted when model's speech is transcribed (output audio transcription)
+  outputTranscript: (data: TranscriptionData) => void;
   // Emitted when the initial setup is complete
   setupcomplete: () => void;
   // Emitted when a tool call is received
@@ -161,6 +173,26 @@ export class TutorClient extends EventEmitter<TutorClientEventTypes> {
       if ("turnComplete" in serverContent) {
         this.log("server.content", "turnComplete");
         this.emit("turncomplete");
+      }
+
+      // Handle input audio transcription (user's speech)
+      if ("inputTranscription" in serverContent) {
+        const transcription = (serverContent as any).inputTranscription;
+        if (transcription?.text) {
+          const isFinal = transcription.finished === true;
+          this.emit("inputTranscript", { text: transcription.text, isFinal });
+          this.log("server.inputTranscript", `${isFinal ? "[FINAL]" : "[PARTIAL]"} ${transcription.text}`);
+        }
+      }
+
+      // Handle output audio transcription (model's speech)
+      if ("outputTranscription" in serverContent) {
+        const transcription = (serverContent as any).outputTranscription;
+        if (transcription?.text) {
+          const isFinal = transcription.finished === true;
+          this.emit("outputTranscript", { text: transcription.text, isFinal });
+          this.log("server.outputTranscript", `${isFinal ? "[FINAL]" : "[PARTIAL]"} ${transcription.text}`);
+        }
       }
 
       if ("modelTurn" in serverContent) {

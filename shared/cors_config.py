@@ -28,11 +28,14 @@ def get_allowed_origins() -> List[str]:
         "http://localhost:3002",
         "http://localhost:4173",
         "http://localhost:5173",
+        "http://localhost:8080",  # For serving test HTML files
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
         "http://127.0.0.1:3002",
         "http://127.0.0.1:4173",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:8080",  # For serving test HTML files
+        "null",  # For file:// protocol (dev only)
     ]
     
     # Add production domain if set

@@ -21,7 +21,7 @@ export type { UseTutorResults } from './use-tutor';
 // Core Services
 export { TutorService, clearTokenCache } from './tutor-service';
 export { TutorClient } from './tutor-client';
-export type { TutorClientEventTypes } from './tutor-client';
+export type { TutorClientEventTypes, TranscriptionData } from './tutor-client';
 
 // Audio Components
 export { AudioStreamer } from './audio-streamer';
