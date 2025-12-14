@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {linterContextDefault} from "@khanacademy/perseus-linter";
 import * as React from "react";
 import ReactDOM from "react-dom";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Derived from the MIT-licensed:
 // https://github.com/fat/zoom.js/blob/fd4f3e43153da7596da0bade198e99f98b47791e/js/zoom.js
 
@@ -134,7 +135,7 @@ function changeViewportTag(
 /**
  * The zoom service
  */
-function ZoomServiceClass() {}
+function ZoomServiceClass() { }
 
 ZoomServiceClass.prototype._initialize = function (enableMobilePinch: any) {
     // Check to see if the service is already initialized
@@ -145,7 +146,7 @@ ZoomServiceClass.prototype._initialize = function (enableMobilePinch: any) {
         this._initialScrollPosition =
         this._initialTouchPosition =
         this._touchMoveListener =
-            null;
+        null;
 
     this._$document = $(document);
     this._$window = $(window);

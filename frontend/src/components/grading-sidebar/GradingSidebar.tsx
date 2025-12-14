@@ -53,8 +53,10 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
             }
             return res.json();
         },
-        staleTime: 10_000, // Refresh every 10 seconds
-        refetchInterval: 10_000, // Auto-refresh every 10 seconds
+        staleTime: 60_000, // Consider data fresh for 60 seconds
+        refetchOnWindowFocus: false, // Don't refetch when window regains focus
+        refetchOnMount: true, // Only refetch when component mounts
+        // Removed refetchInterval - we'll manually invalidate on answer submission
     });
     
     const skillStates = (skillScoresData?.skill_states || {}) as Record<
@@ -69,11 +71,24 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
     >;
 
     const scrollToSkill = (skill: string) => {
-        if (!scrollContainerRef.current) return;
+        const container = scrollContainerRef.current;
+        if (!container) return;
 
         const element = document.getElementById(`skill-${skill}`);
         if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
+            // Calculate the element's position relative to the container
+            const containerTop = container.getBoundingClientRect().top;
+            const elementTop = element.getBoundingClientRect().top;
+            const offset = 0; // Position at the very top
+            
+            // Calculate the target scroll position
+            const scrollPosition = container.scrollTop + (elementTop - containerTop) - offset;
+            
+            // Scroll to position
+            container.scrollTo({
+                top: Math.max(0, scrollPosition),
+                behavior: "smooth"
+            });
         }
     };
 
@@ -163,8 +178,8 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
             )}>
                 {open ? (
                     <div className="flex items-center gap-2 lg:gap-2.5 animate-in fade-in slide-in-from-left-4 duration-300">
-                        <div className="p-1.5 lg:p-2 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
-                            <GraduationCap className="w-4 h-4 lg:w-4 lg:h-4 text-black dark:text-white font-bold" />
+                        <div className="px-[0.25rem] pt-[0.15rem] pb-[0.25rem] lg:px-[0.375rem] lg:pt-[0.25rem] lg:pb-[0.375rem] border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
+                            <GraduationCap className="w-4 h-4 text-black dark:text-white font-bold" />
                         </div>
                         <h2 className="text-xs lg:text-sm font-black text-white whitespace-nowrap uppercase tracking-tight">
                             GRADING & SKILLS
@@ -175,9 +190,9 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                         variant="ghost"
                         size="icon"
                         onClick={onToggle}
-                        className="w-9 h-9 lg:w-10 lg:h-10 border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] transition-colors shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
+                        className="w-[1.8125rem] h-[1.6rem] lg:w-[2.025rem] lg:h-[1.8125rem] border-[2px] lg:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] transition-colors shadow-[1px_1px_0_0_rgba(0,0,0,1)] lg:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5"
                     >
-                        <GraduationCap className="w-6 h-6 text-black dark:text-white dark:hover:text-black font-bold" />
+                        <GraduationCap className="w-3 h-3 text-black dark:text-white dark:hover:text-black font-bold" />
                     </Button>
                 )}
 
@@ -186,20 +201,26 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                         variant="ghost"
                         size="icon"
                         onClick={onToggle}
-                        className="w-10 h-10 border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black transition-all shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
+                        className="w-[2.125rem] h-[2.125rem] border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000] hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black transition-all shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1"
                     >
                         <ChevronLeft className="w-5 h-5 font-bold" />
                     </Button>
                 )}
             </header>
 
-            <div className="flex-grow overflow-hidden relative" onClick={handleContainerClick}>
+            <div className="flex-grow overflow-hidden relative">
                 {open ? (
                     <div
                         ref={scrollContainerRef}
                         className="h-full overflow-y-auto overflow-x-hidden animate-in fade-in duration-500 px-4 py-4"
+                        onClick={handleContainerClick}
                     >
-                        <Accordion type="single" collapsible className="w-full space-y-3">
+                        <Accordion
+                            type="single"
+                            collapsible
+                            className="w-full space-y-3"
+                            onClick={(e) => e.stopPropagation()} // Prevent handleContainerClick from intercepting accordion clicks
+                        >
                             {isLoading ? (
                                 <div className="text-center py-8 text-sm text-gray-500">
                                     Loading skills...
@@ -229,6 +250,8 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                     ? Math.round((stats.correct_count / stats.practice_count) * 100)
                                     : 0;
 
+                                const isCurrentSkill = skillName === currentSkill;
+                                
                                 return (
                                     <AccordionItem
                                         key={skillName}
@@ -238,9 +261,10 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                                     >
                                         <div className={cn(
                                             "border-[4px] border-black dark:border-white transition-all duration-200 shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.2)]",
-                                            isPracticed ? "bg-[#FFFDF5] dark:bg-[#000000]" : "bg-[#FFFDF5] dark:bg-[#000000]",
-                                            isPracticed && "hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:translate-x-[-2px] hover:translate-y-[-2px]",
-                                            !isPracticed && "opacity-60"
+                                            isCurrentSkill && "bg-[#FFE500] dark:bg-[#FFD93D] shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(0,0,0,1)] scale-[1.02]",
+                                            !isCurrentSkill && isPracticed && "bg-[#FFFDF5] dark:bg-[#000000]",
+                                            !isCurrentSkill && !isPracticed && "bg-[#FFFDF5] dark:bg-[#000000] opacity-60",
+                                            isPracticed && "hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] hover:translate-x-[-2px] hover:translate-y-[-2px]"
                                         )}>
                                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:hidden cursor-pointer group">
                                                 <div className="flex flex-col gap-2 w-full">

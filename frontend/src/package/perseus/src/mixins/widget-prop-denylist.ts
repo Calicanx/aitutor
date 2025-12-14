@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * These are things that widgets should exclude when serializing themselves.
  *

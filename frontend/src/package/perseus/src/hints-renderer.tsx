@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as PerseusLinter from "@khanacademy/perseus-linter";
 import {StyleSheet, css} from "aphrodite";
 import classnames from "classnames";

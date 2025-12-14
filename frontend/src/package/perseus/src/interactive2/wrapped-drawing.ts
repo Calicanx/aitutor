@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Default methods for a wrapped movable.
  */

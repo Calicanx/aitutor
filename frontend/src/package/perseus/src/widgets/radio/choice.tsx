@@ -40,6 +40,8 @@ export type ChoiceProps = {
     // answers may be rendered orange in review, rather than grey if
     // incorrect.
     previouslyAnswered?: boolean;
+    // Unique identifier for this radio widget group (for name attribute)
+    widgetId?: string;
     // A callback indicating that this choice has changed. Its argument is
     // an object with a `checked` key. It contains a boolean value specifying
     // the new checked value of this choice.
@@ -67,6 +69,7 @@ const Choice = function (props: ChoicePropsWithForwardRef): React.ReactElement {
         pos = 0,
         showRationale = false,
         rationale,
+        widgetId,
         forwardedRef,
     } = props;
     const [isInputFocused, setIsInputFocused] = useState(false);
@@ -86,7 +89,6 @@ const Choice = function (props: ChoicePropsWithForwardRef): React.ReactElement {
     // maintaining a consistent API for the parent.
     function sendChange(newValues: {checked?: boolean}) {
         const updatedChecked = newValues.checked ?? checked;
-        
         onChange({checked: updatedChecked});
     }
 
@@ -138,6 +140,7 @@ const Choice = function (props: ChoicePropsWithForwardRef): React.ReactElement {
                         {a11yText} &nbsp; {content}
                         <input
                             type={multipleSelect ? "checkbox" : "radio"}
+                            name={widgetId ? `radio-${widgetId}` : undefined}
                             checked={checked}
                             onClick={() => {
                                 sendChange({

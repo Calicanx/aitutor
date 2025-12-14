@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Regexp defining characters that are valid SMILES characters that this parser
 // can parse.  In addition to serving as a sort of validation, this also keeps
 // out unimplemented features (like cycles and stereochemistry), which use

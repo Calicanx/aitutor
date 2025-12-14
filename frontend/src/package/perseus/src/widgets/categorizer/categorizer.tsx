@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable @khanacademy/ts-no-error-suppressions */
 import {shuffle} from "@khanacademy/perseus-core";
 import {linterContextDefault} from "@khanacademy/perseus-linter";

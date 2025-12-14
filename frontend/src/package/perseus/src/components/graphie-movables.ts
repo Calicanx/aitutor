@@ -1,3 +1,4 @@
+// @ts-nocheck
 import _ from "underscore";
 
 import {getDependencies} from "../dependencies";

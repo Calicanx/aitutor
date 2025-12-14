@@ -54,8 +54,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
   const startCamera = useCallback(async () => {
     try {
       console.log('Starting camera capture...');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 }
       });
 
       cameraStreamRef.current = stream;
@@ -94,8 +94,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
           onCameraFrame?.(imageData);
         }
 
-        // Continue loop - reduced to ~5 FPS for better performance
-        setTimeout(() => requestAnimationFrame(captureLoop), 200);
+        // Continue loop - reduced to ~2 FPS for better performance (500ms)
+        setTimeout(() => requestAnimationFrame(captureLoop), 500);
       };
 
       captureLoop();
@@ -110,8 +110,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
   const startScreen = useCallback(async () => {
     try {
       console.log('Starting screen capture...');
-      const stream = await navigator.mediaDevices.getDisplayMedia({ 
-        video: { width: 1280, height: 720 } 
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1280, height: 720 }
       });
 
       screenStreamRef.current = stream;
@@ -157,8 +157,8 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
           onScreenFrame?.(imageData);
         }
 
-        // Continue loop - reduced to ~5 FPS for better performance
-        setTimeout(() => requestAnimationFrame(captureLoop), 200);
+        // Continue loop - reduced to ~2 FPS for better performance (500ms)
+        setTimeout(() => requestAnimationFrame(captureLoop), 500);
       };
 
       captureLoop();
@@ -194,10 +194,13 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
     }
   }, [startScreen, stopScreen]);
 
+  // Expose video refs for direct consumption by MediaMixer
   return {
     cameraEnabled,
     screenEnabled,
     toggleCamera,
-    toggleScreen
+    toggleScreen,
+    cameraVideoRef,
+    screenVideoRef
   };
 };

@@ -31,7 +31,11 @@ def get_current_user(request: Request) -> str:
     token = auth_header.split(" ")[1]
     
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(
+            token, 
+            JWT_SECRET, 
+            algorithms=[JWT_ALGORITHM]
+        )
         user_id = payload.get("sub")
         
         if not user_id:
@@ -56,7 +60,11 @@ def get_user_from_token(token: str) -> Optional[Dict]:
         Dictionary with user info or None if invalid
     """
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(
+            token, 
+            JWT_SECRET, 
+            algorithms=[JWT_ALGORITHM]
+        )
         return {
             "user_id": payload.get("sub"),
             "email": payload.get("email", ""),

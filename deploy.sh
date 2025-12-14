@@ -67,7 +67,6 @@ if [ "$ENV" = "staging" ]; then
     DASH_API_URL=$(gcloud run services describe dash-api-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     SHERLOCKED_API_URL=$(gcloud run services describe sherlocked-api-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     TEACHING_ASSISTANT_API_URL=$(gcloud run services describe teaching-assistant-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
-    TUTOR_URL=$(gcloud run services describe tutor-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     AUTH_SERVICE_URL=$(gcloud run services describe auth-service-staging --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     
     # Use placeholders if services don't exist yet (first deployment)
@@ -82,10 +81,6 @@ if [ "$ENV" = "staging" ]; then
     if [ -z "$TEACHING_ASSISTANT_API_URL" ]; then
         echo "⚠️  TeachingAssistant API not found. Using existing URL"
         TEACHING_ASSISTANT_API_URL="https://teaching-assistant-staging-utmfhquz6a-uc.a.run.app"
-    fi
-    if [ -z "$TUTOR_URL" ]; then
-        echo "⚠️  Tutor service not found. Using existing URL"
-        TUTOR_URL="https://tutor-staging-utmfhquz6a-uc.a.run.app"
     fi
     if [ -z "$AUTH_SERVICE_URL" ]; then
         echo "⚠️  Auth Service not found. Using existing URL"
@@ -103,7 +98,6 @@ else
     DASH_API_URL=$(gcloud run services describe dash-api --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     SHERLOCKED_API_URL=$(gcloud run services describe sherlocked-api --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     TEACHING_ASSISTANT_API_URL=$(gcloud run services describe teaching-assistant --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
-    TUTOR_URL=$(gcloud run services describe tutor --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
     AUTH_SERVICE_URL=$(gcloud run services describe auth-service --region $REGION --format 'value(status.url)' 2>/dev/null || echo "")
 
     # Use placeholders if services don't exist yet (first deployment)
@@ -119,33 +113,25 @@ else
         echo "⚠️  TeachingAssistant API not found. Will be created on first deployment"
         TEACHING_ASSISTANT_API_URL="https://teaching-assistant-utmfhquz6a-uc.a.run.app"
     fi
-    if [ -z "$TUTOR_URL" ]; then
-        echo "⚠️  Tutor service not found. Will be created on first deployment"
-        TUTOR_URL="https://tutor-utmfhquz6a-uc.a.run.app"
-    fi
     if [ -z "$AUTH_SERVICE_URL" ]; then
         echo "⚠️  Auth Service not found. Will be created on first deployment"
         AUTH_SERVICE_URL="https://auth-service-utmfhquz6a-uc.a.run.app"
     fi
 fi
 
-# Convert HTTPS to WSS for WebSocket URLs
-TUTOR_WS_URL=$(echo $TUTOR_URL | sed 's/https/wss/')
-
 echo "🔗 Using URLs:"
 echo "  DASH API: $DASH_API_URL"
 echo "  SherlockED: $SHERLOCKED_API_URL"
 echo "  TeachingAssistant: $TEACHING_ASSISTANT_API_URL"
-echo "  Tutor: $TUTOR_URL"
 echo "  Auth Service: $AUTH_SERVICE_URL"
 echo ""
 
 # Submit build with substitutions
-# Using comma as delimiter (default) - CORS now allows all origins, so no CORS_ORIGINS needed
+# ALLOWED_ORIGINS is passed from GitHub Actions workflow environment
 echo "📤 Submitting Cloud Build job..."
 gcloud builds submit \
   --config=$CONFIG_FILE \
-  --substitutions=_ENV_SUFFIX="$ENV_SUFFIX_SUB",_MONGODB_URI="$MONGODB_URI",_MONGODB_DB_NAME="$MONGODB_DB_NAME",_OPENROUTER_API_KEY="$OPENROUTER_API_KEY",_GEMINI_API_KEY="$GEMINI_API_KEY",_GEMINI_MODEL="$GEMINI_MODEL",_JWT_SECRET="$JWT_SECRET",_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID",_GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET",_DASH_API_URL="$DASH_API_URL",_SHERLOCKED_API_URL="$SHERLOCKED_API_URL",_TEACHING_ASSISTANT_API_URL="$TEACHING_ASSISTANT_API_URL",_TUTOR_WS="$TUTOR_WS_URL",_AUTH_SERVICE_URL="$AUTH_SERVICE_URL",_FRONTEND_URL="$FRONTEND_URL" \
+  --substitutions=_ENV_SUFFIX="$ENV_SUFFIX_SUB",_MONGODB_URI="$MONGODB_URI",_MONGODB_DB_NAME="$MONGODB_DB_NAME",_OPENROUTER_API_KEY="$OPENROUTER_API_KEY",_GEMINI_API_KEY="$GEMINI_API_KEY",_GEMINI_MODEL="$GEMINI_MODEL",_JWT_SECRET="$JWT_SECRET",_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID",_GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET",_DASH_API_URL="$DASH_API_URL",_SHERLOCKED_API_URL="$SHERLOCKED_API_URL",_TEACHING_ASSISTANT_API_URL="$TEACHING_ASSISTANT_API_URL",_AUTH_SERVICE_URL="$AUTH_SERVICE_URL",_FRONTEND_URL="$FRONTEND_URL",_ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
   .
 
 # Get actual deployed URLs
@@ -155,12 +141,8 @@ echo "🔍 Retrieving service URLs..."
 DASH_URL=$(gcloud run services describe dash-api$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 SHERLOCKED_URL=$(gcloud run services describe sherlocked-api$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 TEACHING_ASSISTANT_URL=$(gcloud run services describe teaching-assistant$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
-TUTOR_URL=$(gcloud run services describe tutor$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 AUTH_SERVICE_URL=$(gcloud run services describe auth-service$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
 FRONTEND_URL=$(gcloud run services describe tutor-frontend$SERVICE_SUFFIX --region $REGION --format 'value(status.url)' 2>/dev/null)
-
-# Convert to WSS
-TUTOR_WS_URL=$(echo $TUTOR_URL | sed 's/https/wss/')
 
 echo ""
 echo "🎉 Deployment Complete! ($ENV environment)"
@@ -171,10 +153,6 @@ echo "  🔐 Auth Service:       $AUTH_SERVICE_URL"
 echo "  🔧 DASH API:           $DASH_URL"
 echo "  🕵️  SherlockED:         $SHERLOCKED_URL"
 echo "  👨‍🏫 TeachingAssistant:  $TEACHING_ASSISTANT_URL"
-echo "  🎓 Tutor Service:      $TUTOR_URL"
-echo ""
-echo "🔗 WebSocket URLs:"
-echo "  Tutor:              $TUTOR_WS_URL"
 echo ""
 
 if [ "$ENV" = "staging" ]; then
@@ -185,7 +163,6 @@ if [ "$ENV" = "staging" ]; then
     echo "   DASH_API_URL=\"$DASH_URL\""
     echo "   SHERLOCKED_API_URL=\"$SHERLOCKED_URL\""
     echo "   TEACHING_ASSISTANT_API_URL=\"$TEACHING_ASSISTANT_URL\""
-    echo "   TUTOR_URL=\"$TUTOR_URL\""
     echo "   AUTH_SERVICE_URL=\"$AUTH_SERVICE_URL\""
 else
     echo "💡 Note: If this is your first production deployment, update this script with the actual URLs above"
@@ -195,7 +172,6 @@ else
     echo "   DASH_API_URL=\"$DASH_URL\""
     echo "   SHERLOCKED_API_URL=\"$SHERLOCKED_URL\""
     echo "   TEACHING_ASSISTANT_API_URL=\"$TEACHING_ASSISTANT_URL\""
-    echo "   TUTOR_URL=\"$TUTOR_URL\""
     echo "   AUTH_SERVICE_URL=\"$AUTH_SERVICE_URL\""
 fi
 

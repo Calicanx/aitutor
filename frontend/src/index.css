@@ -8,7 +8,7 @@
 body {
   margin: 0;
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+    'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
     "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -17,6 +17,48 @@ body {
 code {
   font-family:
     source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+/* ============================================
+   SCRATCHPAD / EXCALIDRAW CANVAS STYLES
+   ============================================ */
+
+/* Container for the Excalidraw whiteboard */
+.scratchpad-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Ensure Excalidraw fills its container */
+.scratchpad-container > div {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Excalidraw canvas wrapper */
+.scratchpad-container .excalidraw {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Make question panel relative for absolute positioning of scratchpad */
+.question-panel {
+  position: relative;
+  min-height: 500px;
+}
+
+/* Scratchpad capture wrapper */
+.scratchpad-capture-wrapper {
+  position: relative;
+  height: 100%;
+  width: 100%;
 }
 
 /* Core dropdown container */
@@ -66,6 +108,25 @@ code {
   /* add breathing room */
   box-sizing: border-box !important;
   /* ensure padding doesn’t mess width */
+  /* ensure padding doesn’t mess width */
+}
+
+/* Fix for MCQ Radio Selection vs Hover State */
+/* The radio input itself is often hidden/replaced by Perseus, so we target the label/container usually */
+.perseus-radio-option:hover {
+  background-color: #f5f5f5 !important;
+}
+
+.perseus-radio-option input[type="radio"]:checked+div {
+  background-color: #e6f7ff !important;
+  border-color: #1890ff !important;
+  font-weight: 600;
+}
+
+/* Ensure selected state is distinct from hover */
+.perseus-radio-selected {
+  background-color: #e6f7ff !important;
+  border: 2px solid #1890ff !important;
 }
 
 /* Optional: change border on focus */
@@ -330,7 +391,7 @@ a[target="lint-help-window"] {
   --sidebar-accent-foreground: oklch(0.3729 0.0306 259.7328);
   --sidebar-border: oklch(0.8717 0.0093 258.3382);
   --sidebar-ring: oklch(0.5854 0.2041 277.1173);
-  --font-sans: Inter, sans-serif;
+  --font-sans: 'Space Grotesk', Inter, sans-serif;
   --font-serif: Merriweather, serif;
   --font-mono: JetBrains Mono, monospace;
   --radius: 0.5rem;
@@ -390,7 +451,7 @@ a[target="lint-help-window"] {
   --sidebar-accent-foreground: oklch(0.8717 0.0093 258.3382);
   --sidebar-border: oklch(0.4461 0.0263 256.8018);
   --sidebar-ring: oklch(0.6801 0.1583 276.9349);
-  --font-sans: Inter, sans-serif;
+  --font-sans: 'Space Grotesk', Inter, sans-serif;
   --font-serif: Merriweather, serif;
   --font-mono: JetBrains Mono, monospace;
   --radius: 0.5rem;

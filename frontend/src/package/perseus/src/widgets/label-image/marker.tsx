@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable @khanacademy/ts-no-error-suppressions */
 /**
  * Controlled question image marker, rendered as a styled button element.

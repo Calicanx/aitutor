@@ -1,8 +1,19 @@
 {
   "compilerOptions": {
-    "types": ["node", "react", "react-dom", "jest", "lodash", "react-syntax-highlighter"],
+    "types": [
+      "node",
+      "react",
+      "react-dom",
+      "jest",
+      "lodash",
+      "react-syntax-highlighter"
+    ],
     "target": "es2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -18,7 +29,9 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
   "include": [

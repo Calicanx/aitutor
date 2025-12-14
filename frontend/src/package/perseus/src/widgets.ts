@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {Errors, PerseusError, Registry} from "@khanacademy/perseus-core";
 
 import {Log} from "./logging/log";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable @khanacademy/ts-no-error-suppressions */
 import {
     usesNumCorrect,
@@ -22,7 +23,6 @@ import ChoiceNoneAbove from "./choice-none-above";
 
 import type {PerseusStrings} from "../../strings";
 import type {APIOptions} from "../../types";
-import type {StyleDeclaration} from "aphrodite";
 
 const {captureScratchpadTouchStart} = Util;
 
@@ -67,6 +67,8 @@ type Props = {
     // Renderer. Determines whether we'll auto-scroll the page upon
     // entering review mode.
     isLastUsedWidget?: boolean;
+    // Unique identifier for this radio widget group (for name attribute)
+    widgetId?: string;
 };
 
 function getInstructionsText(
@@ -97,6 +99,7 @@ const BaseRadio = function ({
     editMode = false,
     multipleSelect = false,
     labelWrap,
+    widgetId,
     countChoices,
     numCorrect,
     isLastUsedWidget,
@@ -163,7 +166,6 @@ const BaseRadio = function ({
     // So, given the new values for a particular choice, compute the new values
     // for all choices, and pass them to `onChange`.
     function updateChoice(choiceId: string, checked: boolean): void {
-        
         const checkedChoiceIds: string[] = [];
 
         if (checked && !multipleSelect) {
@@ -172,13 +174,13 @@ const BaseRadio = function ({
             // Multi-select mode + checking: add to existing
             const currentCheckedIds = choices
                 .filter((choice) => choice.checked)
-                .map((choice) => choice.id);
+                .map((choice) => choice.id || `choice-${choices.indexOf(choice)}`);
             checkedChoiceIds.push(...currentCheckedIds, choiceId);
         } else {
             // Unchecking: remove this choice from checked list
             const currentCheckedIds = choices
-                .filter((choice) => choice.checked && choice.id !== choiceId)
-                .map((choice) => choice.id);
+                .filter((choice) => choice.checked && (choice.id || `choice-${choices.indexOf(choice)}`) !== choiceId)
+                .map((choice) => choice.id || `choice-${choices.indexOf(choice)}`);
             checkedChoiceIds.push(...currentCheckedIds);
         }
         onChange(checkedChoiceIds);
@@ -250,8 +252,10 @@ const BaseRadio = function ({
                     const ref = React.createRef<any>();
                     // @ts-expect-error - TS2322 - Type 'RefObject<unknown>' is not assignable to type 'never'.
                     choiceRefs.current[i] = ref;
+                    // Ensure choice has an ID - use choice.id if available, otherwise fallback to index
+                    const choiceId = choice.id || `choice-${i}`;
                     const elementProps = {
-                        id: choice.id,
+                        id: choiceId,
                         apiOptions: apiOptions,
                         multipleSelect: multipleSelect,
                         checked: choice.checked,
@@ -266,13 +270,14 @@ const BaseRadio = function ({
                             choice.hasRationale &&
                             (reviewMode || choice.showRationale),
                         pos: i,
-                        onChange: (newValues) => {
+                        widgetId: widgetId,
+                        onChange: (newValues: {checked: boolean}) => {
                             // editMode selection is handled in clickHandler
                             if (editMode) {
                                 return;
                             }
 
-                            updateChoice(choice.id, newValues.checked);
+                            updateChoice(choiceId, newValues.checked);
                         },
                     } as const;
 
@@ -349,7 +354,7 @@ const BaseRadio = function ({
                                 // radio icon, then we want to trigger the
                                 // check by flipping the choice of the icon.
                                 if (elem.getAttribute("data-is-radio-icon")) {
-                                    updateChoice(choice.id, !choice.checked);
+                                    updateChoice(choice.id || `choice-${i}`, !choice.checked);
                                     return;
                                 }
                                 elem = elem.parentNode;
@@ -365,7 +370,7 @@ const BaseRadio = function ({
                     return (
                         // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- TODO(LEMS-2871): Address a11y error
                         <li
-                            key={choice.id}
+                            key={choice.id || `choice-${i}`}
                             ref={(e) => (listElem = e)}
                             className={className}
                             onClick={clickHandler}
@@ -388,7 +393,7 @@ const BaseRadio = function ({
     return <div className={css(styles.responsiveContainer)}>{fieldset}</div>;
 };
 
-const styles: StyleDeclaration = StyleSheet.create({
+const styles = StyleSheet.create({
     instructions: {
         display: "block",
         color: styleConstants.gray17,

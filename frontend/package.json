@@ -2,10 +2,11 @@
   "name": "multimodal-live-api-web-console",
   "version": "0.1.0",
   "dependencies": {
-    "@google/genai": "^0.14.0",
+    "@excalidraw/excalidraw": "^0.18.0",
+    "@google/genai": "1.33.0",
     "@hookform/resolvers": "^5.2.2",
-    "@khanacademy/kmath": "^2.2.8",
-    "@khanacademy/math-input": "^26.2.4",
+    "@khanacademy/kmath": "2.2.4",
+    "@khanacademy/math-input": "26.2.4",
     "@khanacademy/mathjax-renderer": "^3.0.0",
     "@khanacademy/perseus": "68.0.2",
     "@khanacademy/wonder-blocks-accordion": "^3.1.39",
@@ -59,11 +60,13 @@
     "aphrodite": "^2.4.0",
     "class-variance-authority": "^0.7.1",
     "classnames": "^2.5.1",
+    "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "dotenv-flow": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "eventemitter3": "^5.0.1",
+    "framer-motion": "^12.23.25",
     "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
@@ -75,7 +78,6 @@
     "react": "^18.3.1",
     "react-day-picker": "^9.11.2",
     "react-dom": "^18.3.1",
-    "react-draggable": "^4.5.0",
     "react-hook-form": "^7.66.1",
     "react-icons": "^5.3.0",
     "react-json-view": "^1.21.3",
@@ -84,7 +86,6 @@
     "react-router-dom": "^5.3.4",
     "react-router-dom-v5-compat": "^6.30.0",
     "react-select": "^5.8.3",
-    "react-sketch-canvas": "^6.2.0",
     "react-syntax-highlighter": "^16.1.0",
     "react-window": "^1.8.11",
     "recharts": "2.15.4",
@@ -97,7 +98,7 @@
     "vega": "^5.30.0",
     "vega-embed": "^6.29.0",
     "vega-lite": "^5.22.0",
-    "web-vitals": "^2.1.4",
+    "web-vitals": "^5.1.0",
     "zod": "^4.1.13",
     "zustand": "^5.0.1"
   },
@@ -105,12 +106,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:analyze": "vite build --mode analyze",
     "type-check": "tsc --noEmit --skipLibCheck",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "perf:lighthouse": "lhci autorun",
+    "perf:bundle": "npm run build && npx vite-bundle-visualizer"
   },
   "devDependencies": {
+    "@lhci/cli": "^0.15.1",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
@@ -127,16 +132,27 @@
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.17",
+    "terser": "^5.44.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-bundle-visualizer": "^1.2.1"
   },
   "overrides": {
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "@khanacademy/perseus-core": "19.0.2",
+    "@khanacademy/kas": "2.1.1",
+    "@khanacademy/perseus-utils": "2.1.0",
+    "@khanacademy/simple-markdown": "2.1.0",
+    "@khanacademy/pure-markdown": "2.2.0",
+    "@khanacademy/kmath": "2.2.4"
   },
   "resolutions": {
-    "@khanacademy/perseus-core": "19.2.0",
+    "@khanacademy/perseus-core": "19.0.2",
     "@khanacademy/kas": "2.1.1",
-    "@khanacademy/perseus-utils": "2.1.0"
+    "@khanacademy/perseus-utils": "2.1.0",
+    "@khanacademy/simple-markdown": "2.1.0",
+    "@khanacademy/pure-markdown": "2.2.0",
+    "@khanacademy/kmath": "2.2.4"
   }
 }

@@ -2,7 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app import routes as app_routes
 import os
+import sys
 import uvicorn
+
+# Add project root to path for shared imports
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 
 app = FastAPI(
     title="Exam System API",
@@ -10,13 +15,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS - allow all origins
+# Configure CORS with secure origins from environment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
-    allow_methods=["*"],  # Includes OPTIONS for preflight
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
     expose_headers=["*"],
 )
 

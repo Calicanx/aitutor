@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {vector as kvector} from "@khanacademy/kmath";
 
 import type {Coord} from "./types";

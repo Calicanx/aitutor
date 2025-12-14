@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, {useId} from "react";
 
 import {usePerseusI18n} from "../../components/i18n-context";

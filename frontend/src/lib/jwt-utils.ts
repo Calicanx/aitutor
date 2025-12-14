@@ -6,7 +6,8 @@ const TOKEN_KEY = 'jwt_token';
 
 export const jwtUtils = {
   getToken: (): string | null => {
-    return localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
+    return token;
   },
 
   setToken: (token: string): void => {

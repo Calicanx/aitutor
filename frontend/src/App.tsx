@@ -14,22 +14,26 @@
  * limitations under the License.
  */
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, Suspense, lazy } from "react";
 import "./App.scss";
-import { LiveAPIProvider } from "./contexts/LiveAPIContext";
+import "./styles/mobile-fixes.css"; // Mobile UI fixes
+import { TutorProvider } from "./features/tutor";
 import AuthGuard from "./components/auth/AuthGuard";
-import SidePanel from "./components/side-panel/SidePanel";
-import GradingSidebar from "./components/grading-sidebar/GradingSidebar";
 import Header from "./components/header/Header";
 import BackgroundShapes from "./components/background-shapes/BackgroundShapes";
-import ScratchpadCapture from "./components/scratchpad-capture/ScratchpadCapture";
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
-import FloatingControlPanel from "./components/floating-control-panel/FloatingControlPanel";
 import Scratchpad from "./components/scratchpad/Scratchpad";
 import { ThemeProvider } from "./components/theme/theme-provier";
+import { HintProvider } from "./contexts/HintContext";
 import { Toaster } from "@/components/ui/sonner";
 import { useMediaMixer } from "./hooks/useMediaMixer";
 import { useMediaCapture } from "./hooks/useMediaCapture";
+
+// Lazy load heavy components
+const SidePanel = lazy(() => import("./components/side-panel/SidePanel"));
+const GradingSidebar = lazy(() => import("./components/grading-sidebar/GradingSidebar"));
+const ScratchpadCapture = lazy(() => import("./components/scratchpad-capture/ScratchpadCapture"));
+const FloatingControlPanel = lazy(() => import("./components/floating-control-panel/FloatingControlPanel"));
 
 function App() {
   // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
@@ -49,23 +53,27 @@ function App() {
   const mediaMixerRef = useRef<any>(null);
 
   // Media capture with frame callbacks - must be called before useMediaMixer
-  const { cameraEnabled, screenEnabled, toggleCamera, toggleScreen } = useMediaCapture({
-    onCameraFrame: (imageData) => {
-      mediaMixerRef.current?.updateCameraFrame(imageData);
-    },
-    onScreenFrame: (imageData) => {
-      mediaMixerRef.current?.updateScreenFrame(imageData);
-    }
-  });
+  // Media capture with frame callbacks - must be called before useMediaMixer
+  // Optimized: No longer using callbacks for frames, but exposing video refs directly
+  const {
+    cameraEnabled,
+    screenEnabled,
+    toggleCamera,
+    toggleScreen,
+    cameraVideoRef,
+    screenVideoRef
+  } = useMediaCapture({});
 
   // MediaMixer hook for local video mixing - uses state from useMediaCapture
   const mediaMixer = useMediaMixer({
     width: 1280,
     height: 2160,
-    fps: 10,
+    fps: 2,  // Reduced from 10 to 2 FPS for better performance
     quality: 0.85,
     cameraEnabled: cameraEnabled,
-    screenEnabled: screenEnabled
+    screenEnabled: screenEnabled,
+    cameraVideoRef: cameraVideoRef,
+    screenVideoRef: screenVideoRef
   });
 
   // Store mediaMixer in ref for use in callbacks
@@ -103,60 +111,64 @@ function App() {
     <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
       <div className="App">
         <AuthGuard>
-          <LiveAPIProvider>
-            <Header
-              sidebarOpen={isSidebarOpen}
-              onToggleSidebar={toggleSidebar}
-            />
-            <div className="streaming-console">
-              <SidePanel
-                open={isSidebarOpen}
-                onToggle={toggleSidebar}
+          <TutorProvider>
+            <HintProvider>
+              <Header
+                sidebarOpen={isSidebarOpen}
+                onToggleSidebar={toggleSidebar}
               />
-              <GradingSidebar
-                open={isGradingSidebarOpen}
-                onToggle={toggleGradingSidebar}
-                currentSkill={currentSkill}
-              />
-              <main style={{
-                marginRight: isSidebarOpen ? "260px" : "0",
-                marginLeft: isGradingSidebarOpen ? "260px" : "40px",
-                transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
-              }}>
-                <div className="main-app-area">
-                  <div className="question-panel">
-                    <BackgroundShapes />
-                    <ScratchpadCapture onFrameCaptured={(imageData) => {
-                      mediaMixer.updateScratchpadFrame(imageData);
-                    }}>
-                      <QuestionDisplay onSkillChange={setCurrentSkill} />
-                      {isScratchpadOpen && (
-                        <div className="scratchpad-container">
-                          <Scratchpad />
-                        </div>
-                      )}
-                    </ScratchpadCapture>
-                  </div>
-                  <FloatingControlPanel
-                    renderCanvasRef={mediaMixer.canvasRef}
-                    videoRef={videoRef}
-                    supportsVideo={true}
-                    onVideoStreamChange={setVideoStream}
-                    onMixerStreamChange={setMixerStream}
-                    enableEditingSettings={true}
-                    onPaintClick={() => setScratchpadOpen(!isScratchpadOpen)}
-                    isPaintActive={isScratchpadOpen}
-                    cameraEnabled={cameraEnabled}
-                    screenEnabled={screenEnabled}
-                    onToggleCamera={toggleCamera}
-                    onToggleScreen={toggleScreen}
-                    mediaMixerCanvasRef={mediaMixer.canvasRef}
+              <div className="streaming-console">
+                <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
+                  <SidePanel
+                    open={isSidebarOpen}
+                    onToggle={toggleSidebar}
                   />
-                </div>
-              </main>
-            </div>
-            <Toaster richColors closeButton />
-          </LiveAPIProvider>
+                  <GradingSidebar
+                    open={isGradingSidebarOpen}
+                    onToggle={toggleGradingSidebar}
+                    currentSkill={currentSkill}
+                  />
+                  <main style={{
+                    marginRight: isSidebarOpen ? "260px" : "0",
+                    marginLeft: isGradingSidebarOpen ? "260px" : "40px",
+                    transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
+                  }}>
+                    <div className="main-app-area">
+                      <div className="question-panel">
+                        <BackgroundShapes />
+                        <ScratchpadCapture onFrameCaptured={(canvas) => {
+                          mediaMixer.updateScratchpadFrame(canvas);
+                        }}>
+                          <QuestionDisplay onSkillChange={setCurrentSkill} />
+                          {isScratchpadOpen && (
+                            <div className="scratchpad-container">
+                              <Scratchpad />
+                            </div>
+                          )}
+                        </ScratchpadCapture>
+                      </div>
+                      <FloatingControlPanel
+                        renderCanvasRef={mediaMixer.canvasRef}
+                        videoRef={videoRef}
+                        supportsVideo={true}
+                        onVideoStreamChange={setVideoStream}
+                        onMixerStreamChange={setMixerStream}
+                        enableEditingSettings={true}
+                        onPaintClick={() => setScratchpadOpen(!isScratchpadOpen)}
+                        isPaintActive={isScratchpadOpen}
+                        cameraEnabled={cameraEnabled}
+                        screenEnabled={screenEnabled}
+                        onToggleCamera={toggleCamera}
+                        onToggleScreen={toggleScreen}
+                        mediaMixerCanvasRef={mediaMixer.canvasRef}
+                      />
+                    </div>
+                  </main>
+                </Suspense>
+              </div>
+              <Toaster richColors closeButton />
+            </HintProvider>
+          </TutorProvider>
         </AuthGuard>
       </div>
     </ThemeProvider>
