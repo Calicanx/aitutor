@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 3000,
+    strictPort: true, // Fail if port 3000 is already in use instead of trying next available port
     open: true, // automatically open browser
   },
   build: {

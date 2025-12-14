@@ -21,8 +21,11 @@ import { KEScore } from "@khanacademy/perseus-core";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Sparkles } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useHint } from "../../contexts/HintContext";
 import { apiUtils } from "../../lib/api-utils";
 import { jwtUtils } from "../../lib/jwt-utils";
+import HintDisplay from "../hint-display/HintDisplay";
+import HintButton from "../hint-button/HintButton";
 
 const DASH_API_URL = import.meta.env.VITE_DASH_API_URL || 'http://localhost:8000';
 const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
@@ -33,6 +36,7 @@ interface RendererComponentProps {
 
 const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     const { user } = useAuth();
+    const { setTotalHints, setCurrentHintIndex, showHints, setShowHints } = useHint();
     const queryClient = useQueryClient();
     const [perseusItems, setPerseusItems] = useState<PerseusItem[]>([]);
     const [item, setItem] = useState(0);
@@ -135,6 +139,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         fetchQuestions();
     }, [user_id]);
 
+    // Fetch questions using apiUtils with JWT authentication
     useEffect(() => {
         if (isError) {
             const message = error?.message || "Unknown error fetching questions";
@@ -179,20 +184,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         }
     }, [isAnswered]);
 
-    // Auto-scroll to bottom when feedback is shown
-    useEffect(() => {
-        if (showFeedback && scrollContainerRef.current) {
-            // Use setTimeout to ensure the DOM has updated with the feedback element
-            setTimeout(() => {
-                if (scrollContainerRef.current) {
-                    scrollContainerRef.current.scrollTo({
-                        top: scrollContainerRef.current.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }
-            }, 100);
-        }
-    }, [showFeedback]);
+    // Auto-scroll removed - scrolling is now handled by the home screen container
 
     // Load next batch of questions when approaching end
     const loadNextBatch = async () => {
@@ -328,10 +320,19 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         ? ((item + 1) / perseusItems.length) * 100
         : 0;
 
+    // Extract hints from current question
+    const hints = (perseusItem as any)?.hints || [];
+
+    // Reset hint index and close hints when question changes
+    useEffect(() => {
+        setCurrentHintIndex(0);
+        setShowHints(false); // Auto-close hints when question changes
+    }, [item, setCurrentHintIndex, setShowHints]);
+
     return (
         <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
             {/* Neo-Brutalism Card */}
-            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto md:h-[550px] lg:h-[600px] flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden transition-all duration-200">
+            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] transition-all duration-200">
                 {/* Progress bar at top */}
                 <div className="absolute top-0 left-0 right-0 h-2 md:h-3 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] md:border-b-[3px] border-black dark:border-white">
                     <div
@@ -379,10 +380,10 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 overflow-hidden px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
+                <CardContent className="flex-1 min-h-0 px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
-                        className="relative h-full w-full overflow-auto scrollbar-thin scrollbar-thumb-black dark:scrollbar-thumb-white scrollbar-track-transparent"
+                        className="relative w-full min-h-full"
                     >
                         {endOfTest ? (
                             <div className="flex h-full items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
@@ -438,7 +439,7 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                             </div>
                         ) : perseusItems.length > 0 ? (
                             <div className="space-y-4 md:space-y-6 py-3 md:py-4">
-                                <div className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                                <div id="question-content-container" className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 text-black dark:text-white p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
                                     <PerseusI18nContextProvider locale="en" strings={mockStrings}>
                                         <RenderStateRoot>
                                             <ServerItemRenderer
@@ -461,8 +462,13 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                                     </PerseusI18nContextProvider>
                                 </div>
 
-                                {/* Neo-Brutalist feedback - FIXED POSITION below header for visibility */}
-                                {isAnswered && showFeedback && (
+                                {/* Hints Display */}
+                                {hints.length > 0 && (
+                                    <HintDisplay hints={hints} />
+                                )}
+
+                                {/* Neo-Brutalist feedback */}
+                                {isAnswered && (
                                     <div
                                         className="fixed top-[60px] lg:top-[64px] left-1/2 transform -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 duration-300"
                                     >
@@ -502,26 +508,29 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     </div>
                 </CardContent>
 
-                <CardFooter className="flex justify-end gap-2 md:gap-3 px-4 md:px-6 pb-4 md:pb-5 pt-3 md:pt-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
-                    <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleSubmit}
-                        disabled={isLoading || endOfTest || perseusItems.length === 0}
-                        className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-[#C4B5FD] hover:bg-[#C4B5FD] text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:hover:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:hover:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
-                    >
-                        Submit
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleNext}
-                        disabled={isLoading || endOfTest || perseusItems.length === 0}
-                        className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
-                    >
-                        Next →
-                    </Button>
+                <CardFooter className="flex justify-between items-center gap-2 md:gap-3 px-4 md:px-6 pb-4 md:pb-5 pt-3 md:pt-4 border-t-[3px] md:border-t-[4px] border-black dark:border-white bg-white dark:bg-neutral-900">
+                    <HintButton inline={true} />
+                    <div className="flex gap-2 md:gap-3">
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleSubmit}
+                            disabled={isLoading || endOfTest || perseusItems.length === 0}
+                            className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-[#C4B5FD] hover:bg-[#C4B5FD] text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:hover:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:hover:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
+                        >
+                            Submit
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleNext}
+                            disabled={isLoading || endOfTest || perseusItems.length === 0}
+                            className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
+                        >
+                            Next →
+                        </Button>
+                    </div>
                 </CardFooter>
             </Card>
         </div>

@@ -24,6 +24,7 @@ import BackgroundShapes from "./components/background-shapes/BackgroundShapes";
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
 import Scratchpad from "./components/scratchpad/Scratchpad";
 import { ThemeProvider } from "./components/theme/theme-provier";
+import { HintProvider } from "./contexts/HintContext";
 import { Toaster } from "@/components/ui/sonner";
 import { useMediaMixer } from "./hooks/useMediaMixer";
 import { useMediaCapture } from "./hooks/useMediaCapture";
@@ -67,7 +68,7 @@ function App() {
   const mediaMixer = useMediaMixer({
     width: 1280,
     height: 2160,
-    fps: 10,
+    fps: 2,  // Reduced from 10 to 2 FPS for better performance
     quality: 0.85,
     cameraEnabled: cameraEnabled,
     screenEnabled: screenEnabled,
@@ -111,60 +112,62 @@ function App() {
       <div className="App">
         <AuthGuard>
           <TutorProvider>
-            <Header
-              sidebarOpen={isSidebarOpen}
-              onToggleSidebar={toggleSidebar}
-            />
-            <div className="streaming-console">
-              <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
-                <SidePanel
-                  open={isSidebarOpen}
-                  onToggle={toggleSidebar}
-                />
-                <GradingSidebar
-                  open={isGradingSidebarOpen}
-                  onToggle={toggleGradingSidebar}
-                  currentSkill={currentSkill}
-                />
-                <main style={{
-                  marginRight: isSidebarOpen ? "260px" : "0",
-                  marginLeft: isGradingSidebarOpen ? "260px" : "40px",
-                  transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
-                }}>
-                  <div className="main-app-area">
-                    <div className="question-panel">
-                      <BackgroundShapes />
-                      <ScratchpadCapture onFrameCaptured={(canvas) => {
-                        mediaMixer.updateScratchpadFrame(canvas);
-                      }}>
-                        <QuestionDisplay onSkillChange={setCurrentSkill} />
-                        {isScratchpadOpen && (
-                          <div className="scratchpad-container">
-                            <Scratchpad />
-                          </div>
-                        )}
-                      </ScratchpadCapture>
+            <HintProvider>
+              <Header
+                sidebarOpen={isSidebarOpen}
+                onToggleSidebar={toggleSidebar}
+              />
+              <div className="streaming-console">
+                <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
+                  <SidePanel
+                    open={isSidebarOpen}
+                    onToggle={toggleSidebar}
+                  />
+                  <GradingSidebar
+                    open={isGradingSidebarOpen}
+                    onToggle={toggleGradingSidebar}
+                    currentSkill={currentSkill}
+                  />
+                  <main style={{
+                    marginRight: isSidebarOpen ? "260px" : "0",
+                    marginLeft: isGradingSidebarOpen ? "260px" : "40px",
+                    transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
+                  }}>
+                    <div className="main-app-area">
+                      <div className="question-panel">
+                        <BackgroundShapes />
+                        <ScratchpadCapture onFrameCaptured={(canvas) => {
+                          mediaMixer.updateScratchpadFrame(canvas);
+                        }}>
+                          <QuestionDisplay onSkillChange={setCurrentSkill} />
+                          {isScratchpadOpen && (
+                            <div className="scratchpad-container">
+                              <Scratchpad />
+                            </div>
+                          )}
+                        </ScratchpadCapture>
+                      </div>
+                      <FloatingControlPanel
+                        renderCanvasRef={mediaMixer.canvasRef}
+                        videoRef={videoRef}
+                        supportsVideo={true}
+                        onVideoStreamChange={setVideoStream}
+                        onMixerStreamChange={setMixerStream}
+                        enableEditingSettings={true}
+                        onPaintClick={() => setScratchpadOpen(!isScratchpadOpen)}
+                        isPaintActive={isScratchpadOpen}
+                        cameraEnabled={cameraEnabled}
+                        screenEnabled={screenEnabled}
+                        onToggleCamera={toggleCamera}
+                        onToggleScreen={toggleScreen}
+                        mediaMixerCanvasRef={mediaMixer.canvasRef}
+                      />
                     </div>
-                    <FloatingControlPanel
-                      renderCanvasRef={mediaMixer.canvasRef}
-                      videoRef={videoRef}
-                      supportsVideo={true}
-                      onVideoStreamChange={setVideoStream}
-                      onMixerStreamChange={setMixerStream}
-                      enableEditingSettings={true}
-                      onPaintClick={() => setScratchpadOpen(!isScratchpadOpen)}
-                      isPaintActive={isScratchpadOpen}
-                      cameraEnabled={cameraEnabled}
-                      screenEnabled={screenEnabled}
-                      onToggleCamera={toggleCamera}
-                      onToggleScreen={toggleScreen}
-                      mediaMixerCanvasRef={mediaMixer.canvasRef}
-                    />
-                  </div>
-                </main>
-              </Suspense>
-            </div>
-            <Toaster richColors closeButton />
+                  </main>
+                </Suspense>
+              </div>
+              <Toaster richColors closeButton />
+            </HintProvider>
           </TutorProvider>
         </AuthGuard>
       </div>

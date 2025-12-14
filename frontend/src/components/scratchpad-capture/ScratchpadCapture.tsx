@@ -11,15 +11,27 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
 
   useEffect(() => {
     let intervalId: number;
+    let isCapturing = false;
+    let lastCaptureTime = 0;
 
     const captureFrame = () => {
-      const questionPanel = document.querySelector('.question-panel') as HTMLElement;
+      // Skip if already capturing or too soon since last capture
+      const now = Date.now();
+      if (isCapturing || (now - lastCaptureTime < 4500)) {
+        return;
+      }
 
-      if (questionPanel) {
-        htmlToImage.toCanvas(questionPanel, {
-          quality: 0.9,
+      isCapturing = true;
+      lastCaptureTime = now;
+
+      const questionContent = document.querySelector('#question-content-container') as HTMLElement;
+
+      if (questionContent) {
+        htmlToImage.toCanvas(questionContent, {
+          quality: 0.7,  // Reduced quality for better performance
           skipFonts: true,
-          pixelRatio: 1.5
+          pixelRatio: 1.0,  // Reduced to 1x for much better performance
+          cacheBust: false,  // Don't bust cache for better performance
         })
           .then((canvas) => {
             // Resize canvas to 1280×720 section size
@@ -39,6 +51,9 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
           })
           .catch(error => {
             console.error('html-to-image failed:', error);
+          })
+          .finally(() => {
+            isCapturing = false;
           });
       } else {
         // Create error message on a canvas
@@ -51,26 +66,28 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
           ctx.fillRect(0, 0, 1280, 720);
           ctx.fillStyle = 'red';
           ctx.font = '24px Arial';
-          ctx.fillText('ERROR: .question-panel not found!', 50, 100);
+          ctx.fillText('ERROR: #question-content-container not found!', 50, 100);
 
           onFrameCaptured(canvas);
         }
+        isCapturing = false;
       }
     };
 
-    // Wait for question-panel to load before starting capture
-    const waitForQuestionPanel = () => {
-      const questionPanel = document.querySelector('.question-panel');
-      if (questionPanel) {
-        console.log('✅ Question panel found, starting capture');
-        intervalId = window.setInterval(captureFrame, 1000);  // Reduced from 500ms to 1000ms (1 FPS) to reduce load
+    // Wait for question-content-container to load before starting capture
+    const waitForQuestionContent = () => {
+      const questionContent = document.querySelector('#question-content-container');
+      if (questionContent) {
+        console.log('✅ Question content found, starting capture at reduced rate');
+        // Much more conservative: 5 seconds between captures (0.2 FPS)
+        intervalId = window.setInterval(captureFrame, 5000);
       } else {
         // Check again in 100ms
-        setTimeout(waitForQuestionPanel, 100);
+        setTimeout(waitForQuestionContent, 100);
       }
     };
 
-    waitForQuestionPanel();
+    waitForQuestionContent();
 
     return () => {
       if (intervalId) {
@@ -78,6 +95,20 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
       }
     };
   }, [onFrameCaptured]);
+
+  useEffect(() => {
+    if (captureRef.current) {
+      const rect = captureRef.current.getBoundingClientRect();
+      const style = window.getComputedStyle(captureRef.current);
+      console.log('📸 ScratchpadCapture Wrapper:', {
+        dimensions: { width: rect.width, height: rect.height },
+        pointerEvents: style.pointerEvents,
+        display: style.display,
+        position: style.position,
+        zIndex: style.zIndex
+      });
+    }
+  }, []);
 
   return (
     <div
@@ -87,7 +118,8 @@ const ScratchpadCapture: React.FC<ScratchpadCaptureProps> = ({ children, onFrame
         width: '100%',
         height: '100%',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        pointerEvents: 'auto'
       }}
     >
       {children}

@@ -154,10 +154,20 @@ SHERLOCKED_API_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/SherlockEDAp
 TEACHING_ASSISTANT_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/TeachingAssistant/api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8002")
 AUTH_SERVICE_PORT=$(grep -o 'PORT", [0-9]*' "$SCRIPT_DIR/services/AuthService/auth_api.py" 2>/dev/null | grep -o '[0-9]*' || echo "8003")
 
-# Start the Node.js frontend in the background
+# Ensure all port variables are properly set (fallback to defaults if extraction failed)
+FRONTEND_PORT=${FRONTEND_PORT:-3000}
+DASH_API_PORT=${DASH_API_PORT:-8000}
+SHERLOCKED_API_PORT=${SHERLOCKED_API_PORT:-8001}
+TEACHING_ASSISTANT_PORT=${TEACHING_ASSISTANT_PORT:-8002}
+AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT:-8003}
+
+# Start the Node.js frontend in the background (after backend services are ready)
 echo "Starting Node.js frontend... Logs -> logs/frontend.log"
 (cd "$SCRIPT_DIR/frontend" && npm run dev) > "$SCRIPT_DIR/logs/frontend.log" 2>&1 &
 pids+=($!)
+
+# Give frontend a moment to start
+sleep 2
 
 echo "Tutor is running with the following PIDs: ${pids[*]}"
 echo ""

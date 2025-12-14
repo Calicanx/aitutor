@@ -73,8 +73,32 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
         };
       });
 
-      // Capture loop removed for performance. MediaMixer will read directly from video element.
-      console.log('Camera started');
+      // Start the capture loop
+      const captureLoop = () => {
+        if (!cameraStreamRef.current) return;
+
+        const canvas = cameraCanvasRef.current!;
+        const ctx = canvas.getContext('2d')!;
+
+        ctx.drawImage(video, 0, 0);
+
+        // Resize to section dimensions and get ImageData
+        const sectionCanvas = document.createElement('canvas');
+        sectionCanvas.width = 1280;
+        sectionCanvas.height = 720;
+        const sectionCtx = sectionCanvas.getContext('2d');
+
+        if (sectionCtx) {
+          sectionCtx.drawImage(canvas, 0, 0, 1280, 720);
+          const imageData = sectionCtx.getImageData(0, 0, 1280, 720);
+          onCameraFrame?.(imageData);
+        }
+
+        // Continue loop - reduced to ~2 FPS for better performance (500ms)
+        setTimeout(() => requestAnimationFrame(captureLoop), 500);
+      };
+
+      captureLoop();
       console.log('Camera started');
 
     } catch (error) {
@@ -112,8 +136,32 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
         };
       });
 
-      // Capture loop removed for performance. MediaMixer will read directly from video element.
-      console.log('Screen share started');
+      // Start the capture loop
+      const captureLoop = () => {
+        if (!screenStreamRef.current) return;
+
+        const canvas = screenCanvasRef.current!;
+        const ctx = canvas.getContext('2d')!;
+
+        ctx.drawImage(video, 0, 0);
+
+        // Resize to section dimensions and get ImageData
+        const sectionCanvas = document.createElement('canvas');
+        sectionCanvas.width = 1280;
+        sectionCanvas.height = 720;
+        const sectionCtx = sectionCanvas.getContext('2d');
+
+        if (sectionCtx) {
+          sectionCtx.drawImage(canvas, 0, 0, 1280, 720);
+          const imageData = sectionCtx.getImageData(0, 0, 1280, 720);
+          onScreenFrame?.(imageData);
+        }
+
+        // Continue loop - reduced to ~2 FPS for better performance (500ms)
+        setTimeout(() => requestAnimationFrame(captureLoop), 500);
+      };
+
+      captureLoop();
       console.log('Screen share started');
 
     } catch (error) {

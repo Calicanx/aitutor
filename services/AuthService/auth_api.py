@@ -295,7 +295,7 @@ async def get_gemini_token(request: Request):
 
         # Create ephemeral token using Google GenAI SDK
         # IMPORTANT: Ephemeral tokens require v1alpha API version
-        from google import genai
+        import google.genai as genai
 
         client = genai.Client(
             api_key=api_key,
