@@ -4,7 +4,7 @@ Shared JWT authentication middleware for FastAPI services
 import jwt
 from fastapi import Request, HTTPException
 from typing import Optional, Dict
-from shared.jwt_config import JWT_SECRET, JWT_ALGORITHM, JWT_AUDIENCE, JWT_ISSUER
+from shared.jwt_config import JWT_SECRET, JWT_ALGORITHM
 
 
 def get_current_user(request: Request) -> str:
@@ -30,17 +30,11 @@ def get_current_user(request: Request) -> str:
     
     token = auth_header.split(" ")[1]
     
-    # Dev bypass matching frontend mock
-    if token == "mock-jwt-token":
-        return "dev_user_123"
-    
     try:
         payload = jwt.decode(
             token, 
             JWT_SECRET, 
-            algorithms=[JWT_ALGORITHM],
-            audience=JWT_AUDIENCE,
-            issuer=JWT_ISSUER
+            algorithms=[JWT_ALGORITHM]
         )
         user_id = payload.get("sub")
         
@@ -69,9 +63,7 @@ def get_user_from_token(token: str) -> Optional[Dict]:
         payload = jwt.decode(
             token, 
             JWT_SECRET, 
-            algorithms=[JWT_ALGORITHM],
-            audience=JWT_AUDIENCE,
-            issuer=JWT_ISSUER
+            algorithms=[JWT_ALGORITHM]
         )
         return {
             "user_id": payload.get("sub"),

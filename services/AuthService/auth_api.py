@@ -17,6 +17,7 @@ from services.AuthService.oauth_handler import GoogleOAuthHandler
 from services.AuthService.jwt_utils import create_jwt_token, create_setup_token, verify_setup_token, verify_token
 from managers.user_manager import UserManager
 from managers.user_manager import calculate_grade_from_age
+from shared.auth_middleware import get_current_user
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 from shared.timing_middleware import UnpluggedTimingMiddleware
 from shared.cache_middleware import CacheControlMiddleware
@@ -67,10 +68,6 @@ class CompleteSetupRequest(BaseModel):
     setup_token: str
     user_type: str  # "student" or "parent" (but always stored as "student")
     age: int
-    subjects: List[str] = []
-    learning_goals: List[str] = []
-    interests: List[str] = []
-    learning_style: str = "visual"
 
 
 @app.get("/health")
@@ -134,7 +131,7 @@ async def google_callback(code: Optional[str] = Query(None), state: Optional[str
             # Redirect to frontend with token
             frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
             return RedirectResponse(
-                url=f"{frontend_url}/login?token={jwt_token}&is_new_user=false"
+                url=f"{frontend_url}/app/login?token={jwt_token}&is_new_user=false"
             )
         else:
             # New user - need to complete setup
@@ -143,7 +140,7 @@ async def google_callback(code: Optional[str] = Query(None), state: Optional[str
             # Redirect to frontend setup page
             frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
             return RedirectResponse(
-                url=f"{frontend_url}/login?setup_token={setup_token}"
+                url=f"{frontend_url}/app/login?setup_token={setup_token}"
             )
             
     except Exception as e:
@@ -176,11 +173,7 @@ async def complete_setup(request: CompleteSetupRequest):
             name=google_user_data["name"],
             age=request.age,
             picture=google_user_data.get("picture", ""),
-            user_type="student",  # Always "student" for now
-            subjects=request.subjects,
-            learning_goals=request.learning_goals,
-            interests=request.interests,
-            learning_style=request.learning_style
+            user_type="student"  # Always "student" for now
         )
         
         # Create JWT token
@@ -216,7 +209,7 @@ async def complete_setup(request: CompleteSetupRequest):
 
 
 @app.get("/auth/me")
-async def get_current_user(request: Request):
+async def get_current_user_info(request: Request):
     """Get current user info from JWT token"""
     auth_header = request.headers.get("Authorization")
     
@@ -239,18 +232,10 @@ async def get_current_user(request: Request):
     from managers.mongodb_manager import mongo_db
     user_data = mongo_db.users.find_one({"user_id": user_profile.user_id})
     
-    # Get name with fallback for dev users
-    name = ""
-    if user_data:
-        name = user_data.get("google_name", "") or user_data.get("name", "")
-    # Fallback for dev/test users without a name
-    if not name and user_profile.user_id.startswith("dev_"):
-        name = "Student"
-
     return {
         "user_id": user_profile.user_id,
         "email": user_data.get("google_email", "") if user_data else "",
-        "name": name,
+        "name": user_data.get("google_name", "") if user_data else "",
         "age": user_profile.age,
         "current_grade": user_profile.current_grade,
         "user_type": user_data.get("user_type", "student") if user_data else "student"
@@ -261,6 +246,82 @@ async def get_current_user(request: Request):
 async def logout():
     """Logout endpoint (frontend clears token)"""
     return {"message": "Logged out successfully"}
+
+
+@app.get("/auth/gemini-key")
+async def get_gemini_key(request: Request):
+    """Get Gemini API key for authenticated user (DEPRECATED - use /auth/gemini-token instead)"""
+    try:
+        # Verify JWT token
+        user_id = get_current_user(request)
+
+        # Get API key and model from environment variables
+        api_key = os.getenv("GEMINI_API_KEY")
+        model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash-native-audio-preview-09-2025")
+
+        if not api_key:
+            logger.error("GEMINI_API_KEY not configured in environment")
+            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+
+        return {
+            "api_key": api_key,
+            "model": model
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting Gemini API key: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get API key: {str(e)}")
+
+
+@app.get("/auth/gemini-token")
+async def get_gemini_token(request: Request):
+    """Get ephemeral token for Gemini Live API (secure - single use)"""
+    try:
+        # Verify JWT token
+        user_id = get_current_user(request)
+
+        # Get API key and model from environment variables
+        api_key = os.getenv("GEMINI_API_KEY")
+        model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash-native-audio-preview-09-2025")
+
+        if not api_key:
+            logger.error("GEMINI_API_KEY not configured in environment")
+            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+
+        if not model:
+            logger.error("GEMINI_MODEL not configured in environment")
+            raise HTTPException(status_code=500, detail="Gemini model not configured")
+
+        # Create ephemeral token using Google GenAI SDK
+        # IMPORTANT: Ephemeral tokens require v1alpha API version
+        from google import genai
+
+        client = genai.Client(
+            api_key=api_key,
+            http_options={'api_version': 'v1alpha'}
+        )
+
+        # Create single-use ephemeral token
+        token = client.auth_tokens.create(
+            config={
+                'uses': 1,  # Single use only - expires after one connection
+            }
+        )
+
+        logger.info(f"Created ephemeral token for user {user_id}")
+        logger.info(f"Token name: {token.name}")
+        logger.info(f"Token object: {token}")
+
+        return {
+            "token": token.name,
+            "model": model
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating ephemeral token: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create token: {str(e)}")
 
 
 if __name__ == "__main__":

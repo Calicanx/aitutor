@@ -8,14 +8,29 @@ import React, {
   useMemo,
 } from "react";
 import { motion, useDragControls } from "framer-motion";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
-import { AudioRecorder } from "../../lib/audio-recorder";
+import { useTutorContext, AudioRecorder } from "../../features/tutor";
+// import { useLiveAPIContext } from "../../contexts/LiveAPIContext"; // Commented out - useLiveAPIContext is an alias for useTutorContext, import from correct location
+// import { AudioRecorder } from "../../lib/audio-recorder"; // Commented out - AudioRecorder is exported from ../../features/tutor, not from lib
 import { jwtUtils } from "../../lib/jwt-utils";
 import { apiUtils } from "../../lib/api-utils";
 import SettingsDialog from "../settings-dialog/SettingsDialog";
 import cn from "classnames";
 import MediaMixerDisplay from "../media-mixer-display/MediaMixerDisplay";
 import { useTheme } from "../theme/theme-provier";
+import { feedWebSocketService } from "../../services/feed-websocket-service";
+import { instructionSSEService } from "../../services/instruction-sse-service";
+import { LiveServerContent } from '@google/genai';
+
+/**
+ * Extract transcript text from Gemini content event
+ */
+function extractTranscriptFromContent(content: LiveServerContent): string | null {
+  const parts = content.modelTurn?.parts || [];
+  const textParts = parts
+    .filter((p: any) => p.text && p.text.trim().length > 0)
+    .map((p: any) => p.text.trim());
+  return textParts.length > 0 ? textParts.join(' ') : null;
+}
 import {
   Mic,
   MicOff,
@@ -69,9 +84,10 @@ function FloatingControlPanel({
   onToggleScreen,
   mediaMixerCanvasRef,
 }: FloatingControlPanelProps) {
-  const { client, connected, connect, disconnect, interruptAudio } = useLiveAPIContext();
+  const { client, connected, connect, disconnect, interruptAudio } = useTutorContext();
   const { theme } = useTheme();
   const dragControls = useDragControls();
+  // const { client, connected, connect, disconnect, interruptAudio } = useTutorContext(); // Commented out - duplicate declaration, already declared above
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("");
   const [audioRecorder] = useState(() => new AudioRecorder());
@@ -153,12 +169,16 @@ function FloatingControlPanel({
 
   useEffect(() => {
     const onData = (base64: string) => {
+      // Send to Gemini (existing functionality)
       client.sendRealtimeInput([
         {
           mimeType: "audio/pcm;rate=16000",
           data: base64,
         },
       ]);
+
+      // Also send via WebSocket (batched, non-blocking)
+      feedWebSocketService.sendAudio(base64);
     };
     if (connected && !muted && audioRecorder) {
       audioRecorder.on("data", onData).start(selectedAudioDevice);
@@ -170,7 +190,21 @@ function FloatingControlPanel({
     };
   }, [connected, client, muted, audioRecorder, selectedAudioDevice]);
 
-  // Record conversation turns for TeachingAssistant
+  // Subscribe to SSE instructions from TeachingAssistant
+  useEffect(() => {
+    const unsubscribe = instructionSSEService.onInstruction((instruction) => {
+      if (client && client.status === "connected") {
+        // Send instruction to Gemini tutor
+        client.send({ text: instruction });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [client]);
+
+  // Record conversation turns for TeachingAssistant (optional - fails gracefully if service unavailable)
   useEffect(() => {
     const onTurnComplete = () => {
       turnCompleteRef.current = true;
@@ -178,8 +212,11 @@ function FloatingControlPanel({
       if (connected) {
         const token = jwtUtils.getToken();
         if (token) {
-          apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`).catch((error) => {
-            console.error('Failed to record conversation turn:', error);
+          apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`).catch((error: any) => {
+            // Only log if it's not a connection refused error (service not available)
+            if (!error.message?.includes('Failed to fetch') && !error.message?.includes('ERR_CONNECTION_REFUSED')) {
+              console.error('Failed to record conversation turn:', error);
+            }
           });
         }
       }
@@ -191,8 +228,11 @@ function FloatingControlPanel({
       if (connected) {
         const token = jwtUtils.getToken();
         if (token) {
-          apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`).catch((error) => {
-            console.error('Failed to record conversation turn:', error);
+          apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/conversation/turn`).catch((error: any) => {
+            // Only log if it's not a connection refused error (service not available)
+            if (!error.message?.includes('Failed to fetch') && !error.message?.includes('ERR_CONNECTION_REFUSED')) {
+              console.error('Failed to record conversation turn:', error);
+            }
           });
         }
       }
@@ -207,99 +247,196 @@ function FloatingControlPanel({
     };
   }, [client, connected]);
 
+  // Handle content events (transcript) - send via WebSocket
+  useEffect(() => {
+    const onContent = (content: any) => {
+      if (!connected) return;
+
+      // Extract transcript from content
+      const transcript = extractTranscriptFromContent(content);
+      if (transcript) {
+        // Send transcript via WebSocket (fire-and-forget)
+        feedWebSocketService.sendTranscript(transcript, 'tutor');
+      }
+    };
+
+    client.on('content', onContent);
+
+    return () => {
+      client.off('content', onContent);
+    };
+  }, [client, connected]);
+
+  // Handle input audio transcription (user's speech) - send via WebSocket
+  useEffect(() => {
+    const onInputTranscript = (data: TranscriptionData) => {
+      if (!connected) return;
+
+      // Send user's speech transcript via WebSocket
+      if (data.text) {
+        feedWebSocketService.sendTranscript(data.text, 'user');
+      }
+    };
+
+    client.on('inputTranscript', onInputTranscript);
+
+    return () => {
+      client.off('inputTranscript', onInputTranscript);
+    };
+  }, [client, connected]);
+
+  // Handle output audio transcription (tutor's speech) - send via WebSocket
+  useEffect(() => {
+    const onOutputTranscript = (data: TranscriptionData) => {
+      if (!connected) return;
+
+      // Send tutor's speech transcript via WebSocket
+      if (data.text) {
+        feedWebSocketService.sendTranscript(data.text, 'tutor');
+      }
+    };
+
+    client.on('outputTranscript', onOutputTranscript);
+
+    return () => {
+      client.off('outputTranscript', onOutputTranscript);
+    };
+  }, [client, connected]);
+
   // Video handling - capture full MediaMixer canvas and send to tutor as JPEG
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.srcObject = activeVideoStream;
     }
 
-    let timeoutId = -1;
+    let timeoutId: number | null = null;
+    let rafId: number | null = null;
+    let isRunning = false; // Track if loop is running to prevent multiple concurrent loops
 
     function sendVideoFrame() {
       const canvas = mediaMixerCanvasRef.current;
 
-      if (!canvas) {
+      if (!canvas || !connected || !isRunning) {
         return;
       }
 
       if (canvas.width + canvas.height > 0) {
         const base64 = canvas.toDataURL("image/jpeg", 1.0);
         const data = base64.slice(base64.indexOf(",") + 1, Infinity);
+        
+        // Send to Gemini (existing functionality)
         client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
+
+        // Also send via WebSocket (fire-and-forget, non-blocking)
+        feedWebSocketService.sendMedia(data);
       }
-      if (connected) {
+      
+      // Schedule next frame only if still connected and running
+      if (connected && isRunning) {
         timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
       }
     }
-    if (connected) {
-      requestAnimationFrame(sendVideoFrame);
+    
+    // Start sending frames when connected
+    if (connected && !isRunning) {
+      isRunning = true;
+      // Send first frame immediately, then schedule subsequent frames
+      rafId = requestAnimationFrame(sendVideoFrame);
     }
+    
     return () => {
-      clearTimeout(timeoutId);
+      isRunning = false; // Stop the loop
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
     };
-  }, [connected, activeVideoStream, client, videoRef, mediaMixerCanvasRef]);
+  }, [connected, activeVideoStream, client]); // Removed refs from dependencies - they don't trigger re-renders
 
   const handleConnect = useCallback(async () => {
     if (connected) {
       // Handle disconnect with TeachingAssistant session end
       try {
         interruptAudio();
-        
+
+        // Disconnect WebSocket and SSE first (optional - may not be connected)
+        try {
+          feedWebSocketService.disconnect();
+        } catch (e) {
+          // WebSocket may not be connected - ignore
+        }
+        try {
+          instructionSSEService.disconnect();
+        } catch (e) {
+          // SSE may not be connected - ignore
+        }
+
         await new Promise((resolve) => setTimeout(resolve, 300));
 
         const token = jwtUtils.getToken();
         if (token) {
-          const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/session/end`, { interrupt_audio: true });
+          try {
+            const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/session/end`, { interrupt_audio: true });
 
-          if (response.ok) {
-            const data = await response.json();
-            if (data.prompt && client.status === 'connected') {
-              const goodbyeTurnComplete = { current: false };
-              const goodbyeAudioReceived = { current: false };
-              let lastAudioTime = 0;
-              
-              const onAudio = () => {
-                goodbyeAudioReceived.current = true;
-                lastAudioTime = Date.now();
-              };
-              
-              const onTurnComplete = () => {
-                if (goodbyeAudioReceived.current) {
-                  goodbyeTurnComplete.current = true;
-                }
-              };
-              
-              client.on('audio', onAudio);
-              client.on('turncomplete', onTurnComplete);
-              
-              client.send({ text: data.prompt }, true);
-              
-              const maxWaitTime = 30000;
-              const startTime = Date.now();
-              const audioSilenceTimeout = 5000;
-              
-              while (!goodbyeTurnComplete.current && (Date.now() - startTime) < maxWaitTime) {
-                await new Promise((resolve) => setTimeout(resolve, 100));
+            if (response.ok) {
+              const data = await response.json();
+              if (data.prompt && client.status === 'connected') {
+                const goodbyeTurnComplete = { current: false };
+                const goodbyeAudioReceived = { current: false };
+                let lastAudioTime = 0;
                 
-                if (goodbyeAudioReceived.current && lastAudioTime > 0) {
-                  const timeSinceLastAudio = Date.now() - lastAudioTime;
-                  if (timeSinceLastAudio > audioSilenceTimeout && goodbyeTurnComplete.current) {
-                    break;
+                const onAudio = () => {
+                  goodbyeAudioReceived.current = true;
+                  lastAudioTime = Date.now();
+                };
+                
+                const onTurnComplete = () => {
+                  if (goodbyeAudioReceived.current) {
+                    goodbyeTurnComplete.current = true;
+                  }
+                };
+                
+                client.on('audio', onAudio);
+                client.on('turncomplete', onTurnComplete);
+                
+                client.send({ text: data.prompt }, true);
+                
+                const maxWaitTime = 30000;
+                const startTime = Date.now();
+                const audioSilenceTimeout = 5000;
+                
+                while (!goodbyeTurnComplete.current && (Date.now() - startTime) < maxWaitTime) {
+                  await new Promise((resolve) => setTimeout(resolve, 100));
+                  
+                  if (goodbyeAudioReceived.current && lastAudioTime > 0) {
+                    const timeSinceLastAudio = Date.now() - lastAudioTime;
+                    if (timeSinceLastAudio > audioSilenceTimeout && goodbyeTurnComplete.current) {
+                      break;
+                    }
                   }
                 }
+                
+                if (goodbyeAudioReceived.current) {
+                  await new Promise((resolve) => setTimeout(resolve, 1500));
+                }
+                
+                client.off('audio', onAudio);
+                client.off('turncomplete', onTurnComplete);
               }
-              
-              if (goodbyeAudioReceived.current) {
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-              }
-              
-              client.off('audio', onAudio);
-              client.off('turncomplete', onTurnComplete);
+            }
+          } catch (taError: any) {
+            // Teaching Assistant service is not available - log warning but continue
+            if (taError.message?.includes('Failed to fetch') || taError.message?.includes('ERR_CONNECTION_REFUSED')) {
+              console.warn('TeachingAssistant service is not available during disconnect - continuing');
+            } else {
+              console.error('Failed to get goodbye from TeachingAssistant:', taError);
             }
           }
         }
       } catch (error) {
-        console.error('Failed to get goodbye from TeachingAssistant:', error);
+        console.error('Error during disconnect:', error);
       }
 
       disconnect();
@@ -367,12 +504,41 @@ function FloatingControlPanel({
           return;
         }
 
-        const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/session/start`);
+        // Start TeachingAssistant session (creates MongoDB session)
+        // Make this optional - if service is not available, continue without it
+        try {
+          const response = await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/session/start`);
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.prompt && client.status === 'connected') {
-            client.send({ text: data.prompt });
+          if (response.ok) {
+            const data = await response.json();
+
+            // Connect WebSocket for feed streaming
+            try {
+              await feedWebSocketService.connect();
+            } catch (wsError) {
+              console.warn('Failed to connect WebSocket feed service (optional):', wsError);
+            }
+
+            // Connect SSE for receiving instructions
+            try {
+              instructionSSEService.connect();
+            } catch (sseError) {
+              console.warn('Failed to connect SSE instruction service (optional):', sseError);
+            }
+
+            // Send greeting if available
+            if (data.prompt && client.status === 'connected') {
+              client.send({ text: data.prompt });
+            }
+          } else {
+            console.warn(`TeachingAssistant service returned status ${response.status} - continuing without it`);
+          }
+        } catch (taError: any) {
+          // Teaching Assistant service is not available - log warning but continue
+          if (taError.message?.includes('Failed to fetch') || taError.message?.includes('ERR_CONNECTION_REFUSED')) {
+            console.warn('TeachingAssistant service is not available - continuing without advanced features');
+          } else {
+            console.error('Failed to connect to TeachingAssistant:', taError);
           }
         }
       } catch (error) {
@@ -988,7 +1154,7 @@ function FloatingControlPanel({
                 <X className="w-4 h-4 md:w-5 md:h-5 font-bold" />
               </button>
             </div>
-            <div className="flex-1 min-h-0 bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden">
+            <div className="flex-1 min-h-0 bg-[#FFFDF5] dark:bg-[#000000] overflow-hidden p-0 m-0">
               <MediaMixerDisplay
                 canvasRef={mediaMixerCanvasRef}
                 onStatusChange={setMediaMixerStatus}

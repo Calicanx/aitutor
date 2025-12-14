@@ -535,6 +535,56 @@ class DASHSystem:
         
         return unique_affected_skills
     
+    def _initialize_unattempted_prerequisites(self, user_profile: UserProfile):
+        """
+        Initialize unattempted previous-grade skills to meet 0.7 threshold.
+        For existing users: sets memory_strength=1.0 for all unattempted skills from grades below student's current grade.
+        This ensures students can access grade-appropriate content without being blocked by empty skill history.
+        """
+        try:
+            current_grade = GradeLevel[user_profile.current_grade]
+        except KeyError:
+            return  # Invalid grade, skip initialization
+        
+        current_grade_value = current_grade.value
+        threshold = 0.7
+        updated_count = 0
+        
+        # Find all skills from grades BELOW current grade (previous skills)
+        for skill_id, skill in self.skills.items():
+            # Only process skills from lower grades
+            if skill.grade_level.value >= current_grade_value:
+                continue
+            
+            # Ensure skill exists in skill_states (add if missing)
+            if skill_id not in user_profile.skill_states:
+                user_profile.skill_states[skill_id] = SkillState(
+                    memory_strength=0.0,
+                    last_practice_time=None,
+                    practice_count=0,
+                    correct_count=0
+                )
+            
+            skill_state = user_profile.skill_states[skill_id]
+            
+            # Only update unattempted skills (practice_count == 0)
+            if skill_state.practice_count > 0:
+                continue
+            
+            # Calculate current probability: P(correct) = 1 / (1 + exp(-(memory_strength - difficulty)))
+            logit = skill_state.memory_strength - skill.difficulty
+            probability = 1 / (1 + math.exp(-logit))
+            
+            # If below threshold, set memory_strength to 1.0 (gives probability >= 0.7)
+            if probability < threshold:
+                skill_state.memory_strength = 1.0
+                updated_count += 1
+        
+        if updated_count > 0:
+            log_print(f"[PREV_SKILLS_INIT] Initialized {updated_count} unattempted previous-grade skills for grade {user_profile.current_grade}")
+            # Save updated profile
+            self.user_manager.save_user(user_profile)
+    
     def load_user_or_create(self, user_id: str, age: int = 5) -> UserProfile:
         """Load existing user or create new one with cold-start initialization"""
         all_skill_ids = list(self.skills.keys())
@@ -544,6 +594,9 @@ class DASHSystem:
             all_skills=self.skills,  # Pass skills for cold-start
             age=age
         )
+        
+        # Initialize unattempted prerequisites (safe to run for all users - only updates if needed)
+        self._initialize_unattempted_prerequisites(user_profile)
         
         # Sync user profile with current student_states for backward compatibility
         self.student_states[user_id] = {}

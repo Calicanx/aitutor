@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useTutorContext } from "../../features/tutor";
 
 const voiceOptions = [
   { value: "Puck", label: "Puck" },
@@ -18,7 +18,7 @@ const voiceOptions = [
 ];
 
 export default function VoiceSelector() {
-  const { config, setConfig } = useLiveAPIContext();
+  const { config, setConfig } = useTutorContext();
 
   const [selected, setSelected] = useState<string>("Puck");
 

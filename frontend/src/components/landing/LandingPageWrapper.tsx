@@ -43,7 +43,7 @@ const LandingPageWrapper: React.FC = () => {
   useEffect(() => {
     // If authenticated, redirect to app
     if (!isLoading && isAuthenticated) {
-      history.replace('/');
+      history.replace('/app');
       return;
     }
   }, [isAuthenticated, isLoading, history]);
@@ -65,7 +65,7 @@ const LandingPageWrapper: React.FC = () => {
 
   // Render landing page
   const handleGetStarted = () => {
-    history.push('/login');
+    history.push('/app/login');
   };
 
   // Commented out switch statement for old random selection

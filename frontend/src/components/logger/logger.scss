@@ -2,13 +2,26 @@
   color: var(--gray-300);
   width: 100%;
   max-width: 100%;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  display: block;
+  min-height: 0; /* Important for flex children to allow shrinking */
 
   .logger-list {
-    padding: 0 0px 0 25px;
+    list-style: none;
+    margin: 0;
+    padding: 0 4px 0 0;
+    overflow-y: auto;
     overflow-x: hidden;
-    width: calc(100% - 45px);
+    flex: 1 1 auto;
+    min-height: 0; /* Important for flex children to allow shrinking */
+  }
+
+  .logger-empty {
+    color: var(--Neutral-50);
+    font-size: 12px;
+    text-align: center;
+    padding: 20px;
   }
 
   .logger-empty {
@@ -26,41 +39,64 @@
   }
 
   .rich-log {
-    display: flex;
-    justify-content: center;
-    gap: 4px;
+    display: block;
+    margin-top: 4px;
 
     pre {
       overflow-x: auto;
+      margin: 0;
+      font-size: 11px;
+      max-width: 100%;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
-    display: block;
-
     h4 {
-      font-size: 14px;
+      font-size: 12px;
       text-transform: uppercase;
-      padding: 8px 0;
+      padding: 6px 0;
       margin: 0;
     }
 
     h5 {
       margin: 0;
-      padding-bottom: 8px;
+      padding-bottom: 6px;
       border-bottom: 1px solid var(--Neutral-20);
+      font-size: 11px;
     }
 
     .part {
       background: var(--Neutral-5);
-      padding: 14px;
+      padding: 8px;
       margin-bottom: 4px;
       color: var(--Neutral-90);
-      border-radius: 8px;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .part-text {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
   }
 
   .plain-log {
-    &>* {
-      padding-right: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 4px;
+
+    & > * {
+      flex-shrink: 0;
+    }
+
+    .message {
+      flex: 1 1 auto;
+      min-width: 0;
+      word-break: break-word;
     }
   }
 
@@ -75,49 +111,61 @@
 
 .logger li {
   display: block;
-  padding: 8px 0;
+  padding: 6px 0;
   color: var(--Neutral-50, #707577);
-  font-family: "Space Mono";
-  font-size: 14px;
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
   font-style: normal;
   font-weight: 400;
-  line-height: normal;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--Neutral-10, #f0f0f0);
+
+  &:last-child {
+    border-bottom: none;
+  }
 }
 
 .logger li .timestamp {
-  width: 70px;
-  flex-grow: 0;
-  flex-shrink: 0;
-  color: var(--Neutral-50);
+  font-size: 10px;
+  color: var(--Neutral-40);
+  font-weight: 500;
 }
 
 .logger li .source {
-  flex-shrink: 0;
+  font-size: 10px;
   font-weight: bold;
+  text-transform: uppercase;
 }
 
 .logger li.source-server,
 .logger li.receive {
-  color: var(--Blue-500);
+  .source {
+    color: var(--Blue-500);
+  }
 }
 
 .logger li.source-client,
 .logger li.send:not(.source-server) {
-  color: var(--Green-500);
+  .source {
+    color: var(--Green-500);
+  }
 }
 
 .logger li .count {
   background-color: var(--Neutral-5);
-  font-size: x-small;
-  padding: 0em 0.6em;
-  padding: 0.3em 0.5em;
+  font-size: 9px;
+  padding: 2px 6px;
   line-height: 1em;
   vertical-align: middle;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--Blue-500);
 }
 
 .logger li .message {
-  flex-grow: 1;
-  color: var(--Neutral-50);
+  color: var(--Neutral-60);
+  font-size: 11px;
+
+  span {
+    word-break: break-word;
+  }
 }

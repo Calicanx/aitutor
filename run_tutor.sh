@@ -108,15 +108,13 @@ echo "Starting SherlockED Exam API server... Logs -> logs/sherlocked_exam.log"
 (cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/SherlockEDApi/run_backend.py) > "$SCRIPT_DIR/logs/sherlocked_exam.log" 2>&1 &
 pids+=($!)
 
-# Start the Tutor service (Node.js backend for Gemini Live API)
-echo "Starting Tutor service (Adam)... Logs -> logs/tutor.log"
-(cd "$SCRIPT_DIR/services/Tutor" && node server.js) > "$SCRIPT_DIR/logs/tutor.log" 2>&1 &
-pids+=($!)
-
 # Start the TeachingAssistant API server in the background
 echo "Starting TeachingAssistant API server... Logs -> logs/teaching_assistant.log"
 (cd "$SCRIPT_DIR" && "$PYTHON_BIN" services/TeachingAssistant/api.py) > "$SCRIPT_DIR/logs/teaching_assistant.log" 2>&1 &
 pids+=($!)
+
+# Note: Tutor service has been moved to frontend (frontend/src/services/tutor/)
+# The backend Tutor service (services/Tutor/) is kept for reference but not started
 
 # Start the Auth Service API server in the background
 echo "Starting Auth Service API server... Logs -> logs/auth_service.log"
@@ -179,7 +177,7 @@ echo "  🔐 Auth Service:       http://localhost:$AUTH_SERVICE_PORT"
 echo "  🔧 DASH API:           http://localhost:$DASH_API_PORT"
 echo "  🕵️  SherlockED API:     http://localhost:$SHERLOCKED_API_PORT"
 echo "  👨‍🏫 TeachingAssistant:  http://localhost:$TEACHING_ASSISTANT_PORT"
-echo "  🎓 Tutor Service:      ws://localhost:8767"
+echo "  🎓 Tutor Service:      (integrated in frontend)"
 echo ""
 echo "Press Ctrl+C to stop."
 echo "You can view the logs for each service in the 'logs' directory."

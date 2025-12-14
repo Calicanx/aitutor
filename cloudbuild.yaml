@@ -33,18 +33,6 @@ steps:
       - '.'
     id: 'build-teaching-assistant'
 
-
-  # Build Tutor Service
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/tutor${_ENV_SUFFIX}'
-      - '-f'
-      - 'services/Tutor/Dockerfile'
-      - '.'
-    id: 'build-tutor'
-
   # Build Auth Service
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -71,14 +59,12 @@ steps:
       - --build-arg
       - VITE_TEACHING_ASSISTANT_API_URL=${_TEACHING_ASSISTANT_API_URL}
       - --build-arg
-      - VITE_TUTOR_WS=${_TUTOR_WS}
-      - --build-arg
       - VITE_AUTH_SERVICE_URL=${_AUTH_SERVICE_URL}
       - --build-arg
       - VITE_GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID}
       - '.'
     id: 'build-frontend'
-    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant', 'build-tutor', 'build-auth-service']
+    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant', 'build-auth-service']
 
   # Push all images
   - name: 'gcr.io/cloud-builders/docker'
@@ -95,11 +81,6 @@ steps:
     args: ['push', 'gcr.io/$PROJECT_ID/teaching-assistant${_ENV_SUFFIX}']
     id: 'push-teaching-assistant'
     waitFor: ['build-teaching-assistant']
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/tutor${_ENV_SUFFIX}']
-    id: 'push-tutor'
-    waitFor: ['build-tutor']
 
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/auth-service${_ENV_SUFFIX}']
@@ -180,33 +161,6 @@ steps:
     id: 'deploy-teaching-assistant'
     waitFor: ['push-teaching-assistant']
 
-  # Deploy Tutor Service to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'tutor${_ENV_SUFFIX}'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/tutor${_ENV_SUFFIX}'
-      - '--region'
-      - 'us-central1'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--port'
-      - '8080'
-      - '--timeout'
-      - '3600'
-      - '--min-instances'
-      - '1'
-      - '--max-instances'
-      - '10'
-      - '--set-env-vars'
-      - 'GEMINI_API_KEY=${_GEMINI_API_KEY},GEMINI_MODEL=${_GEMINI_MODEL},JWT_SECRET=${_JWT_SECRET}'
-    id: 'deploy-tutor'
-    waitFor: ['push-tutor']
-
   # Deploy Auth Service to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -253,7 +207,6 @@ images:
   - 'gcr.io/$PROJECT_ID/dash-api${_ENV_SUFFIX}'
   - 'gcr.io/$PROJECT_ID/sherlocked-api${_ENV_SUFFIX}'
   - 'gcr.io/$PROJECT_ID/teaching-assistant${_ENV_SUFFIX}'
-  - 'gcr.io/$PROJECT_ID/tutor${_ENV_SUFFIX}'
   - 'gcr.io/$PROJECT_ID/auth-service${_ENV_SUFFIX}'
   - 'gcr.io/$PROJECT_ID/tutor-frontend${_ENV_SUFFIX}'
 
@@ -270,7 +223,6 @@ substitutions:
   _DASH_API_URL: 'REPLACE_IN_COMMAND'
   _SHERLOCKED_API_URL: 'REPLACE_IN_COMMAND'
   _TEACHING_ASSISTANT_API_URL: 'REPLACE_IN_COMMAND'
-  _TUTOR_WS: 'REPLACE_IN_COMMAND'
   _AUTH_SERVICE_URL: 'REPLACE_IN_COMMAND'
   _FRONTEND_URL: 'REPLACE_IN_COMMAND'
 

@@ -421,11 +421,7 @@ class UserManager:
         name: str,
         age: int,
         picture: str = "",
-        user_type: str = "student",
-        subjects: List[str] = None,
-        learning_goals: List[str] = None,
-        interests: List[str] = None,
-        learning_style: str = None
+        user_type: str = "student"
     ) -> UserProfile:
         """
         Create a new user from Google OAuth
@@ -437,10 +433,6 @@ class UserManager:
             age: Student age
             picture: Profile picture URL
             user_type: User type (always "student" for now)
-            subjects: List of subjects
-            learning_goals: List of learning goals
-            interests: List of interests
-            learning_style: Preferred learning style
             
         Returns:
             Created UserProfile
@@ -483,12 +475,7 @@ class UserManager:
             "google_picture": picture,
             "user_type": user_type,
             "last_login": current_time,
-            "is_active": True,
-            # Enhanced profile fields
-            "subjects": subjects or [],
-            "learning_goals": learning_goals or [],
-            "interests": interests or [],
-            "learning_style": learning_style or "visual"
+            "is_active": True
         })
         
         # Save to MongoDB

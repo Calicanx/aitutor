@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
-    "@google/genai": "^0.14.0",
+    "@google/genai": "1.33.0",
     "@hookform/resolvers": "^5.2.2",
-    "@khanacademy/kmath": "^2.2.8",
-    "@khanacademy/math-input": "^26.2.4",
+    "@khanacademy/kmath": "2.2.4",
+    "@khanacademy/math-input": "26.2.4",
     "@khanacademy/mathjax-renderer": "^3.0.0",
     "@khanacademy/perseus": "68.0.2",
     "@khanacademy/wonder-blocks-accordion": "^3.1.39",
@@ -60,6 +60,7 @@
     "aphrodite": "^2.4.0",
     "class-variance-authority": "^0.7.1",
     "classnames": "^2.5.1",
+    "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "dotenv-flow": "^4.1.0",
@@ -138,11 +139,20 @@
     "vite-bundle-visualizer": "^1.2.1"
   },
   "overrides": {
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "@khanacademy/perseus-core": "19.0.2",
+    "@khanacademy/kas": "2.1.1",
+    "@khanacademy/perseus-utils": "2.1.0",
+    "@khanacademy/simple-markdown": "2.1.0",
+    "@khanacademy/pure-markdown": "2.2.0",
+    "@khanacademy/kmath": "2.2.4"
   },
   "resolutions": {
-    "@khanacademy/perseus-core": "19.2.0",
+    "@khanacademy/perseus-core": "19.0.2",
     "@khanacademy/kas": "2.1.1",
-    "@khanacademy/perseus-utils": "2.1.0"
+    "@khanacademy/perseus-utils": "2.1.0",
+    "@khanacademy/simple-markdown": "2.1.0",
+    "@khanacademy/pure-markdown": "2.2.0",
+    "@khanacademy/kmath": "2.2.4"
   }
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -36,6 +37,7 @@ interface RendererComponentProps {
 const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     const { user } = useAuth();
     const { setTotalHints, setCurrentHintIndex, showHints, setShowHints } = useHint();
+    const queryClient = useQueryClient();
     const [perseusItems, setPerseusItems] = useState<PerseusItem[]>([]);
     const [item, setItem] = useState(0);
     const [endOfTest, setEndOfTest] = useState(false);
@@ -285,6 +287,9 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
                     is_correct: keScore.correct,
                     response_time_seconds: responseTimeSeconds
                 });
+                
+                // Invalidate skill-scores cache to trigger refetch with updated data
+                queryClient.invalidateQueries({ queryKey: ["skill-scores"] });
             } catch (err) {
                 console.error("Failed to submit answer to DASH:", err);
             }
@@ -318,10 +323,11 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
     // Extract hints from current question
     const hints = (perseusItem as any)?.hints || [];
 
-    // Reset hint index when question changes
+    // Reset hint index and close hints when question changes
     useEffect(() => {
         setCurrentHintIndex(0);
-    }, [item, setCurrentHintIndex]);
+        setShowHints(false); // Auto-close hints when question changes
+    }, [item, setCurrentHintIndex, setShowHints]);
 
     return (
         <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">

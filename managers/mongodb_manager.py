@@ -94,6 +94,11 @@ class MongoDBManager:
     def scraped_questions(self):
         """Get scraped_questions collection"""
         return self._db['scraped_questions']
+
+    @property
+    def sessions(self):
+        """Get sessions collection for active tutoring session state"""
+        return self._db['sessions']
     
     def test_connection(self):
         """Test if MongoDB connection is working"""

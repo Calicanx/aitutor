@@ -33,18 +33,6 @@ steps:
       - '.'
     id: 'build-teaching-assistant'
 
-
-  # Build Tutor Service
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/tutor-staging'
-      - '-f'
-      - 'services/Tutor/Dockerfile'
-      - '.'
-    id: 'build-tutor'
-
   # Build Frontend
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -59,11 +47,9 @@ steps:
       - VITE_SHERLOCKED_API_URL=${_SHERLOCKED_API_URL}
       - --build-arg
       - VITE_TEACHING_ASSISTANT_API_URL=${_TEACHING_ASSISTANT_API_URL}
-      - --build-arg
-      - VITE_TUTOR_WS=${_TUTOR_WS}
       - '.'
     id: 'build-frontend'
-    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant', 'build-tutor']
+    waitFor: ['build-dash-api', 'build-sherlocked-api', 'build-teaching-assistant']
 
   # Push all images
   - name: 'gcr.io/cloud-builders/docker'
@@ -80,11 +66,6 @@ steps:
     args: ['push', 'gcr.io/$PROJECT_ID/teaching-assistant-staging']
     id: 'push-teaching-assistant'
     waitFor: ['build-teaching-assistant']
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/tutor-staging']
-    id: 'push-tutor'
-    waitFor: ['build-tutor']
 
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/tutor-frontend-staging']
@@ -154,33 +135,6 @@ steps:
     id: 'deploy-teaching-assistant'
     waitFor: ['push-teaching-assistant']
 
-  # Deploy Tutor Service to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'tutor-staging'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/tutor-staging'
-      - '--region'
-      - 'us-central1'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--port'
-      - '8080'
-      - '--timeout'
-      - '3600'
-      - '--min-instances'
-      - '1'
-      - '--max-instances'
-      - '10'
-      - '--set-env-vars'
-      - 'GEMINI_API_KEY=${_GEMINI_API_KEY},GEMINI_MODEL=${_GEMINI_MODEL},JWT_SECRET=${_JWT_SECRET}'
-    id: 'deploy-tutor'
-    waitFor: ['push-tutor']
-
   # Deploy Frontend to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -204,7 +158,6 @@ images:
   - 'gcr.io/$PROJECT_ID/dash-api-staging'
   - 'gcr.io/$PROJECT_ID/sherlocked-api-staging'
   - 'gcr.io/$PROJECT_ID/teaching-assistant-staging'
-  - 'gcr.io/$PROJECT_ID/tutor-staging'
   - 'gcr.io/$PROJECT_ID/tutor-frontend-staging'
 
 substitutions:
@@ -217,7 +170,6 @@ substitutions:
   _DASH_API_URL: 'REPLACE_IN_COMMAND'
   _SHERLOCKED_API_URL: 'REPLACE_IN_COMMAND'
   _TEACHING_ASSISTANT_API_URL: 'REPLACE_IN_COMMAND'
-  _TUTOR_WS: 'REPLACE_IN_COMMAND'
 
 options:
   machineType: 'E2_HIGHCPU_8'

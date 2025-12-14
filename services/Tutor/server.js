@@ -105,23 +105,18 @@ server.on('upgrade', (request, socket, head) => {
   try {
     let user_id;
 
-    // DEV MODE: Allow mock token for local development
-    if (token === 'mock-jwt-token' && process.env.NODE_ENV !== 'production') {
-      user_id = 'dev_user_123';
-      console.log(`🔧 [DEV] WebSocket connection using mock token for user: ${user_id}`);
-    } else {
-      const decoded = jwt.verify(token, JWT_SECRET, {
-        algorithms: ['HS256'],
-        audience: JWT_AUDIENCE,
-        issuer: JWT_ISSUER
-      });
-      user_id = decoded.sub;
+    // Verify JWT token
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ['HS256'],
+      audience: JWT_AUDIENCE,
+      issuer: JWT_ISSUER
+    });
+    user_id = decoded.sub;
 
-      if (!user_id) {
-        throw new Error('Invalid token: missing user_id');
-      }
-      console.log(`✅ WebSocket connection authenticated for user: ${user_id}`);
+    if (!user_id) {
+      throw new Error('Invalid token: missing user_id');
     }
+    console.log(`✅ WebSocket connection authenticated for user: ${user_id}`);
 
     // Store user_id in request for later use
     request.user_id = user_id;

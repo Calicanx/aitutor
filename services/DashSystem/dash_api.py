@@ -2,8 +2,6 @@ import time
 import sys
 import os
 import json
-import glob
-import random
 import logging
 from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException, Request
@@ -102,64 +100,6 @@ def health_check():
         "questions_count": len(dash_system.question_index)
     }
 
-# Path to CurriculumBuilder with full Perseus items
-CURRICULUM_BUILDER_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'SherlockEDApi', 'CurriculumBuilder')
-)
-
-# Skill to Perseus slug prefix mapping
-SKILL_TO_SLUG_PREFIX = {
-    # Kindergarten
-    "counting_1_10": "1.1.1.1",
-    "number_recognition": "1.1.1.2",
-    "basic_shapes": "1.1.1.3",
-    "counting_100": "1.1.1.4",
-    # Grade 1
-    "addition_basic": "1.1.2.1",
-    "subtraction_basic": "1.1.2.2",
-    "place_value": "1.1.3.1",
-    "skip_counting": "1.1.4.1",
-    # Grade 2
-    "addition_2digit": "2.1.4.2",
-    "subtraction_2digit": "2.1.5.1",
-    "multiplication_intro": "2.1.6.1",  # Introduction to Multiplication
-    # Grade 3
-    "multiplication_basic": "2.1.6.1",
-    "multiplication_tables": "2.1.6.1",  # Added missing mapping!
-    "division_basic": "2.1.8.1",
-    "fractions_intro": "3.1.1.1",
-    # Grade 4+
-    "fractions_operations": "4.1.1.1",
-    "decimals_intro": "4.1.2.1",
-    "decimals_operations": "5.1.1.1",
-    "percentages": "5.1.2.1",
-    "integers": "6.1.1.1",
-    "ratios_proportions": "6.1.2.1",
-    "algebraic_expressions": "7.1.1.1",
-    "linear_equations_1var": "7.1.2.1",
-    "linear_equations_2var": "8.1.1.1",
-    "quadratic_intro": "8.1.2.1",
-    "quadratic_equations": "9.1.1.1",
-    "polynomial_operations": "9.1.2.1",
-    "geometric_proofs": "10.1.1.1",
-    "trigonometry_basic": "10.1.2.1",
-    "exponentials_logs": "11.1.1.1",
-    "trigonometry_advanced": "11.1.2.1",
-    "limits": "12.1.1.1",
-    "derivatives": "12.1.2.1",
-}
-
-def extract_slug_from_filename(filepath: str) -> str:
-    """Extract slug like '1.1.1.1.5' from '1.1.1.1.5_xABC.json'"""
-    filename = os.path.basename(filepath)
-    slug = filename.split('_')[0]
-    return slug
-
-def get_perseus_files_for_skill(skill_id: str, curriculum_path: str) -> List[str]:
-    """Get all Perseus files matching a skill's slug prefix"""
-    prefix = SKILL_TO_SLUG_PREFIX.get(skill_id, "1.1.1")
-    pattern = os.path.join(curriculum_path, f"{prefix}*.json")
-    return glob.glob(pattern)
 
 def load_perseus_items_for_dash_questions_from_mongodb(
     dash_questions: List[Question]
@@ -268,76 +208,6 @@ def load_perseus_items_for_dash_questions_from_mongodb(
 
     return perseus_items
 
-def load_perseus_items_for_dash_questions(
-    dash_questions: List[Question],
-    curriculum_path: str
-) -> List[Dict]:
-    """Load Perseus items matching DASH-selected questions (LOCAL FILES FALLBACK)"""
-    perseus_items = []
-    
-    for dash_q in dash_questions:
-        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else "counting_1_10"
-        
-        # Get matching Perseus files
-        matching_files = get_perseus_files_for_skill(skill_id, curriculum_path)
-        
-        if not matching_files:
-            # Fallback to any file if no match
-            matching_files = glob.glob(os.path.join(curriculum_path, "1.1.*.json"))
-            if not matching_files:
-                matching_files = glob.glob(os.path.join(curriculum_path, "*.json"))
-        
-        if not matching_files:
-            logger.warning(f"No Perseus files found for skill {skill_id}")
-            continue
-            
-        # Pick one randomly from matches
-        selected_file = random.choice(matching_files[:min(20, len(matching_files))])
-        
-        try:
-            with open(selected_file, 'r', encoding='utf-8') as f:
-                perseus_data = json.load(f)
-            
-            # Tag with DASH metadata
-            # Note: This function is fallback only, dash_system should be initialized
-            skill_names = []
-            if dash_system is not None:
-                skill_names = [dash_system.skills[sid].name for sid in dash_q.skill_ids 
-                               if sid in dash_system.skills]
-            
-            perseus_data['dash_metadata'] = {
-                'dash_question_id': dash_q.question_id,
-                'skill_ids': dash_q.skill_ids,
-                'difficulty': dash_q.difficulty,
-                'expected_time_seconds': dash_q.expected_time_seconds,
-                'slug': extract_slug_from_filename(selected_file),
-                'skill_names': skill_names
-            }
-            
-            perseus_items.append(perseus_data)
-        except Exception as e:
-            logger.warning(f"Failed to load Perseus file {selected_file}: {e}")
-    
-    return perseus_items
-
-def load_perseus_items_from_dir(directory: str, limit: Optional[int] = None) -> List[Dict]:
-    """Load Perseus items from CurriculumBuilder directory (legacy function)"""
-    all_items = []
-    file_pattern = os.path.join(directory, "*.json")
-    
-    for file_path in glob.glob(file_pattern):
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                # Ensure it has the expected structure
-                if isinstance(data, dict) and "question" in data:
-                    all_items.append(data)
-        except Exception as e:
-            logger.warning(f"Warning: Failed to load {file_path}: {e}")
-    
-    if limit and len(all_items) > limit:
-        return random.sample(all_items, limit)
-    return all_items
 
 @app.get("/api/questions/preloaded", response_model=List[PerseusQuestion])
 def get_preloaded_questions(request: Request):
@@ -443,32 +313,6 @@ def get_preloaded_questions(request: Request):
         logger.info("[PRELOADED] Returning empty list due to error")
         return []
 
-# ===== COMPOSITE DASHBOARD ENDPOINT (Phase 3: Request Batching) =====
-from services.DashSystem.dashboard_loader import DashboardDataLoader
-
-@app.get("/api/dashboard")
-def get_dashboard_data(
-    request: Request,
-    include_questions: bool = True
-):
-    """
-    Composite endpoint that combines user profile, skills, learning path, and progress.
-    Reduces 5-6 API calls to 1 optimized call.
-    
-    Performance: ~200-400ms (vs 1-2s for sequential calls)
-    """
-    # Get authenticated user
-    user_id = get_current_user(request)
-    
-    # Load all dashboard data
-    loader = DashboardDataLoader()
-    
-    try:
-        dashboard_data = loader.load_dashboard_data(user_id, include_questions=include_questions)
-        return dashboard_data.dict()
-    except Exception as e:
-        logger.error(f"Error loading dashboard: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to load dashboard data: {str(e)}")
 
 # ===== QUESTION ENDPOINTS =====
 @app.get("/api/questions/{sample_size}", response_model=List[PerseusQuestion])
@@ -586,27 +430,6 @@ def log_question_displayed(request: Request, display_info: dict):
     logger.info(f"{'='*80}\n")
     return {"success": True}
 
-@app.get("/next-question", response_model=Question)
-def get_next_question(request: Request):
-    """
-    Gets the next recommended question for a given user.
-    (Original endpoint kept for backward compatibility)
-    """
-    ensure_dash_system()
-    # Get user_id from JWT token
-    user_id = get_current_user(request)
-    
-    # Ensure the user exists and is loaded
-    dash_system.load_user_or_create(user_id)
-    
-    # Get the next question
-    next_question = dash_system.get_next_question(user_id, time.time())
-    
-    if next_question:
-        return next_question
-    else:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No recommended question found.")
 
 class AnswerSubmission(BaseModel):
     question_id: str
@@ -688,8 +511,8 @@ def get_skill_scores(request: Request):
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
-    # Get user profile to ensure it exists
-    user_profile = dash_system.user_manager.load_user(user_id)
+    # Get user profile to ensure it exists and sync skill states
+    user_profile = dash_system.load_user_or_create(user_id)
     if not user_profile:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -783,64 +606,6 @@ def recommend_next_questions(request: Request, req: RecommendNextRequest):
     except Exception as e:
         logger.error(f"[ERROR] Failed to load recommended questions: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load recommended questions: {e}")
-@app.get("/api/learning-path")
-def get_learning_path(request: Request):
-    """
-    Get the learning path progress for the current user.
-    Returns a unified view of completed, in-progress, and locked topics for the dashboard.
-    """
-    user_id = get_current_user(request)
-    current_time = time.time()
-    
-    # Get all scores to determine status
-    scores = dash_system.get_skill_scores(user_id, current_time)
-    
-    # Simple logic to group into 'completed' (>2.0 mem), 'in-progress' (0.0-2.0), 'locked' (<0)
-    # This is a simplification of the real graph traversal but works for the UI
-    path = []
-    
-    # Sort by grade level then sequence
-    sorted_skills = sorted(dash_system.skills.values(), key=lambda s: (s.grade_level.value, s.sequence_order))
-    
-    for skill in sorted_skills:
-        skill_id = skill.id
-        data = scores.get(skill_id, {})
-        
-        # Determine status
-        if not data:
-             status = "locked" 
-             score_display = ""
-        else:
-            mem = data.get('memory_strength', -2.0)
-            if mem >= 1.5:
-                status = "completed"
-                score_display = f"{int(data.get('accuracy', 0) * 100)}%"
-            elif mem > -1.0:
-                status = "in-progress"
-                score_display = ""
-            else:
-                status = "locked"
-                score_display = ""
-
-        # Only include relevant skills (e.g., current grade +/- 1) to keep list manageable
-        # For now, just taking a slice around the 'in-progress' items
-        path.append({
-            "id": skill_id,
-            "title": skill.name,
-            "status": status,
-            "score": score_display
-        })
-    
-    # Filter to show a window of relevant items
-    # Find first in-progress or locked
-    start_idx = 0
-    for i, item in enumerate(path):
-        if item["status"] in ["in-progress", "locked"]:
-            start_idx = max(0, i - 2)
-            break
-            
-    # Return window of 10 items
-    return path[start_idx:start_idx+10]
 
 if __name__ == "__main__":
     import uvicorn

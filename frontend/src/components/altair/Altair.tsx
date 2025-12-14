@@ -15,7 +15,7 @@
  */
 import { useEffect, useRef, useState, memo } from "react";
 import vegaEmbed from "vega-embed";
-import { useLiveAPIContext } from "../../contexts/LiveAPIContext";
+import { useTutorContext } from "../../features/tutor";
 import {
   FunctionDeclaration,
   LiveServerToolCall,
@@ -41,7 +41,7 @@ const declaration: FunctionDeclaration = {
 
 function AltairComponent() {
   const [jsonString, setJSONString] = useState<string>("");
-  const { client, setConfig } = useLiveAPIContext();
+  const { client, setConfig } = useTutorContext();
 
   useEffect(() => {
     setConfig({

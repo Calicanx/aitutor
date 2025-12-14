@@ -120,20 +120,6 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
     setIsSubmitting(true);
     setSubmitError("");
 
-    // Dev bypass for UI verification
-    if (setupToken === "dev-test-token") {
-      setTimeout(() => {
-        onComplete("mock-jwt-token", {
-          user_id: "dev_user_123",
-          name: googleUser?.name || "Test User",
-          email: googleUser?.email || "test@example.com",
-          current_grade: "GRADE_10",
-          role: "student"
-        });
-      }, 1500);
-      return;
-    }
-
     try {
       const response = await authAPI.completeSetup(setupToken, data.userType, data.age, {
         subjects: data.subjects,
