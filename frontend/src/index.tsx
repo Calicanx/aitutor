@@ -23,7 +23,7 @@ import reportWebVitals from "./reportWebVitals";
 import "./package/perseus/testing/perseus-init.tsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-// import ComingSoonGuard from "./components/coming-soon/ComingSoonGuard"; // Commented out to allow home page access
+import ComingSoonGuard from "./components/coming-soon/ComingSoonGuard"; // Commented out to allow home page access
 
 const LoginPage = lazy(() => import("./components/auth/LoginPage"));
 const LandingPageWrapper = lazy(() => import("./components/landing/LandingPageWrapper"));
@@ -141,8 +141,7 @@ root.render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          {/* ComingSoonGuard commented out to allow home page access - uncomment to re-enable coming soon page */}
-          {/* <ComingSoonGuard> */}
+          <ComingSoonGuard>
             <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
               <Switch>
                 <Route path="/app/auth/setup" component={LoginPage} />
@@ -153,7 +152,7 @@ root.render(
                 <Route component={LandingPageOrApp} /> {/* Catch-all route - fallback to landing page */}
               </Switch>
             </Suspense>
-          {/* </ComingSoonGuard> */}
+          </ComingSoonGuard>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
