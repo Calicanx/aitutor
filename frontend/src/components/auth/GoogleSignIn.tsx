@@ -78,17 +78,27 @@ const GoogleSignInContent: React.FC<GoogleSignInContentProps> = ({ onAuthSuccess
     );
   }
 
+  const handleDevSignupTest = () => {
+    setSetupToken('dev-test-token');
+    setGoogleUser({
+      name: "Test User",
+      email: "test@example.com",
+      picture: ""
+    });
+    setShowSignupForm(true);
+  };
+
   return (
     <div className="auth-container">
       <BackgroundShapes />
       <div className="auth-card">
         {/* Logo Badge */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          gap: '12px', 
-          marginBottom: '24px' 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          marginBottom: '24px'
         }}>
           <div style={{
             width: '56px',
@@ -101,8 +111,8 @@ const GoogleSignInContent: React.FC<GoogleSignInContentProps> = ({ onAuthSuccess
             boxShadow: '4px 4px 0px 0px #000000',
             transform: 'rotate(-2deg)'
           }}>
-            <span className="material-symbols-outlined" style={{ 
-              fontSize: '32px', 
+            <span className="material-symbols-outlined" style={{
+              fontSize: '32px',
               color: '#000000',
               fontWeight: 900
             }}>
@@ -110,10 +120,10 @@ const GoogleSignInContent: React.FC<GoogleSignInContentProps> = ({ onAuthSuccess
             </span>
           </div>
         </div>
-        
+
         <h1>Welcome to AI Tutor</h1>
         <p>Sign in with your Google account to get started</p>
-        
+
         <button className="google-sign-in-button" onClick={handleGoogleLogin}>
           <svg width="20" height="20" viewBox="0 0 18 18" style={{ flexShrink: 0 }}>
             <path
@@ -135,6 +145,28 @@ const GoogleSignInContent: React.FC<GoogleSignInContentProps> = ({ onAuthSuccess
           </svg>
           Sign in with Google
         </button>
+
+        {/* Dev Mode Verification Button */}
+        {process.env.NODE_ENV === 'development' && (
+          <div style={{ marginTop: '20px', borderTop: '2px dashed #ccc', paddingTop: '20px' }}>
+            <p style={{ fontSize: '12px', marginBottom: '10px', color: '#666' }}>Development Mode:</p>
+            <button
+              onClick={handleDevSignupTest}
+              style={{
+                padding: '10px 15px',
+                background: '#333',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: 'bold'
+              }}
+            >
+              Test Signup Wizard UI
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -145,35 +177,19 @@ interface GoogleSignInProps {
 }
 
 const GoogleSignIn: React.FC<GoogleSignInProps> = ({ onAuthSuccess }) => {
-  if (!GOOGLE_CLIENT_ID) {
+  // If no client ID, we still render the content but the Google button will fail/not render correctly.
+  // We wrap in Provider if ID exists, otherwise just render content for Dev access.
+
+  if (GOOGLE_CLIENT_ID) {
     return (
-      <div className="auth-container">
-        <BackgroundShapes />
-        <div className="auth-card">
-          <div style={{
-            padding: '16px 20px',
-            background: '#FF6B6B',
-            border: '4px solid #000000',
-            color: '#FFFFFF',
-            fontSize: '14px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            boxShadow: '4px 4px 0px 0px #000000'
-          }}>
-            Error: Google Client ID not configured
-          </div>
-        </div>
-      </div>
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <GoogleSignInContent onAuthSuccess={onAuthSuccess} />
+      </GoogleOAuthProvider>
     );
   }
 
-  return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <GoogleSignInContent onAuthSuccess={onAuthSuccess} />
-    </GoogleOAuthProvider>
-  );
+  // Fallback for dev mode without Client ID
+  return <GoogleSignInContent onAuthSuccess={onAuthSuccess} />;
 };
 
 export default GoogleSignIn;
-

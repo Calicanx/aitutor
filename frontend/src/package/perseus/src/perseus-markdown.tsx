@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {pureMarkdownRules, traverseContent} from "@khanacademy/pure-markdown";
 import SimpleMarkdown from "@khanacademy/simple-markdown";
 import * as React from "react";

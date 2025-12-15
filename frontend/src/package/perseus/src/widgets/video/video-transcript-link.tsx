@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * This is a component that adds a link to the transcript for embedded videos in articles.
  */

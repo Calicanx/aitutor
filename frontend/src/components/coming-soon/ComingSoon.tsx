@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import TeachrLogo from '../landing/TeachrLogo';
-import './coming-soon.scss';
+import './ComingSoon.scss';
 
 const ComingSoon: React.FC = () => {
   return (
@@ -56,4 +56,3 @@ const ComingSoon: React.FC = () => {
 };
 
 export default ComingSoon;
-

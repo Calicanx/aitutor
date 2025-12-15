@@ -12,6 +12,11 @@ sys.path.insert(0, project_root)
 from managers.mongodb_manager import mongo_db
 import time
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 def create_test_user():
     """Create a test user in MongoDB"""
     
@@ -97,7 +102,7 @@ def create_test_user():
     # Check if user already exists
     existing = mongo_db.users.find_one({"user_id": user_id})
     if existing:
-        print(f"⚠️  User '{user_id}' already exists in MongoDB")
+        logger.warning(f"  User '{user_id}' already exists in MongoDB")
         print("   Deleting old version and creating fresh...")
         mongo_db.users.delete_one({"user_id": user_id})
     
@@ -105,7 +110,7 @@ def create_test_user():
     result = mongo_db.users.insert_one(test_user)
     
     print("\n" + "="*60)
-    print("✅ Test User Created in MongoDB!")
+    logger.info(" Test User Created in MongoDB!")
     print("="*60)
     print(f"  User ID: {user_id}")
     print(f"  Age: {age} years old")

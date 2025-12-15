@@ -1,62 +1,34 @@
-import time
-from typing import Optional, Dict, Any
+"""
+Greeting Handler for TeachingAssistant
+Simplified: Only generates greeting/closing prompts.
+Session timing is now handled by SessionManager in MongoDB.
+"""
 
 
 class GreetingHandler:
+    """
+    Simplified: Only generates greeting/closing prompts.
+    Session timing is now handled by SessionManager in MongoDB.
+    """
     SYSTEM_PROMPT_PREFIX = "[SYSTEM PROMPT FOR ADAM]"
-    
-    def __init__(self):
-        self.session_start_time: Optional[float] = None
-        self.questions_log: list = []
-    
-    def start_session(self, user_id: str) -> str:
-        self.session_start_time = time.time()
-        self.questions_log = []
-        
-        greeting_prompt = f"""{self.SYSTEM_PROMPT_PREFIX}
+
+    def get_greeting(self, user_id: str) -> str:
+        """Generate greeting prompt for session start"""
+        return f"""{self.SYSTEM_PROMPT_PREFIX}
 You are starting a tutoring session.
 Please greet the student warmly and ask how they're doing today.
 Make them feel welcome and excited to learn."""
-        
-        return greeting_prompt
-    
-    def end_session(self, user_id: str) -> str:
-        if self.session_start_time is None:
-            session_duration = 0.0
-        else:
-            session_duration = (time.time() - self.session_start_time) / 60
-        
-        total_questions = len(self.questions_log)
-        
-        closing_prompt = f"""{self.SYSTEM_PROMPT_PREFIX}
-The tutoring session is ending now.
-Session stats: {session_duration:.1f} minutes, {total_questions} questions attempted.
-Please give the student a warm closing message, acknowledge their hard work, 
-and encourage them for next session."""
-        
-        self.session_start_time = None
-        self.questions_log = []
-        
-        return closing_prompt
-    
-    def record_question(self, question_id: str, is_correct: bool):
-        self.questions_log.append({
-            'question_id': question_id,
-            'timestamp': time.time(),
-            'is_correct': is_correct
-        })
-    
-    def get_session_stats(self) -> Dict[str, Any]:
-        if self.session_start_time is None:
-            return {
-                'session_active': False,
-                'duration_minutes': 0.0,
-                'total_questions': 0
-            }
-        
-        return {
-            'session_active': True,
-            'duration_minutes': (time.time() - self.session_start_time) / 60,
-            'total_questions': len(self.questions_log)
-        }
 
+    def get_closing(self, duration_minutes: float, questions_answered: int) -> str:
+        """Generate closing prompt with session stats (passed in from SessionManager)"""
+        return f"""{self.SYSTEM_PROMPT_PREFIX}
+The tutoring session is ending now.
+Session stats: {duration_minutes:.1f} minutes, {questions_answered} questions attempted.
+Please give the student a warm closing message, acknowledge their hard work,
+and encourage them for next session."""
+
+    def get_inactivity_prompt(self) -> str:
+        """Generate inactivity check prompt"""
+        return f"""{self.SYSTEM_PROMPT_PREFIX}
+Check with the student if they're there, and if they want to continue...
+We have some very interesting problems to solve."""

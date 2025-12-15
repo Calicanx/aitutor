@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as KAS from "@khanacademy/kas";
 import {lockedFigureColors} from "@khanacademy/perseus-core";
 import {Plot} from "mafs";

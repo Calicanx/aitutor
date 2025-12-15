@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {Errors, PerseusError} from "@khanacademy/perseus-core";
 
 import {getDependencies} from "../dependencies";

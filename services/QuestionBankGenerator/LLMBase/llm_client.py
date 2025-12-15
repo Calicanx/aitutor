@@ -9,6 +9,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from managers.config_manager import ConfigManager
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 class OpenRouterClient:
     def __init__(self, config_path: Optional[str] = None):
         self.config_manager = ConfigManager(config_path=config_path) if config_path else ConfigManager()
@@ -59,7 +64,7 @@ class OpenRouterClient:
             return result["choices"][0]["message"]["content"]
             
         except requests.exceptions.RequestException as e:
-            print(f"Error calling OpenRouter API: {e}")
+            logger.error(f"Error calling OpenRouter API: {e}")
             if hasattr(e, 'response') and e.response is not None:
                 print(f"Response: {e.response.text}")
             raise
@@ -77,7 +82,7 @@ class OpenRouterClient:
                 response = self.generate(prompt, use_case, system_prompt)
                 responses.append(response)
             except Exception as e:
-                print(f"Error generating response for prompt: {e}")
+                logger.error(f"Error generating response for prompt: {e}")
                 responses.append("")
         
         return responses

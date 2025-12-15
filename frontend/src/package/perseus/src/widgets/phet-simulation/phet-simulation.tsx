@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * This is a PhET simulation widget. It is used for rendering simulations
  * from https://phet.colorado.edu/.

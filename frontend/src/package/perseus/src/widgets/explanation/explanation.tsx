@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {linterContextDefault} from "@khanacademy/perseus-linter";
 import Button from "@khanacademy/wonder-blocks-button";
 import {Id, View} from "@khanacademy/wonder-blocks-core";

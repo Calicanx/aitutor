@@ -1,5 +1,7 @@
 import React from 'react';
 import RendererComponent from "../question-widget-renderer/RendererComponent";
+import './mcq-fix.css'; // Fix for MCQ highlighting bug
+
 
 interface QuestionDisplayProps {
   onSkillChange?: (skill: string) => void;

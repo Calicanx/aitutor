@@ -5,6 +5,11 @@ import os
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from typing import Dict, Optional
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
@@ -78,6 +83,6 @@ class GoogleOAuthHandler:
                 "verified_email": user_info.get("verified_email", False)
             }
         except Exception as e:
-            print(f"Error getting user info: {e}")
+            logger.error(f"Error getting user info: {e}")
             return None
 

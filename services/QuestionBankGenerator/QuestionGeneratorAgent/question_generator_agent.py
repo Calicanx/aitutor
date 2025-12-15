@@ -12,6 +12,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from LLMBase.llm_client import OpenRouterClient
 from .validators import SubjectValidator
 
+from shared.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
 # Determine project root to reliably find config.json
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, 'config.json')
@@ -59,7 +64,7 @@ class QuestionGeneratorAgent:
                 if variation:
                     generated_ids.append(variation['question_id'])
             except Exception as e:
-                print(f"Error generating variation {i+1}: {e}")
+                logger.error(f"Error generating variation {i+1}: {e}")
         
         # Save updated curriculum
         self.save_curriculum()
@@ -164,14 +169,14 @@ Respond in JSON format:
             if not self._is_duplicate(new_question):
                 # Add to curriculum
                 self._add_question_to_curriculum(new_question, skill_id, grade_level)
-                print(f"✅ Generated: {new_question_id}")
+                logger.info(f" Generated: {new_question_id}")
                 return new_question
             else:
-                print(f"⚠️  Duplicate detected, skipping")
+                logger.warning(f"  Duplicate detected, skipping")
                 return None
                 
         except Exception as e:
-            print(f"Error in generation: {e}")
+            logger.error(f"Error in generation: {e}")
             return None
     
     def _parse_llm_response(self, response: str) -> Dict:

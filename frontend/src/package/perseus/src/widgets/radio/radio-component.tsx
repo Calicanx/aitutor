@@ -249,8 +249,11 @@ class Radio extends React.Component<Props> implements Widget {
 
                 const reviewChoice = this.props.reviewModeRubric?.choices[i];
 
+                // Generate ID if missing - use choice.id if available, otherwise use index
+                const choiceId = choice.id || `choice-${i}`;
+
                 return {
-                    id: choice.id,
+                    id: choiceId,
                     content: this._renderRenderer(content),
                     checked: selected,
                     // Current versions of the radio widget always pass in the
@@ -292,6 +295,7 @@ class Radio extends React.Component<Props> implements Widget {
                 deselectEnabled={this.props.deselectEnabled}
                 apiOptions={this.props.apiOptions}
                 isLastUsedWidget={this.props.isLastUsedWidget}
+                widgetId={this.props.widgetId}
                 registerFocusFunction={(i) => this.registerFocusFunction(i)}
             />
         );

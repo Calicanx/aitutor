@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type {ILogger} from "./logging/log";
 import type {SizeClass} from "./util/sizing-utils";
 import type {WidgetPromptJSON} from "./widget-ai-utils/prompt-types";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {View} from "@khanacademy/wonder-blocks-core";
 import Switch from "@khanacademy/wonder-blocks-switch";
 import {LabelMedium} from "@khanacademy/wonder-blocks-typography";

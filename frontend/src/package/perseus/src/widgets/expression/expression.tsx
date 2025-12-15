@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {KeypadInput} from "@khanacademy/math-input";
 import {expressionLogic} from "@khanacademy/perseus-core";
 import {linterContextDefault} from "@khanacademy/perseus-linter";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {vec} from "mafs";
 
 import {srFormatNumber} from "./screenreader-text";

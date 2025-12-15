@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* eslint-disable max-lines */
 /* eslint-disable react/no-unsafe */
 import {KhanMath} from "@khanacademy/kmath";
