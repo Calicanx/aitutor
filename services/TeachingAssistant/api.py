@@ -3,6 +3,8 @@ import os
 import threading
 import requests
 import asyncio
+import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -15,6 +17,7 @@ from sse_starlette.sse import EventSourceResponse
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from services.TeachingAssistant.teaching_assistant import TeachingAssistant
+from services.TeachingAssistant.core.context import Event
 from shared.auth_middleware import get_current_user, get_user_from_token
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 from shared.timing_middleware import UnpluggedTimingMiddleware
@@ -37,7 +40,35 @@ active_observers: Dict[str, List[WebSocket]] = {}
 OBSERVER_API_KEY = os.getenv("OBSERVER_API_KEY", "dev-observer-key-12345")
 
 
-app = FastAPI(title="Teaching Assistant API")
+# ============================================================================
+# Lifespan Context Manager (Start/Stop Event Processing Loop)
+# ============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start and stop event processing loop"""
+    global ta, event_processing_task
+    
+    # Start event processing loop
+    ta.running = True
+    event_processing_task = asyncio.create_task(ta.ongoing())
+    logger.info("[API] Started event processing loop")
+    
+    yield
+    
+    # Shutdown
+    logger.info("[API] Shutting down event processing loop...")
+    ta.running = False
+    if event_processing_task:
+        event_processing_task.cancel()
+        try:
+            await event_processing_task
+        except asyncio.CancelledError:
+            pass
+    logger.info("[API] Event processing loop stopped")
+
+
+app = FastAPI(title="Teaching Assistant API", lifespan=lifespan)
 
 # Add timing middleware for performance monitoring (Phase 1)
 app.add_middleware(UnpluggedTimingMiddleware)
@@ -100,8 +131,69 @@ async def options_handler(full_path: str):
 # Create TeachingAssistant instance (now stateless - all state in MongoDB)
 ta = TeachingAssistant()
 
+# Global task for event processing loop
+event_processing_task = None
+
 # DASH API URL for pre-loading questions
 DASH_API_URL = os.getenv("DASH_API_URL", "http://localhost:8000")
+
+
+# ============================================================================
+# Feed-to-Event Converter
+# ============================================================================
+
+def feed_message_to_event(message: dict, session_id: str, user_id: str) -> Optional[Event]:
+    """Convert WebSocket feed message to Event object"""
+    msg_type = message.get("type")
+    timestamp_str = message.get("timestamp")
+    payload = message.get("data", {})
+    
+    # Parse timestamp
+    if timestamp_str:
+        try:
+            from datetime import datetime
+            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')).timestamp()
+        except:
+            timestamp = time.time()
+    else:
+        timestamp = time.time()
+    
+    # Convert based on message type
+    if msg_type == "transcript":
+        return Event(
+            type="text",
+            timestamp=timestamp,
+            session_id=session_id,
+            user_id=user_id,
+            data={
+                "speaker": payload.get("speaker", "user"),
+                "text": payload.get("transcript", ""),
+                "timestamp": timestamp_str
+            }
+        )
+    elif msg_type == "audio":
+        return Event(
+            type="audio",
+            timestamp=timestamp,
+            session_id=session_id,
+            user_id=user_id,
+            data={
+                "audio": payload.get("audio", ""),
+                "timestamp": timestamp_str
+            }
+        )
+    elif msg_type == "media":
+        return Event(
+            type="media",
+            timestamp=timestamp,
+            session_id=session_id,
+            user_id=user_id,
+            data={
+                "media": payload.get("media", ""),
+                "timestamp": timestamp_str
+            }
+        )
+    return None
 
 
 # ============================================================================
@@ -146,13 +238,35 @@ def health_check():
 # ============================================================================
 
 @app.post("/session/start", response_model=PromptResponse)
-def start_session(http_request: Request, request: Optional[StartSessionRequest] = None):
+async def start_session(http_request: Request, request: Optional[StartSessionRequest] = None):
     """Start a new tutoring session"""
     user_id = get_current_user(http_request)
     try:
+        # Create session in MongoDB (existing method)
         result = ta.start_session(user_id)
+        session_id = result["session_info"]["session_id"]
+        
+        # Initialize memory and context components (new method)
+        greeting = await ta.start(user_id, session_id)
+        
+        # Create session_start event
+        start_event = Event(
+            type="session_start",
+            timestamp=time.time(),
+            session_id=session_id,
+            user_id=user_id,
+            data={"session_id": session_id, "user_id": user_id}
+        )
+        ta.queue_manager.enqueue(start_event)
+        
+        # IMPORTANT:
+        # - The initial greeting is now delivered via the SSE instruction queue
+        #   (see TeachingAssistant.start -> InjectionManager).
+        # - To avoid double-injecting the same greeting (once as Adam's system
+        #   prompt and once as a SYSTEM INSTRUCTION), we return an empty prompt
+        #   here and let the frontend rely on SSE for the greeting.
         return PromptResponse(
-            prompt=result["prompt"],
+            prompt="",
             session_info=result["session_info"]
         )
     except Exception as e:
@@ -196,7 +310,7 @@ def _preload_questions_background(user_id: str, token: str):
 
 
 @app.post("/session/end", response_model=PromptResponse)
-def end_session(http_request: Request, request: Optional[EndSessionRequest] = None):
+async def end_session(http_request: Request, request: Optional[EndSessionRequest] = None):
     """End the current tutoring session"""
     user_id = get_current_user(http_request)
     try:
@@ -208,7 +322,23 @@ def end_session(http_request: Request, request: Optional[EndSessionRequest] = No
                 session_info={'session_active': False, 'user_id': user_id}
             )
 
-        result = ta.end_session(session["session_id"])
+        session_id = session["session_id"]
+        
+        # End session with memory consolidation (new method)
+        closing = await ta.end(user_id, session_id)
+        
+        # Create session_end event
+        end_event = Event(
+            type="session_end",
+            timestamp=time.time(),
+            session_id=session_id,
+            user_id=user_id,
+            data={"session_id": session_id, "user_id": user_id}
+        )
+        ta.queue_manager.enqueue(end_event)
+        
+        # Get session summary (existing method for stats)
+        result = ta.end_session(session_id)
 
         # Pre-load next session questions in background (non-blocking)
         try:
@@ -402,10 +532,31 @@ async def broadcast_to_observers(session_id: str, message: dict):
 
 async def process_audio(session_id: str, audio_base64: str, timestamp: str):
     """Process incoming audio data and broadcast to observers"""
-    # TODO: Implement audio analysis
+    # Get user_id from session
+    session = ta.session_manager.get_session_by_id(session_id)
+    if not session:
+        return
+    
+    user_id = session["user_id"]
+    
+    # Create event from feed message
+    event = feed_message_to_event(
+        {
+            "type": "audio",
+            "timestamp": timestamp,
+            "data": {"audio": audio_base64}
+        },
+        session_id,
+        user_id
+    )
+    
+    if event:
+        # Enqueue event for processing
+        ta.queue_manager.enqueue(event)
+    
+    # Broadcast to observers (keep existing functionality)
     logger.debug(f"[AUDIO] Session {session_id}: received audio at {timestamp}")
 
-    # Broadcast to observers
     await broadcast_to_observers(session_id, {
         "type": "audio",
         "timestamp": timestamp,
@@ -415,10 +566,31 @@ async def process_audio(session_id: str, audio_base64: str, timestamp: str):
 
 async def process_media(session_id: str, media_base64: str, timestamp: str):
     """Process incoming media (video frames) and broadcast to observers"""
-    # TODO: Implement media analysis
+    # Get user_id from session
+    session = ta.session_manager.get_session_by_id(session_id)
+    if not session:
+        return
+    
+    user_id = session["user_id"]
+    
+    # Create event from feed message
+    event = feed_message_to_event(
+        {
+            "type": "media",
+            "timestamp": timestamp,
+            "data": {"media": media_base64}
+        },
+        session_id,
+        user_id
+    )
+    
+    if event:
+        # Enqueue event for processing
+        ta.queue_manager.enqueue(event)
+    
+    # Broadcast to observers (keep existing functionality)
     logger.debug(f"[MEDIA] Session {session_id}: received frame at {timestamp}")
 
-    # Broadcast to observers
     await broadcast_to_observers(session_id, {
         "type": "media",
         "timestamp": timestamp,
@@ -428,11 +600,35 @@ async def process_media(session_id: str, media_base64: str, timestamp: str):
 
 async def process_transcript(session_id: str, transcript: str, timestamp: str, speaker: str = "tutor"):
     """Process incoming transcript and broadcast to observers"""
-    # TODO: Analyze transcript for instruction generation
+    # Get user_id from session
+    session = ta.session_manager.get_session_by_id(session_id)
+    if not session:
+        return
+    
+    user_id = session["user_id"]
+    
+    # Create event from feed message
+    event = feed_message_to_event(
+        {
+            "type": "transcript",
+            "timestamp": timestamp,
+            "data": {
+                "transcript": transcript,
+                "speaker": speaker
+            }
+        },
+        session_id,
+        user_id
+    )
+    
+    if event:
+        # Enqueue event for processing
+        ta.queue_manager.enqueue(event)
+    
+    # Broadcast to observers (keep existing functionality)
     speaker_label = "USER" if speaker == "user" else "TUTOR"
     logger.debug(f"[TRANSCRIPT] Session {session_id} [{speaker_label}]: {transcript[:100] if transcript else 'empty'}...")
 
-    # Broadcast to observers
     await broadcast_to_observers(session_id, {
         "type": "transcript",
         "timestamp": timestamp,
