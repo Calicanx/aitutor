@@ -83,6 +83,7 @@ class MemoryRetriever:
 
     def _do_deep_retrieval(self, session_id: str, user_id: str):
         import logging
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         logger = logging.getLogger(__name__)
         
         history = self._conversation_history.get(session_id, [])
@@ -100,19 +101,33 @@ class MemoryRetriever:
         
         deep_results = {}
         total_results = 0
-        for mem_type in MemoryType:
-            results = self.store.search(
-                query=conversation_text,
-                student_id=user_id,
-                mem_type=mem_type,
-                top_k=5 if mem_type == MemoryType.ACADEMIC else 3,
-                exclude_session_id=session_id
-            )
-            deep_results[mem_type.value] = results
-            total_results += len(results)
         
+        # Optimize: Parallelize Pinecone searches (reduction ~4x latency)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_type = {
+                executor.submit(
+                    self.store.search,
+                    query=conversation_text,
+                    student_id=user_id,
+                    mem_type=mem_type,
+                    top_k=5 if mem_type == MemoryType.ACADEMIC else 3,
+                    exclude_session_id=session_id
+                ): mem_type
+                for mem_type in MemoryType
+            }
+            
+            for future in as_completed(future_to_type):
+                mem_type = future_to_type[future]
+                try:
+                    results = future.result()
+                    deep_results[mem_type.value] = results
+                    total_results += len(results)
+                except Exception as e:
+                    logger.error(f"Error in deep retrieval for {mem_type.value}: {e}")
+                    deep_results[mem_type.value] = []
+
         self._session_retrievals[session_id]["deep"] = deep_results
-        logger.info("TA-deep retrieval found %s memories across all types", total_results)
+        logger.info("TA-deep retrieval found %s memories across all types (Parallel)", total_results)
         self._save_retrieval(session_id, user_id, "deep", deep_results)
     
     def get_memory_injection(self, session_id: str) -> Optional[str]:

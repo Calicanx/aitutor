@@ -38,6 +38,7 @@ class SessionContext:
 
     has_audio: bool = False
     has_video: bool = False
+    is_dirty: bool = False
 
     def add_turn(self, speaker: str, text: str, timestamp: float):
         """

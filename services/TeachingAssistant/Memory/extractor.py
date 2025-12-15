@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import google.generativeai as genai
 from dotenv import load_dotenv
 from .schema import Memory, MemoryType
@@ -17,9 +17,9 @@ class MemoryExtractor:
     def __init__(self):
         self.model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
-    def extract_memories_batch(self, exchanges: List[Dict], student_id: str, session_id: str) -> List[Memory]:
+    def extract_memories_batch(self, exchanges: List[Dict], student_id: str, session_id: str) -> Dict[str, Any]:
         """
-        Extract memories from multiple exchanges in a single batch.
+        Extract memories and analyze exchanges in a single batch call.
         
         Args:
             exchanges: List of dicts with keys 'student_text', 'ai_text', 'topic'
@@ -27,14 +27,18 @@ class MemoryExtractor:
             session_id: Session ID
             
         Returns:
-            List of Memory objects extracted from all exchanges
+            Dict containing:
+            - memories: List of Memory objects
+            - emotions: List of detected emotions
+            - key_moments: List of key moments
+            - unfinished_topics: List of unfinished topics
         """
         if not exchanges:
             logger.warning("extract_memories_batch called with empty exchanges list")
-            return []
+            return {"memories": [], "emotions": [], "key_moments": [], "unfinished_topics": []}
 
         logger.info(
-            "Extracting memories from batch of %s exchanges for session %s",
+            "Extracting memories and analyzing batch of %s exchanges for session %s",
             len(exchanges),
             session_id,
         )
@@ -47,32 +51,33 @@ class MemoryExtractor:
             exchanges_text += f"AI: {exchange['ai_text']}\n"
             exchanges_text += f"Topic: {exchange['topic']}\n"
         
-        prompt = f"""Extract memorable details from these {len(exchanges)} conversation exchanges. Extract ALL types of memories that are worth remembering:
-- ACADEMIC: Learning progress, concepts understood, mistakes made, skills demonstrated
-- PERSONAL: Personal information shared, family, hobbies, interests, background
-- PREFERENCE: Learning style, communication preferences, what they like/dislike
-- CONTEXT: Conversation context, session-specific details, ongoing topics
-
-Return only genuinely useful information as JSON array. Return empty array if nothing worth remembering.
+        prompt = f"""Analyze these {len(exchanges)} conversation exchanges to extract memories and tracking data.
 
 {exchanges_text}
 
-Return JSON array with format (extract multiple memories if applicable):
-[
-  {{
-    "type": "academic|personal|preference|context",
-    "text": "memorable detail",
-    "importance": 0.0-1.0,
-    "metadata": {{
-      "emotion": "frustrated|confused|excited|anxious|tired|happy",
-      "valence": "positive|negative|neutral",
-      "category": "category name",
-      "topic": "topic name"
-    }}
-  }}
-]
+Task 1: Extract MEMORIES (academic, personal, preference, context) worth remembering.
+Task 2: Detect EMOTIONS (frustrated, confused, excited, anxious, tired, happy, or neutral) for each exchange.
+Task 3: Identify KEY MOMENTS (breakthroughs, struggles, important events) - max 1 per exchange.
+Task 4: Identify UNFINISHED TOPICS that should continue next time.
 
-IMPORTANT: Extract memories of ALL 4 types if present. Don't limit to just one type."""
+Return a SINGLE JSON object with this structure:
+{{
+  "memories": [
+    {{
+      "type": "academic|personal|preference|context",
+      "text": "memorable detail",
+      "importance": 0.0-1.0,
+      "metadata": {{ "emotion": "...", "topic": "..." }}
+    }}
+  ],
+  "emotions": ["emotion1", "emotion2", ...],
+  "key_moments": ["moment description 1", ...],
+  "unfinished_topics": ["topic description 1", ...]
+}}
+
+Select best fitting emotion for each exchange (or "neutral").
+Only include key moments and unfinished topics if they are significant.
+Return ONLY valid JSON."""
 
         try:
             response = self.model.generate_content(prompt)
@@ -82,9 +87,12 @@ IMPORTANT: Extract memories of ALL 4 types if present. Don't limit to just one t
             if text.endswith("```"):
                 text = text[:-3]
             text = text.strip()
+            
             data = json.loads(text)
+            
+            # Process memories
             memories = []
-            for item in data:
+            for item in data.get("memories", []):
                 memory = Memory(
                     type=MemoryType(item.get("type", "academic")),
                     text=item.get("text", ""),
@@ -94,97 +102,38 @@ IMPORTANT: Extract memories of ALL 4 types if present. Don't limit to just one t
                     metadata=item.get("metadata", {})
                 )
                 memories.append(memory)
-            
-            memory_types = [m.type.value for m in memories]
-            type_counts = {}
-            for mt in memory_types:
-                type_counts[mt] = type_counts.get(mt, 0) + 1
+                
+            result = {
+                "memories": memories,
+                "emotions": [e for e in data.get("emotions", []) if e and e != "neutral"],
+                "key_moments": [k for k in data.get("key_moments", []) if k and k != "None"],
+                "unfinished_topics": [t for t in data.get("unfinished_topics", []) if t and t != "None"]
+            }
 
             if len(memories) > 0:
-                logger.info("%s", "=" * 60)
-                logger.info("MEMORIES CREATED (%s total):", len(memories))
-                for m in memories:
-                    logger.info("   [%s] %s", m.type.value.upper(), m.text)
-                logger.info("%s", "=" * 60)
-            else:
-                logger.info("No memories extracted from %s exchanges", len(exchanges))
-            return memories
+                logger.info("   MEMORIES: %s", len(memories))
+            if result["emotions"]:
+                logger.info("   EMOTIONS: %s", result["emotions"])
+            if result["key_moments"]:
+                logger.info("   KEY MOMENTS: %s", result["key_moments"])
+                
+            return result
+            
         except json.JSONDecodeError as e:
             logger.error("JSON decode error in batch memory extraction: %s", e)
-            logger.error(
-                "Response text: %s",
-                text[:500] if "text" in locals() else "N/A",
-            )
-            return []
+            return {"memories": [], "emotions": [], "key_moments": [], "unfinished_topics": []}
         except Exception as e:
-            logger.error(
-                "Error extracting memories from batch: %s: %s",
-                type(e).__name__,
-                e,
-                exc_info=True,
-            )
-            return []
-
+            logger.error("Error extracting memories from batch: %s", e, exc_info=True)
+            return {"memories": [], "emotions": [], "key_moments": [], "unfinished_topics": []}
 
     def detect_emotion(self, text: str) -> Optional[str]:
-        valid_emotions = ["frustrated", "confused", "excited", "anxious", "tired", "happy"]
-        prompt = f"""Detect the emotion in this text. Return one word only: {', '.join(valid_emotions)} or None.
-
-Text: {text}"""
-
-        try:
-            response = self.model.generate_content(prompt)
-            emotion = response.text.strip().lower()
-            return emotion if emotion in valid_emotions else None
-        except Exception as e:
-            logger.warning(f"Error detecting emotion: {e}")
-            return None
+        # Deprecated: Included in extract_memories_batch
+        return None
 
     def detect_key_moments(self, student_text: str, ai_text: str, topic: str) -> Optional[str]:
-        """Detect key moments (breakthroughs, struggles, important events) using LLM."""
-        prompt = f"""Analyze this conversation exchange for key moments: breakthroughs, struggles, important learning events, or significant realizations.
-
-Student: {student_text}
-AI: {ai_text}
-Topic: {topic}
-
-If there's a key moment (breakthrough, struggle, important event), return a brief descriptive sentence (max 15 words).
-Examples:
-- "Breakthrough on discriminant with visual diagram"
-- "Struggled with word problems - gets lost in text"
-- "Connected quadratic formula to graph shape"
-
-If no key moment, return "None".
-Return ONLY the moment description or "None", nothing else."""
-
-        try:
-            response = self.model.generate_content(prompt)
-            moment = response.text.strip()
-            return moment if moment.lower() != "none" and len(moment) > 0 else None
-        except Exception as e:
-            logger.warning(f"Error detecting key moment: {e}")
-            return None
+        # Deprecated: Included in extract_memories_batch
+        return None
             
     def detect_unfinished_topics(self, student_text: str, ai_text: str) -> Optional[str]:
-        """Detect if a topic was started but not completed."""
-        prompt = f"""Analyze if this exchange indicates an unfinished topic or conversation thread that should continue next session.
-
-Student: {student_text}
-AI: {ai_text}
-
-Look for patterns like: "started X", "we'll continue", "next time", "ran out of time", incomplete explanations, or topics mentioned but not fully explored.
-
-If there's an unfinished topic, return a brief description (max 20 words) of what was started.
-Example: "Started completing the square but ran out of time"
-
-If nothing unfinished, return "None".
-Return ONLY the unfinished topic description or "None", nothing else."""
-
-        try:
-            response = self.model.generate_content(prompt)
-            topic = response.text.strip()
-            return topic if topic.lower() != "none" and len(topic) > 0 else None
-        except Exception as e:
-            logger.warning(f"Error detecting unfinished topic: {e}")
-            return None
-
+        # Deprecated: Included in extract_memories_batch
+        return None

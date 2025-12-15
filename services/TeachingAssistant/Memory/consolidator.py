@@ -2,13 +2,18 @@ import os
 import json
 import time
 import logging
-import threading
+import asyncio
+from typing import Dict, Any, List
 from .schema import MemoryType
 from .vector_store import MemoryStore
 from .extractor import MemoryExtractor
+from ..core.decorators import with_retry, with_circuit_breaker, CircuitBreaker
+from ..core.exceptions import LLMGenerationError
 
 logger = logging.getLogger(__name__)
 
+# Circuit breaker for LLM services
+llm_circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
 
 class SessionClosingCache:
     # Number of user-adam exchanges to collect before triggering memory generation
@@ -17,8 +22,10 @@ class SessionClosingCache:
     def __init__(self, session_id: str, user_id: str):
         self.session_id = session_id
         self.user_id = user_id
-        # Lock to protect exchange_buffer and cache from concurrent updates
-        self._lock = threading.Lock()
+        # Lock not strictly needed if running in single async event loop task, 
+        # but kept for safety if multi-threaded app structure persists.
+        # Switched to asyncio.Lock for async context if needed, but here we keep simple logic.
+        self._lock = asyncio.Lock()
         self.cache = {
             "new_memories": [],
             "emotional_arc": [],
@@ -34,6 +41,7 @@ class SessionClosingCache:
 
         # Clear any existing closing cache from previous session
         self.clear_closing_cache()
+
     
     def clear_closing_cache(self):
         """Clear closing cache file at the start of a new session."""
@@ -66,34 +74,13 @@ class SessionClosingCache:
         except Exception as e:
             logger.error(f"Error clearing closing cache: {e}", exc_info=True)
 
-    def update_after_exchange(self, student_text: str, ai_text: str, topic: str, extractor: MemoryExtractor, store: MemoryStore):
+    async def update_after_exchange(self, student_text: str, ai_text: str, topic: str, extractor: MemoryExtractor, store: MemoryStore):
         """
         Buffer exchanges and extract memories in batches of 3.
         This is called when we receive broadcasts from server.js.
         Thread-safe to avoid race conditions between concurrent updates.
         """
-        with self._lock:
-            # Detect emotion
-            emotion = extractor.detect_emotion(student_text)
-            if emotion:
-                self.cache["emotional_arc"].append(emotion)
-
-            # Detect key moments using LLM
-            key_moment = extractor.detect_key_moments(student_text, ai_text, topic)
-            if key_moment:
-                self.cache["key_moments"].append(key_moment)
-
-            # Detect unfinished topics; ignore very short / garbled fragments
-            unfinished_topic = extractor.detect_unfinished_topics(student_text, ai_text)
-            if unfinished_topic:
-                clean_topic = unfinished_topic.strip()
-                if len(clean_topic) >= 3:
-                    self.cache["unfinished_topics"].append(clean_topic)
-
-            # Track topics
-            if topic and topic not in self.cache["topics_covered"]:
-                self.cache["topics_covered"].append(topic)
-
+        async with self._lock:
             # Buffer the exchange if we have both sides of the dialogue
             if student_text and ai_text:
                 self.exchange_buffer.append({
@@ -101,7 +88,12 @@ class SessionClosingCache:
                     "ai_text": ai_text,
                     "topic": topic or "general"
                 })
-                logger.info(
+                
+                # Track topics (simple deduplication)
+                if topic and topic not in self.cache["topics_covered"]:
+                    self.cache["topics_covered"].append(topic)
+                
+                logger.debug(
                     "Buffered exchange %s/%s",
                     len(self.exchange_buffer),
                     self.USER_EXCHANGES_FOR_MEMORY_GENERATION,
@@ -109,7 +101,7 @@ class SessionClosingCache:
 
                 # Process batch when we reach the threshold
                 if len(self.exchange_buffer) >= self.USER_EXCHANGES_FOR_MEMORY_GENERATION:
-                    self._process_exchange_batch(extractor, store)
+                    await self._process_exchange_batch(extractor, store)
             else:
                 logger.warning(
                     "Missing text for buffering - student_text: %s, ai_text: %s",
@@ -117,9 +109,9 @@ class SessionClosingCache:
                     bool(ai_text),
                 )
     
-    def _process_exchange_batch(self, extractor: MemoryExtractor, store: MemoryStore):
+    async def _process_exchange_batch(self, extractor: MemoryExtractor, store: MemoryStore):
         """Process buffered exchanges and extract memories."""
-        # Caller must hold self._lock
+        # Caller must hold self._lock (async)
         if not self.exchange_buffer:
             return
 
@@ -137,12 +129,25 @@ class SessionClosingCache:
         logger.info("Processing batch of %s exchanges for memory extraction", batch_size)
         
         try:
-            # Extract memories from the batch
-            extracted_memories = extractor.extract_memories_batch(
+            # Extract memories and analysis from the batch
+            # async wrapper for potentially blocking LLM call
+            extraction_result = await asyncio.to_thread(
+                extractor.extract_memories_batch,
                 exchanges=valid_exchanges,
                 student_id=self.user_id,
                 session_id=self.session_id
             )
+            
+            # Unpack results
+            extracted_memories = extraction_result.get("memories", [])
+            emotions = extraction_result.get("emotions", [])
+            key_moments = extraction_result.get("key_moments", [])
+            unfinished_topics = extraction_result.get("unfinished_topics", [])
+            
+            # Update cache with analysis data
+            self.cache["emotional_arc"].extend(emotions)
+            self.cache["key_moments"].extend(key_moments)
+            self.cache["unfinished_topics"].extend(unfinished_topics)
             
             # Save extracted memories to store (Pinecone + local)
             if extracted_memories:
@@ -150,7 +155,9 @@ class SessionClosingCache:
                     "Saving %s memories from batch to store",
                     len(extracted_memories),
                 )
-                store.save_memories_batch(extracted_memories)
+                # Async wrapper for vector store save (network I/O)
+                await asyncio.to_thread(store.save_memories_batch, extracted_memories)
+                
                 # Also add to cache for session consolidation
                 self.cache["new_memories"].extend(extracted_memories)
                 logger.info(
@@ -165,91 +172,115 @@ class SessionClosingCache:
             self.exchange_buffer.clear()
             logger.info("Cleared exchange buffer")
             
-            # Trigger regeneration after each batch of 3 exchanges, but throttle so we
-            # don't regenerate too frequently in very active sessions.
+            # Trigger regeneration after each batch of 3 exchanges, but throttle
             now = time.time()
             last_regen = self.cache.get("last_regen_time", 0)
-            if now - last_regen >= 60:  # at most once per minute during session
+            if now - last_regen >= 60:  # at most once per minute
                 self.cache["last_regen_time"] = now
-                logger.info("Triggering closing cache regeneration (after 3 exchanges)")
-                import threading
-                thread = threading.Thread(target=self._regenerate_closing_sync, args=(extractor,), daemon=True)
-                thread.start()
+                logger.info("Triggering closing cache regeneration (async)")
+                # Fire and forget task
+                asyncio.create_task(self.regenerate_closing_async(extractor))
             
         except Exception as e:
             logger.error(f"Error processing exchange batch: {e}", exc_info=True)
             # Clear buffer even on error to prevent memory buildup
             self.exchange_buffer.clear()
     
-    def flush_remaining_exchanges(self, extractor: MemoryExtractor, store: MemoryStore):
+    async def flush_remaining_exchanges(self, extractor: MemoryExtractor, store: MemoryStore):
         """Process any remaining exchanges in buffer (called at session end)."""
-        if not self.exchange_buffer:
-            logger.info("No remaining exchanges to flush")
-            return
+        async with self._lock:
+            if not self.exchange_buffer:
+                logger.info("No remaining exchanges to flush")
+                return
+            
+            remaining_count = len(self.exchange_buffer)
+            logger.info("Flushing %s remaining exchanges from buffer", remaining_count)
+            await self._process_exchange_batch(extractor, store)
         
-        remaining_count = len(self.exchange_buffer)
-        logger.info("Flushing %s remaining exchanges from buffer", remaining_count)
-        self._process_exchange_batch(extractor, store)
-        
-        # Final regeneration at session end (sync to ensure completion)
+        # Final regeneration at session end
         logger.info("Final closing cache regeneration at session end")
-        self._regenerate_closing_sync(extractor)
+        await self.regenerate_closing_async(extractor)
     
-    def _regenerate_closing_sync(self, extractor: MemoryExtractor):
-        """Regenerate closing cache content using LLM (runs in thread, non-blocking)."""
-        logger.info("Starting closing cache regeneration")
+    async def regenerate_closing_async(self, extractor: MemoryExtractor):
+        """Regenerate closing cache content using LLM (non-blocking async)."""
+        logger.info("Starting closing cache regeneration (consolidated async)")
         
         try:
-            # Generate session summary
-            summary = self._generate_session_summary_sync()
-            if summary:
-                self.cache["session_summary"] = summary
-                logger.info("Generated session_summary: %s...", summary[:100])
+            # Prepare context
+            topics = ', '.join(self.cache["topics_covered"]) if self.cache["topics_covered"] else "general topics"
+            moments = ', '.join(self.cache["key_moments"]) if self.cache["key_moments"] else "None"
+            emotions = ' -> '.join(self.cache["emotional_arc"]) if self.cache["emotional_arc"] else "neutral"
+            unfinished = self.cache.get("unfinished_topics", [])
+            unfinished_str = ', '.join(unfinished) if unfinished else "None"
+            current_emotion = self.cache["emotional_arc"][-1] if self.cache["emotional_arc"] else "neutral"
+
+            # Execute LLM call with retry and circuit breaker logic
+            data = await self._generate_closing_artifacts_call(
+                topics, moments, emotions, current_emotion, unfinished_str
+            )
             
-            # Generate goodbye message
-            goodbye = self._generate_goodbye_message_sync()
-            if goodbye:
-                self.cache["goodbye_message"] = goodbye
-                logger.info("Generated goodbye_message: %s...", goodbye[:100])
-            
-            # Generate next session hooks
-            hooks = self._generate_next_session_hooks_sync()
-            if hooks:
-                self.cache["next_session_hooks"] = hooks
-                logger.info("Generated next_session_hooks: %s", hooks)
-            
-            logger.info("Closing cache regeneration complete")
+            if not data:
+                return
+
+            # Update cache
+            if data.get("summary"):
+                self.cache["session_summary"] = data["summary"]
+            if data.get("goodbye"):
+                self.cache["goodbye_message"] = data["goodbye"]
+            if data.get("hooks"):
+                # Merge with actual unfinished topics
+                generated_hooks = data["hooks"]
+                final_hooks = unfinished[:2] 
+                final_hooks.extend(generated_hooks[:3-len(final_hooks)])
+                self.cache["next_session_hooks"] = final_hooks[:3]
+
+            logger.info("Closing cache regeneration complete (Consolidated Async)")
             
             # Save closing cache in real-time
-            self._save_closing_realtime()
+            await asyncio.to_thread(self._save_closing_realtime)
             
         except Exception as e:
-            logger.error(f"Error in _regenerate_closing_sync: {e}", exc_info=True)
-    
-    def _generate_session_summary_sync(self) -> str:
-        """Generate session summary using LLM (synchronous)."""
+            logger.error(f"Error in regenerate_closing_async: {e}", exc_info=True)
+
+    @with_circuit_breaker(llm_circuit_breaker, fallback_return=None)
+    @with_retry(exceptions=(Exception,), retries=2)
+    async def _generate_closing_artifacts_call(self, topics, moments, emotions, current_emotion, unfinished_str):
+        """Helper to make the actual LLM call, protected by decorators."""
         import google.generativeai as genai
         
-        topics = ', '.join(self.cache["topics_covered"]) if self.cache["topics_covered"] else "general topics"
-        moments = ', '.join(self.cache["key_moments"]) if self.cache["key_moments"] else "None"
-        emotions = ' → '.join(self.cache["emotional_arc"]) if self.cache["emotional_arc"] else "neutral"
-        
-        prompt = f"""Summarize this tutoring session in 1-2 concise sentences.
+        prompt = f"""Analyze this session data and generate closing artifacts.
 
-Topics covered: {topics}
-Key moments: {moments}
-Emotional journey: {emotions}
+Data:
+- Topics: {topics}
+- Key Moments: {moments}
+- Emotional Journey: {emotions} (Ending: {current_emotion})
+- Unfinished Topics: {unfinished_str}
 
-Focus on what was learned and how the student felt. Be specific but brief.
-Return ONLY the summary, nothing else."""
-        
-        try:
+Generate a JSON object with these 3 keys:
+1. "summary": 1-2 conc sentences on what was learned and how they felt.
+2. "goodbye": A warm, natural, personal goodbye message (1-2 sentences) acknowledging their emotion.
+3. "hooks": Array of 2-3 specific, actionable next session limits/topics based on unfinished items or key moments.
+
+Return ONLY valid JSON:
+{{
+  "summary": "...",
+  "goodbye": "...",
+  "hooks": ["...", "..."]
+}}"""
+
+        def _call_gemini():
             model = genai.GenerativeModel("gemini-2.0-flash-lite")
             response = model.generate_content(prompt)
-            return response.text.strip()
-        except Exception as e:
-            logger.error(f"❌ Error generating session_summary: {e}")
-            return ""
+            text = response.text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            return json.loads(text.strip())
+
+        # Offload blocking call to thread
+        return await asyncio.to_thread(_call_gemini)
+
     
     def _generate_goodbye_message_sync(self) -> str:
         """Generate goodbye message based on emotional state using LLM (synchronous)."""
@@ -382,11 +413,11 @@ class MemoryConsolidator:
         self.store = store
         self.extractor = extractor
 
-    def consolidate_session(self, user_id: str, session_id: str, closing_cache: SessionClosingCache):
+    async def consolidate_session(self, user_id: str, session_id: str, closing_cache: SessionClosingCache):
         logger.info("Consolidating session %s for user %s", session_id, user_id)
         
         # Flush any remaining exchanges in buffer (< 3)
-        closing_cache.flush_remaining_exchanges(self.extractor, self.store)
+        await closing_cache.flush_remaining_exchanges(self.extractor, self.store)
         
         # Note: Memories are already saved in real-time batches, no need to save again
         logger.info("All memories already saved in real-time batches")
@@ -398,10 +429,21 @@ class MemoryConsolidator:
             len(closing_cache.cache['topics_covered']),
         )
         
-        self._save_closing(user_id, closing_cache)
-        opening_context = self._generate_opening_context(user_id, closing_cache)
-        self._save_opening(user_id, opening_context)
+        # Offload file I/O to thread
+        await asyncio.to_thread(self._save_closing, user_id, closing_cache)
+        
+        # Generate opening context (LLM calls inside)
+        opening_context = await self._generate_opening_context_async(user_id, closing_cache)
+        
+        await asyncio.to_thread(self._save_opening, user_id, opening_context)
         logger.info("Session consolidation complete for %s", session_id)
+
+    async def _generate_opening_context_async(self, user_id: str, closing_cache: SessionClosingCache) -> dict:
+        """Generate personalized opening context for next session using LLM (Async wrapper)."""
+        logger.info("Generating opening context (async)")
+        # We can implement a similar _generate_opening_context_call protected method 
+        # or just wrap the existing logic in to_thread here for simplicity in this step.
+        return await asyncio.to_thread(self._generate_opening_context, user_id, closing_cache)
 
     def _generate_personal_relevance(self, user_id: str) -> str:
         """Generate time-contextual personal relevance string."""

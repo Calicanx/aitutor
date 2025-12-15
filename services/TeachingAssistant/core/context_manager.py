@@ -88,8 +88,8 @@ class ContextManager:
                 context.last_adam_text = text
                 context.last_adam_turn_time = timestamp
         
-        # Sync to MongoDB (async or periodic)
-        self._sync_to_mongodb(context)
+        # Mark dirty instead of syncing immediately
+        context.is_dirty = True
     
     def _sync_to_mongodb(self, context: SessionContext):
         """Sync context to MongoDB"""
@@ -101,6 +101,18 @@ class ContextManager:
             )
         except Exception as e:
             logger.error(f"[CONTEXT_MANAGER] Error syncing context to MongoDB: {e}")
+            
+    def sync_dirty_contexts(self):
+        """Sync all dirty contexts to MongoDB"""
+        dirty_count = 0
+        for session_id, context in list(self._in_memory_cache.items()):
+            if context.is_dirty:
+                self._sync_to_mongodb(context)
+                context.is_dirty = False
+                dirty_count += 1
+        
+        if dirty_count > 0:
+            logger.debug(f"[CONTEXT_MANAGER] Synced {dirty_count} dirty contexts to MongoDB")
     
     def clear_context(self, session_id: str):
         """Clear context from cache and MongoDB"""
@@ -111,7 +123,3 @@ class ContextManager:
             logger.info(f"[CONTEXT_MANAGER] Cleared context for session {session_id}")
         except Exception as e:
             logger.error(f"[CONTEXT_MANAGER] Error clearing context: {e}")
-    
-
-
-

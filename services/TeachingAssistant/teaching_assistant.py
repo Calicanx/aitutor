@@ -59,6 +59,13 @@ class TeachingAssistant:
         # Greeting handler (memory-aware from v3)
         self.greeting_handler = GreetingHandler()
         
+        # Optimization: Cache active sessions to avoid frequent DB polling
+        self.active_session_cache = []
+        self.last_session_sync_time = 0
+        self.SESSION_SYNC_INTERVAL = 1.0  # Seconds
+        self.last_context_sync_time = 0
+        self.CONTEXT_SYNC_INTERVAL = 2.0  # Seconds
+        
         # Event processing loop
         self.running = False
         
@@ -207,6 +214,8 @@ class TeachingAssistant:
                         continue
                     elif event.type == 'session_end':
                         await self._handle_session_end(event)
+                        # Force refresh active sessions cache
+                        self.last_session_sync_time = 0
                         continue
                     
                     # Update context from event
@@ -271,10 +280,22 @@ class TeachingAssistant:
                             )
                             if context:
                                 setattr(context, "_last_injection", injection.strip())
-            else:
-                # No events - execute skills on all active sessions
-                active_sessions = self.session_manager.list_active_sessions()
-                for session in active_sessions:
+            # === Optimization: Periodic Maintenance Tasks ===
+            now = time.time()
+
+            # 1. Sync dirty contexts to MongoDB (Write-Behind)
+            if now - self.last_context_sync_time >= self.CONTEXT_SYNC_INTERVAL:
+                self.context_manager.sync_dirty_contexts()
+                self.last_context_sync_time = now
+
+            # 2. Refresh active session cache periodically (DB Polling Optimization)
+            if now - self.last_session_sync_time >= self.SESSION_SYNC_INTERVAL:
+                self.active_session_cache = self.session_manager.list_active_sessions()
+                self.last_session_sync_time = now
+                
+            # Execute skills on cached active sessions (instead of querying DB every loop)
+            if not events and self.active_session_cache:
+                for session in self.active_session_cache:
                     session_id = session["session_id"]
                     context = self.context_manager.get_context(session_id)
                     if context:
@@ -292,47 +313,53 @@ class TeachingAssistant:
 
     async def end(self, user_id: str, session_id: str) -> Optional[str]:
         """End session with memory consolidation"""
-        # Get context before clearing
-        context = self.context_manager.get_context(session_id)
-        
-        if context:
-            # Flush any remaining turn
-            context.flush_current_turn()
+        try:
+            # Get context before clearing
+            context = self.context_manager.get_context(session_id)
             
-            # Save conversation
-            await self._save_conversation_async(user_id, session_id, context)
-        
-        # Consolidate memories
-        closing_cache = self.closing_caches.get(session_id)
-        if closing_cache:
-            consolidator = self.memory_consolidators.get(user_id)
-            if consolidator:
-                consolidator.consolidate_session(user_id, session_id, closing_cache)
-            del self.closing_caches[session_id]
-        
-        # Clean up memory retriever
-        memory_retriever = self.memory_retrievers.get(session_id)
-        if memory_retriever:
-            memory_retriever.clear_session(session_id)
-            del self.memory_retrievers[session_id]
-        
-        # Clear context
-        self.context_manager.clear_context(session_id)
-        
-        # Get closing message (memory-aware)
-        closing = self.greeting_handler.end_session(user_id, session_id)
-        
-        # Send closing via instruction queue
-        if closing:
-            await self.injection_manager.send_to_adam(closing, session_id, user_id)
-        
-        return closing
+            if context:
+                # Flush any remaining turn
+                context.flush_current_turn()
+                
+                # Save conversation
+                await self._save_conversation_async(user_id, session_id, context)
+            
+            # Consolidate memories
+            closing_cache = self.closing_caches.get(session_id)
+            if closing_cache:
+                consolidator = self.memory_consolidators.get(user_id)
+                if consolidator:
+                    # Async consolidation
+                    await consolidator.consolidate_session(user_id, session_id, closing_cache)
+                del self.closing_caches[session_id]
+            
+            # Clean up memory retriever
+            memory_retriever = self.memory_retrievers.get(session_id)
+            if memory_retriever:
+                memory_retriever.clear_session(session_id)
+                del self.memory_retrievers[session_id]
+            
+            # Clear context
+            self.context_manager.clear_context(session_id)
+            
+            # Get closing message (memory-aware)
+            closing = self.greeting_handler.end_session(user_id, session_id)
+            
+            # Send closing via instruction queue
+            if closing:
+                await self.injection_manager.send_to_adam(closing, session_id, user_id)
+            
+            return closing
+        except Exception as e:
+            logger.error(f"[TEACHING_ASSISTANT] Error ending session {session_id}: {e}", exc_info=True)
+            return None
 
     async def _trigger_memory_retrieval_async(self, memory_retriever: MemoryRetriever, session_id: str, 
                                                user_id: str, user_text: str, timestamp: float, adam_text: str):
         """Trigger memory retrieval (TA-light and TA-deep) asynchronously and inject memories after completion"""
         try:
             # Run memory retrieval in executor to avoid blocking (Pinecone queries can be slow)
+            # This part remains in executor because on_user_turn is still synchronous but uses threading internally for deep retrieval
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
@@ -366,18 +393,15 @@ class TeachingAssistant:
             # Get user-specific memory store
             memory_store = self._get_or_create_memory_store(user_id)
             
-            # Run memory extraction in executor to avoid blocking
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                closing_cache.update_after_exchange,
+            # Now native async, await directly
+            await closing_cache.update_after_exchange(
                 user_text,
                 adam_text,
                 topic,
                 self.memory_extractor,
                 memory_store
             )
-            logger.info(f"[TEACHING_ASSISTANT] Memory extraction completed for session: {session_id}")
+            logger.debug(f"[TEACHING_ASSISTANT] Memory extraction step completed for session: {session_id}")
         except Exception as e:
             logger.error(f"[TEACHING_ASSISTANT] Error in async memory extraction: {e}", exc_info=True)
 
@@ -417,6 +441,10 @@ class TeachingAssistant:
 
     async def _handle_session_end(self, event):
         """Handle session end event"""
-        session = self.session_manager.get_session_by_id(event.session_id)
-        if session:
-            await self.end(session["user_id"], event.session_id)
+        try:
+            session = self.session_manager.get_session_by_id(event.session_id)
+            if session:
+                await self.end(session["user_id"], event.session_id)
+        except Exception as e:
+             logger.error(f"[TEACHING_ASSISTANT] Error in _handle_session_end: {e}", exc_info=True)
+
