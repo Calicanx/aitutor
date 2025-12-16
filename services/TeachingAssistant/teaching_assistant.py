@@ -6,12 +6,18 @@ Integrates memory management, skills system, and event-driven processing.
 
 import asyncio
 import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Optional, Dict, Any
 
-from .greeting_handler import GreetingHandler
+from .skills.greeting import GreetingSkill
 from .session_manager import SessionManager
 from .core.context_manager import ContextManager
 from .core.event_processor import EventProcessor
+from .core.config import TeachingAssistantConfig
+from .core.decorators import with_retry
+from .core.exceptions import MemoryRetrievalError, MemoryConsolidationError, FileOperationError
+from .core.file_utils import save_json_file
 from .handlers.queue_manager import EventQueueManager
 from .handlers.injection_manager import InjectionManager
 from .skills_manager import SkillsManager
@@ -29,25 +35,53 @@ logger = get_logger(__name__)
 
 class TeachingAssistant:
     """
-    Enhanced TeachingAssistant with memory management, skills, and event processing.
+    TeachingAssistant with memory management, skills, and event processing.
+    
+    Now includes:
+    - Dependency injection for testability
+    - Centralized configuration
+    - Managed thread pool for blocking I/O
+    - Path handling with pathlib
+    - Enhanced error handling
+    
     Maintains backward compatibility with existing API methods.
     """
 
-    def __init__(self):
-        # MongoDB session manager (existing)
+    def __init__(
+        self,
+        session_manager: Optional[SessionManager] = None,
+        context_manager: Optional[ContextManager] = None,
+        injection_manager: Optional[InjectionManager] = None,
+        skills_manager: Optional[SkillsManager] = None,
+        config: Optional[TeachingAssistantConfig] = None
+    ):
+        """
+        Initialize TeachingAssistant with dependency injection support.
+        
+        Args:
+            session_manager: Optional SessionManager instance (creates default if None)
+            context_manager: Optional ContextManager instance (creates default if None)
+            injection_manager: Optional InjectionManager instance (creates default if None)
+            skills_manager: Optional SkillsManager instance (creates default if None)
+            config: Optional configuration (loads from environment if None)
+        """
+        # Configuration (load from environment or use default)
+        self.config = config or TeachingAssistantConfig.from_env()
+        
+        # MongoDB client (shared dependency)
         mongo = MongoDBManager()
-        self.session_manager = SessionManager(mongo)
+        
+        # Core components (with dependency injection)
+        self.session_manager = session_manager or SessionManager(mongo, self.config)
+        self.context_manager = context_manager or ContextManager(mongo, self.config)
+        self.injection_manager = injection_manager or InjectionManager(self.session_manager, self.config)
         
         # Event processing components
         self.queue_manager = EventQueueManager()
-        self.context_manager = ContextManager()
         self.event_processor = EventProcessor(self.context_manager, None)  # Skills added later
         
-        # Injection manager (uses MongoDB queue)
-        self.injection_manager = InjectionManager()
-        
         # Skills system
-        self.skills_manager = SkillsManager()
+        self.skills_manager = skills_manager or SkillsManager()
         
         # Memory system
         self.memory_stores: Dict[str, MemoryStore] = {}
@@ -56,15 +90,20 @@ class TeachingAssistant:
         self.memory_retrievers: Dict[str, MemoryRetriever] = {}
         self.closing_caches: Dict[str, SessionClosingCache] = {}
         
-        # Greeting handler (memory-aware from v3)
-        self.greeting_handler = GreetingHandler()
+        # Greeting Skill (with config injection)
+        self.greeting_skill = GreetingSkill(self.config)
+        self.skills_manager.register_skill(self.greeting_skill)
+        
+        # Thread pool for blocking I/O operations (managed lifecycle)
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.config.io_thread_pool_workers,
+            thread_name_prefix=self.config.thread_name_prefix
+        )
         
         # Optimization: Cache active sessions to avoid frequent DB polling
         self.active_session_cache = []
         self.last_session_sync_time = 0
-        self.SESSION_SYNC_INTERVAL = 1.0  # Seconds
         self.last_context_sync_time = 0
-        self.CONTEXT_SYNC_INTERVAL = 2.0  # Seconds
         
         # Event processing loop
         self.running = False
@@ -72,12 +111,15 @@ class TeachingAssistant:
         # Update event processor with skills manager
         self.event_processor.skills_manager = self.skills_manager
         
-        logger.info("[TEACHING_ASSISTANT] Initialized with MongoDB-backed session manager, memory system, and skills")
+        logger.info(
+            "[TEACHING_ASSISTANT] Initialized with config-driven architecture, "
+            f"thread pool ({self.config.io_thread_pool_workers} workers), and dependency injection"
+        )
 
     def start_session(self, user_id: str) -> dict:
         """Start a new session, returns greeting prompt and session info"""
         session = self.session_manager.create_session(user_id)
-        greeting = self.greeting_handler.get_greeting(user_id)
+        greeting = self.greeting_skill.get_greeting(user_id)
         return {
             "session_id": session["session_id"],
             "prompt": greeting,
@@ -93,7 +135,7 @@ class TeachingAssistant:
                 "session_info": {"session_active": False}
             }
 
-        closing = self.greeting_handler.get_closing(
+        closing = self.greeting_skill.get_closing(
             duration_minutes=session_summary.get("duration_minutes", 0),
             questions_answered=session_summary.get("questions_answered", 0)
         )
@@ -118,7 +160,7 @@ class TeachingAssistant:
     def check_inactivity(self, session_id: str) -> Optional[str]:
         """Check inactivity and return prompt if needed"""
         if self.session_manager.check_inactivity(session_id):
-            prompt = self.greeting_handler.get_inactivity_prompt()
+            prompt = self.greeting_skill.get_inactivity_prompt()
             self.session_manager.push_instruction(session_id, prompt)
             return prompt
         return None
@@ -184,7 +226,9 @@ class TeachingAssistant:
 
         
         # Get greeting (memory-aware)
-        greeting = self.greeting_handler.start_session(user_id, session_id)
+        logger.info(f"[TEACHING_ASSISTANT] Requesting greeting for session {session_id}")
+        greeting = self.greeting_skill.start_session(user_id, session_id)
+        logger.info(f"[TEACHING_ASSISTANT] Greeting received: {bool(greeting)}, Length: {len(greeting) if greeting else 0}")
 
         # Also record greeting into conversation context so it appears in saved history
         context = self.context_manager.get_context(session_id)
@@ -193,9 +237,15 @@ class TeachingAssistant:
             ts = context.start_time or time.time()
             context.add_turn(speaker="adam", text=greeting, timestamp=ts)
 
-        # Send greeting via instruction queue
-        if greeting:
-            await self.injection_manager.send_to_adam(greeting, session_id, user_id)
+        # Send greeting via instruction queue - REMOVED to avoid duplicates
+        # The greeting is returned to the API and sent in the HTTP response instead
+        # if greeting:
+        #     logger.info(f"[TEACHING_ASSISTANT] Sending greeting to injection manager for session {session_id}")
+        #     await self.injection_manager.send_to_adam(greeting, session_id, user_id)
+        #     logger.info(f"[TEACHING_ASSISTANT] Greeting sent successfully")
+        # else:
+        #     if not greeting:
+        #         logger.warning(f"[TEACHING_ASSISTANT] No greeting generated for session {session_id}")
 
         return greeting
 
@@ -203,7 +253,7 @@ class TeachingAssistant:
         """Main event processing loop"""
         while self.running:
             # Dequeue batch of events
-            events = self.queue_manager.dequeue_batch(max_batch_size=5)
+            events = self.queue_manager.dequeue_batch(max_batch_size=self.config.event_batch_size)
             
             if events:
                 for event in events:
@@ -238,9 +288,9 @@ class TeachingAssistant:
                             # Trigger TA-light retrieval (async) but debounce to avoid
                             # running on every tiny turn in very quick succession.
                             if memory_retriever:
-                                # simple debounce: skip if last retrieval was < 5s ago
+                                # simple debounce: skip if last retrieval was < Ns ago
                                 last_rt = context.last_retrieval_time or 0
-                                if (timestamp - last_rt) >= 5.0:
+                                if (timestamp - last_rt) >= self.config.memory_retrieval_debounce:
                                     context.last_retrieval_time = timestamp
                                     asyncio.create_task(self._trigger_memory_retrieval_async(
                                         memory_retriever=memory_retriever,
@@ -284,12 +334,12 @@ class TeachingAssistant:
             now = time.time()
 
             # 1. Sync dirty contexts to MongoDB (Write-Behind)
-            if now - self.last_context_sync_time >= self.CONTEXT_SYNC_INTERVAL:
+            if now - self.last_context_sync_time >= self.config.context_sync_interval:
                 self.context_manager.sync_dirty_contexts()
                 self.last_context_sync_time = now
 
             # 2. Refresh active session cache periodically (DB Polling Optimization)
-            if now - self.last_session_sync_time >= self.SESSION_SYNC_INTERVAL:
+            if now - self.last_session_sync_time >= self.config.session_sync_interval:
                 self.active_session_cache = self.session_manager.list_active_sessions()
                 self.last_session_sync_time = now
                 
@@ -308,8 +358,10 @@ class TeachingAssistant:
                                     session["user_id"]
                                 )
             
+            
+            # Continuous processing - yield to event loop to prevent starvation
             if not events:
-                await asyncio.sleep(0.01)  # Small delay when no events
+                await asyncio.sleep(0)  # Yield control without delay
 
     async def end(self, user_id: str, session_id: str) -> Optional[str]:
         """End session with memory consolidation"""
@@ -343,11 +395,19 @@ class TeachingAssistant:
             self.context_manager.clear_context(session_id)
             
             # Get closing message (memory-aware)
-            closing = self.greeting_handler.end_session(user_id, session_id)
+            logger.info(f"[TEACHING_ASSISTANT] Requesting closing for session {session_id}")
+            closing = self.greeting_skill.end_session(user_id, session_id)
+            logger.info(f"[TEACHING_ASSISTANT] Closing received: {bool(closing)}, Length: {len(closing) if closing else 0}")
             
-            # Send closing via instruction queue
-            if closing:
-                await self.injection_manager.send_to_adam(closing, session_id, user_id)
+            # Send closing via instruction queue - REMOVED to avoid duplicates
+            # The closing is returned to the API and sent in the HTTP response instead
+            # if closing:
+            #     logger.info(f"[TEACHING_ASSISTANT] Sending closing to injection manager for session {session_id}")
+            #     await self.injection_manager.send_to_adam(closing, session_id, user_id)
+            #     logger.info(f"[TEACHING_ASSISTANT] Closing sent successfully")
+            # else:
+            #     if not closing:
+            #         logger.warning(f"[TEACHING_ASSISTANT] No closing generated for session {session_id}")
             
             return closing
         except Exception as e:
@@ -356,13 +416,15 @@ class TeachingAssistant:
 
     async def _trigger_memory_retrieval_async(self, memory_retriever: MemoryRetriever, session_id: str, 
                                                user_id: str, user_text: str, timestamp: float, adam_text: str):
-        """Trigger memory retrieval (TA-light and TA-deep) asynchronously and inject memories after completion"""
+        """
+        Trigger memory retrieval (TA-light and TA-deep) asynchronously and inject memories after completion.
+        Uses managed thread pool for blocking Pinecone operations.
+        """
         try:
-            # Run memory retrieval in executor to avoid blocking (Pinecone queries can be slow)
-            # This part remains in executor because on_user_turn is still synchronous but uses threading internally for deep retrieval
+            # Run memory retrieval in managed executor to avoid blocking
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
-                None,
+                self._executor,  # Use managed executor instead of None
                 memory_retriever.on_user_turn,
                 session_id,
                 user_id,
@@ -382,7 +444,8 @@ class TeachingAssistant:
                     user_id
                 )
         except Exception as e:
-            logger.error(f"[TEACHING_ASSISTANT] Error in async memory retrieval: {e}", exc_info=True)
+            # Wrap in specific exception for better error tracking
+            raise MemoryRetrievalError(f"Memory retrieval failed for session {session_id}") from e
 
     async def _extract_memories_async(self, closing_cache, user_text: str, adam_text: str, topic: str, session_id: str):
         """Extract memories asynchronously without blocking the event loop"""
@@ -406,21 +469,32 @@ class TeachingAssistant:
             logger.error(f"[TEACHING_ASSISTANT] Error in async memory extraction: {e}", exc_info=True)
 
     async def _save_conversation_async(self, user_id: str, session_id: str, context):
-        """Save conversation to file (non-blocking via thread executor)"""
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._save_conversation_sync, user_id, session_id, context)
+        """Save conversation to file (non-blocking via managed thread executor)"""
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                self._executor,  # Use managed executor
+                self._save_conversation_sync,
+                user_id,
+                session_id,
+                context
+            )
+        except Exception as e:
+            raise FileOperationError(f"Failed to save conversation for session {session_id}") from e
     
     def _save_conversation_sync(self, user_id: str, session_id: str, context):
-        """Synchronous file save (runs in thread executor)"""
-        import os
-        import json
+        """
+        Synchronous file save (runs in thread executor).
+        Now uses pathlib and file_utils for better path handling.
+        """
         from datetime import datetime
         
         try:
-            data_dir = f"services/TeachingAssistant/Memory/data/{user_id}/conversations"
-            os.makedirs(data_dir, exist_ok=True)
+            # Use pathlib for cross-platform compatibility
+            data_dir = self.config.get_conversations_path(user_id)
+            data_dir.mkdir(parents=True, exist_ok=True)
             
-            file_path = f"{data_dir}/{session_id}.json"
+            file_path = data_dir / f"{session_id}.json"
             conversation_data = {
                 "session_id": session_id,
                 "user_id": user_id,
@@ -430,10 +504,11 @@ class TeachingAssistant:
                 "turns": context.conversation_turns
             }
             
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(conversation_data, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"[TEACHING_ASSISTANT] Saved conversation to {file_path} ({len(context.conversation_turns)} turns)")
+            # Use file_utils for consistent error handling
+            if save_json_file(file_path, conversation_data):
+                logger.info(f"[TEACHING_ASSISTANT] Saved conversation to {file_path} ({len(context.conversation_turns)} turns)")
+            else:
+                raise FileOperationError(f"Failed to save conversation to {file_path}")
         except Exception as e:
             logger.error(f"[TEACHING_ASSISTANT] Error saving conversation: {e}", exc_info=True)
 
@@ -448,3 +523,21 @@ class TeachingAssistant:
         except Exception as e:
              logger.error(f"[TEACHING_ASSISTANT] Error in _handle_session_end: {e}", exc_info=True)
 
+    async def shutdown(self):
+        """
+        Graceful shutdown of TeachingAssistant.
+        Ensures all resources are properly cleaned up.
+        """
+        logger.info("[TEACHING_ASSISTANT] Initiating graceful shutdown...")
+        
+        # Stop the event processing loop
+        self.running = False
+        
+        # Wait a moment for ongoing operations to complete
+        await asyncio.sleep(0.5)
+        
+        # Shutdown the thread pool executor
+        self._executor.shutdown(wait=True, cancel_futures=False)
+        logger.info("[TEACHING_ASSISTANT] Thread pool executor shut down")
+        
+        logger.info("[TEACHING_ASSISTANT] Shutdown complete")

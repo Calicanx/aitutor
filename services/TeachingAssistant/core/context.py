@@ -27,7 +27,6 @@ class SessionContext:
     last_adam_text: Optional[str] = None
 
     conversation_turns: List[dict] = field(default_factory=list)
-    MAX_CONVERSATION_HISTORY: int = 50
 
     last_activity_time: float = field(default_factory=time.time)
     last_question_time: Optional[float] = None
@@ -81,10 +80,6 @@ class SessionContext:
                 {"speaker": speaker, "text": text, "timestamp": timestamp}
             )
 
-        # Enforce max history
-        if len(self.conversation_turns) > self.MAX_CONVERSATION_HISTORY:
-            self.conversation_turns = self.conversation_turns[-self.MAX_CONVERSATION_HISTORY :]
-
         # Update last speaker and text for memory extraction
         if speaker == "user":
             self.last_user_text = text
@@ -121,7 +116,7 @@ class SessionContext:
             "last_adam_turn_time": self.last_adam_turn_time,
             "last_user_text": self.last_user_text,
             "last_adam_text": self.last_adam_text,
-            "conversation_turns": self.conversation_turns[-10:],  # Last 10 turns for MongoDB
+            "conversation_turns": self.conversation_turns,  # Save all turns to MongoDB
             "last_activity_time": self.last_activity_time,
             "last_question_time": self.last_question_time,
             "questions_attempted": self.questions_attempted,

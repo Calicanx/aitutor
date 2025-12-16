@@ -259,14 +259,11 @@ async def start_session(http_request: Request, request: Optional[StartSessionReq
         )
         ta.queue_manager.enqueue(start_event)
         
-        # IMPORTANT:
-        # - The initial greeting is now delivered via the SSE instruction queue
-        #   (see TeachingAssistant.start -> InjectionManager).
-        # - To avoid double-injecting the same greeting (once as Adam's system
-        #   prompt and once as a SYSTEM INSTRUCTION), we return an empty prompt
-        #   here and let the frontend rely on SSE for the greeting.
+        # UPDATED: Return greeting in response for immediate delivery
+        # Also sent via SSE for systems that listen to instruction queue
+        # This ensures backward compatibility with frontends expecting prompt in response
         return PromptResponse(
-            prompt="",
+            prompt=greeting or "",  # Return greeting directly (not empty!)
             session_info=result["session_info"]
         )
     except Exception as e:
@@ -362,8 +359,10 @@ async def end_session(http_request: Request, request: Optional[EndSessionRequest
         except Exception as e:
             logger.error(f"[PRELOAD] Failed to start pre-loading thread: {e}")
 
+        
+        # Return closing message directly (also sent via SSE)
         return PromptResponse(
-            prompt=result["prompt"],
+            prompt=closing or result["prompt"],  # Use memory-aware closing or fallback
             session_info=result["session_info"]
         )
     except Exception as e:

@@ -8,6 +8,7 @@ import time
 import logging
 
 from .context import SessionContext, Event
+from .config import TeachingAssistantConfig
 from managers.mongodb_manager import MongoDBManager
 
 logger = logging.getLogger(__name__)
@@ -19,10 +20,10 @@ class ContextManager:
     Uses in-memory cache for performance, syncs to MongoDB periodically.
     """
     
-    def __init__(self):
-        mongo = MongoDBManager()
-        self.db = mongo.db
+    def __init__(self, mongo_client, config: Optional[TeachingAssistantConfig] = None):
+        self.db = mongo_client.db
         self.contexts = self.db.session_contexts
+        self.config = config or TeachingAssistantConfig()
         self._in_memory_cache = {}  # Cache for performance
         self._ensure_indexes()
     

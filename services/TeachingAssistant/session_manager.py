@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 import uuid
 
+from .core.config import TeachingAssistantConfig
 from shared.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -19,12 +20,10 @@ class SessionManager:
     Enables multi-user support and survives Cloud Run restarts.
     """
 
-    INACTIVITY_THRESHOLD_SECONDS = 60
-    GRACE_PERIOD_SECONDS = 60
-
-    def __init__(self, mongo_client):
+    def __init__(self, mongo_client, config: Optional[TeachingAssistantConfig] = None):
         self.db = mongo_client.db
         self.sessions = self.db.sessions
+        self.config = config or TeachingAssistantConfig()
         self._ensure_indexes()
 
     def _ensure_indexes(self):
@@ -33,8 +32,6 @@ class SessionManager:
             self.sessions.create_index("user_id")
             self.sessions.create_index("session_id", unique=True)
             self.sessions.create_index([("is_active", 1), ("user_id", 1)])
-            # TTL index for automatic cleanup (documents expire at expires_at time)
-            self.sessions.create_index("expires_at", expireAfterSeconds=0)
             logger.info("[SESSION_MANAGER] Indexes ensured on sessions collection")
         except Exception as e:
             logger.error(f"[SESSION_MANAGER] Failed to create indexes: {e}")
@@ -59,7 +56,6 @@ class SessionManager:
             "pending_instructions": [],
             "websocket_connected": False,
             "sse_connected": False,
-            "expires_at": now + timedelta(hours=24),
             "inactivity_prompt_sent": False,  # Track if we've sent an inactivity prompt
         }
         self.sessions.insert_one(session)
@@ -88,8 +84,7 @@ class SessionManager:
             {"session_id": session_id},
             {
                 "$set": {
-                    "last_activity": now,
-                    "expires_at": now + timedelta(hours=24)
+                    "last_activity": now
                 }
             }
         )
@@ -103,7 +98,6 @@ class SessionManager:
                 "$set": {
                     "last_conversation_turn": now,
                     "last_activity": now,
-                    "expires_at": now + timedelta(hours=24),
                     "inactivity_prompt_sent": False  # Reset on activity
                 }
             }
@@ -120,7 +114,6 @@ class SessionManager:
             "$set": {
                 "last_question_submission": now,
                 "last_activity": now,
-                "expires_at": now + timedelta(hours=24),
                 "inactivity_prompt_sent": False  # Reset on activity
             },
             "$inc": {
@@ -255,8 +248,8 @@ class SessionManager:
         now = datetime.utcnow()
         started_at = session["started_at"]
 
-        # Grace period: don't check inactivity for first 60 seconds
-        if (now - started_at).total_seconds() < self.GRACE_PERIOD_SECONDS:
+        # Grace period: don't check inactivity for first N seconds
+        if (now - started_at).total_seconds() < self.config.grace_period:
             return False
 
         # Get the most recent activity time
@@ -265,7 +258,7 @@ class SessionManager:
         last_activity = max(last_conversation, last_question)
 
         inactive_seconds = (now - last_activity).total_seconds()
-        is_inactive = inactive_seconds >= self.INACTIVITY_THRESHOLD_SECONDS
+        is_inactive = inactive_seconds >= self.config.inactivity_threshold
 
         if is_inactive:
             # Mark that we've sent a prompt to avoid spamming
