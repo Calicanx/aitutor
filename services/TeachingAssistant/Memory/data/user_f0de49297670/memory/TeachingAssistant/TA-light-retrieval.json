@@ -1,0 +1,24 @@
+[
+  {
+    "session_id": "sess_420e647f3bd04178",
+    "timestamp": 1765851458.7341278,
+    "results": [
+      {
+        "memory": {
+          "id": "7a59263f-be44-46a3-af47-18f61d6cff3e",
+          "type": "academic",
+          "text": "The student is currently engaged in math.",
+          "importance": 0.7,
+          "student_id": "user_f0de49297670",
+          "session_id": "sess_2cc90293e3f94b14",
+          "timestamp": "2025-12-16T07:39:03.959515",
+          "metadata": {
+            "emotion": "neutral",
+            "topic": "math"
+          }
+        },
+        "score": 0.743723333
+      }
+    ]
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "session_id": "sess_420e647f3bd04178",
+  "user_id": "user_f0de49297670",
+  "start_time": "2025-12-16T02:17:23.909000",
+  "end_time": "2025-12-16T07:47:57.591196",
+  "turn_count": 1,
+  "turns": [
+    {
+      "speaker": "adam",
+      "text": "[SYSTEM PROMPT FOR ADAM] You are starting a tutoring session. Please greet the student warmly and ask how they're doing today. Make them feel welcome and excited to learn.",
+      "timestamp": 1765831643.909
+    },
+    {
+      "speaker": "tutor",
+      "text": "Hey there! How are you doing today? Ready to jump into some math together?",
+      "timestamp": 1765851448.717
+    },
+    {
+      "speaker": "user",
+      "text": "Yes.",
+      "timestamp": 1765851455.966
+    },
+    {
+      "speaker": "tutor",
+      "text": "**Acknowledge and Inquire** Great! I've recognized the user's positive response and confirmed their presence. Now, I'm shifting focus to understanding their needs. What specific area are we collaborating on today? Let's delve into their goals. That's the spirit! What would you like to work on today? Any particular topics or problems you had in mind? Great! Let's dive into some math then. What equation do you want to start with?",
+      "timestamp": 1765851468.055
+    }
+  ]
+}

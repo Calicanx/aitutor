@@ -324,15 +324,16 @@ async def end_session(http_request: Request, request: Optional[EndSessionRequest
         # End session with memory consolidation (new method)
         closing = await ta.end(user_id, session_id)
         
-        # Create session_end event
-        end_event = Event(
-            type="session_end",
-            timestamp=time.time(),
-            session_id=session_id,
-            user_id=user_id,
-            data={"session_id": session_id, "user_id": user_id}
-        )
-        ta.queue_manager.enqueue(end_event)
+        # Session end event is NO LONGER needed here because we called ta.end() directly above
+        # Queuing it would cause the event loop to call ta.end() a second time!
+        # end_event = Event(
+        #     type="session_end",
+        #     timestamp=time.time(),
+        #     session_id=session_id,
+        #     user_id=user_id,
+        #     data={"session_id": session_id, "user_id": user_id}
+        # )
+        # ta.queue_manager.enqueue(end_event)
         
         # Get session summary (existing method for stats)
         result = ta.end_session(session_id)
