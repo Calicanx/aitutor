@@ -25,7 +25,9 @@ import "./auth.scss";
 // Zod Schema for Validation
 const signupSchema = z.object({
   userType: z.enum(["student", "parent"]),
-  age: z.coerce.number().min(5, "Age must be at least 5").max(18, "Age must be under 18"),
+  dateOfBirth: z.string().min(1, "Date of birth is required"),
+  gender: z.string().min(1, "Please select your gender"),
+  preferredLanguage: z.string().min(1, "Please select your preferred language"),
   // Step 2
   subjects: z.array(z.string()).min(1, "Select at least one subject"),
   learningGoals: z.array(z.string()).min(1, "Select at least one goal"),
@@ -73,6 +75,8 @@ const LEARNING_STYLES = [
   { value: "kinesthetic", label: "Kinesthetic (I learn by doing)", icon: "sports_handball" },
   { value: "reading", label: "Reading/Writing (I learn by reading)", icon: "menu_book" },
 ];
+const LANGUAGES = ["English", "Hindi", "Spanish", "French"];
+const GENDERS = ["Male", "Female", "Other", "Prefer not to say"];
 
 
 const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onComplete, onCancel }) => {
@@ -90,7 +94,9 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
     resolver: zodResolver(signupSchema) as any,
     defaultValues: {
       userType: "student",
-      age: undefined,
+      dateOfBirth: "",
+      gender: "",
+      preferredLanguage: "",
       subjects: [],
       learningGoals: [],
       interests: [],
@@ -102,7 +108,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
   const nextStep = async () => {
     let isValidStep = false;
     if (step === 1) {
-      isValidStep = await trigger(["userType", "age"]);
+      isValidStep = await trigger(["userType", "dateOfBirth", "gender", "preferredLanguage"]);
     } else if (step === 2) {
       isValidStep = await trigger(["subjects", "learningGoals"]);
     }
@@ -121,7 +127,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
     setSubmitError("");
 
     try {
-      const response = await authAPI.completeSetup(setupToken, data.userType, data.age, {
+      const response = await authAPI.completeSetup(setupToken, data.userType, data.dateOfBirth, data.gender, data.preferredLanguage, {
         subjects: data.subjects,
         learningGoals: data.learningGoals,
         interests: data.interests,
@@ -204,24 +210,19 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
                 </div>
 
                 <div className="space-y-3">
-                  <Label htmlFor="age" className="text-base font-semibold">
-                    How old are you?
+                  <Label htmlFor="dateOfBirth" className="text-base font-semibold">
+                    What's your date of birth?
                   </Label>
                   <Controller
-                    name="age"
+                    name="dateOfBirth"
                     control={control}
                     render={({ field }) => (
                       <div className="relative">
                         <Input
                           {...field}
-                          value={field.value ?? ''}
-                          id="age"
-                          type="number"
-                          placeholder="Enter age (5-18)"
+                          id="dateOfBirth"
+                          type="date"
                           className="h-12 text-lg"
-                          onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                          min={5}
-                          max={18}
                         />
                         <div className="absolute right-3 top-3 text-muted-foreground">
                           <span className="material-symbols-outlined">cake</span>
@@ -229,7 +230,57 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
                       </div>
                     )}
                   />
-                  {errors.age && <p className="text-sm font-medium text-destructive">{errors.age.message}</p>}
+                  {errors.dateOfBirth && <p className="text-sm font-medium text-destructive">{errors.dateOfBirth.message}</p>}
+                </div>
+
+                <div className="space-y-3">
+                  <Label htmlFor="gender" className="text-base font-semibold">
+                    What's your gender?
+                  </Label>
+                  <Controller
+                    name="gender"
+                    control={control}
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger className="h-12 text-lg">
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GENDERS.map((gender) => (
+                            <SelectItem key={gender} value={gender}>
+                              {gender}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  {errors.gender && <p className="text-sm font-medium text-destructive">{errors.gender.message}</p>}
+                </div>
+
+                <div className="space-y-3">
+                  <Label htmlFor="preferredLanguage" className="text-base font-semibold">
+                    What language are you most comfortable in?
+                  </Label>
+                  <Controller
+                    name="preferredLanguage"
+                    control={control}
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger className="h-12 text-lg">
+                          <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LANGUAGES.map((language) => (
+                            <SelectItem key={language} value={language}>
+                              {language}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  {errors.preferredLanguage && <p className="text-sm font-medium text-destructive">{errors.preferredLanguage.message}</p>}
                 </div>
               </div>
             )}

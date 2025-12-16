@@ -28,6 +28,7 @@ import { HintProvider } from "./contexts/HintContext";
 import { Toaster } from "@/components/ui/sonner";
 import { useMediaMixer } from "./hooks/useMediaMixer";
 import { useMediaCapture } from "./hooks/useMediaCapture";
+import { useDeveloperMode } from "./hooks/use-developer-mode";
 
 // Lazy load heavy components
 const SidePanel = lazy(() => import("./components/side-panel/SidePanel"));
@@ -36,6 +37,9 @@ const ScratchpadCapture = lazy(() => import("./components/scratchpad-capture/Scr
 const FloatingControlPanel = lazy(() => import("./components/floating-control-panel/FloatingControlPanel"));
 
 function App() {
+  // Developer mode hook for Gemini Console visibility
+  const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
+
   // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
   // feel free to style as you see fit
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -107,6 +111,19 @@ function App() {
     }
   }, [mixerStream]);
 
+  // Keyboard shortcut for developer mode (Ctrl+Shift+D)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        toggleDeveloperMode();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleDeveloperMode]);
+
   return (
     <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
       <div className="App">
@@ -119,10 +136,12 @@ function App() {
               />
               <div className="streaming-console">
                 <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
-                  <SidePanel
-                    open={isSidebarOpen}
-                    onToggle={toggleSidebar}
-                  />
+                  {isDeveloperMode && (
+                    <SidePanel
+                      open={isSidebarOpen}
+                      onToggle={toggleSidebar}
+                    />
+                  )}
                   <GradingSidebar
                     open={isGradingSidebarOpen}
                     onToggle={toggleGradingSidebar}

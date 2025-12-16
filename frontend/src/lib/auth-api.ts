@@ -44,7 +44,9 @@ class AuthAPI {
   async completeSetup(
     setupToken: string,
     userType: string,
-    age: number,
+    dateOfBirth: string,
+    gender: string,
+    preferredLanguage: string,
     profileData: {
       subjects: string[];
       learningGoals: string[];
@@ -60,7 +62,9 @@ class AuthAPI {
       body: JSON.stringify({
         setup_token: setupToken,
         user_type: userType,
-        age: age,
+        date_of_birth: dateOfBirth,
+        gender: gender,
+        preferred_language: preferredLanguage,
         subjects: profileData.subjects,
         learning_goals: profileData.learningGoals,
         interests: profileData.interests,
@@ -71,6 +75,59 @@ class AuthAPI {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'Setup failed');
+    }
+
+    return response.json();
+  }
+
+  async emailSignup(
+    email: string,
+    password: string,
+    name: string,
+    dateOfBirth: string,
+    gender: string,
+    preferredLanguage: string,
+    userType: string = "student"
+  ): Promise<AuthResponse> {
+    const response = await fetch(`${AUTH_SERVICE_URL}/auth/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        name,
+        date_of_birth: dateOfBirth,
+        gender,
+        preferred_language: preferredLanguage,
+        user_type: userType
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Signup failed');
+    }
+
+    return response.json();
+  }
+
+  async emailLogin(email: string, password: string): Promise<AuthResponse> {
+    const response = await fetch(`${AUTH_SERVICE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Login failed');
     }
 
     return response.json();
