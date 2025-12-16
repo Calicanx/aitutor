@@ -1832,6 +1832,22 @@
     }
   }
 
+  .neo-ref-button-yellow {
+    background: var(--neo-secondary);
+    color: var(--neo-black);
+    font-size: 16px;
+    padding: 18px 48px;
+
+    @media (min-width: 768px) {
+      font-size: 18px;
+      padding: 22px 56px;
+    }
+
+    &:hover {
+      background: var(--neo-secondary);
+    }
+  }
+
   .neo-ref-button-massive {
     background: var(--neo-black);
     color: var(--neo-white);

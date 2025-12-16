@@ -4,6 +4,7 @@
  * Visual style matching the reference screenshots
  */
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import TeachrLogo from './TeachrLogo';
 import './landing.scss';
 
@@ -56,6 +57,9 @@ const LandingPageNeo: React.FC<LandingPageNeoProps> = ({ onGetStarted }) => {
                 <button onClick={onGetStarted} className="neo-ref-button neo-ref-button-cta">
                   TRY IT FREE
                 </button>
+                <Link to="/app/pricing" className="neo-ref-button neo-ref-button-yellow">
+                  PRICING
+                </Link>
                 <div className="neo-ref-badge neo-ref-badge-rotate">NO CREDIT CARD</div>
               </div>
             </div>
