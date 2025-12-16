@@ -133,6 +133,8 @@ function App() {
               <Header
                 sidebarOpen={isSidebarOpen}
                 onToggleSidebar={toggleSidebar}
+                isDeveloperMode={isDeveloperMode}
+                onToggleDeveloperMode={toggleDeveloperMode}
               />
               <div className="streaming-console">
                 <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
@@ -148,7 +150,7 @@ function App() {
                     currentSkill={currentSkill}
                   />
                   <main style={{
-                    marginRight: isSidebarOpen ? "260px" : "0",
+                    marginRight: (isDeveloperMode && isSidebarOpen) ? "260px" : "0",
                     marginLeft: isGradingSidebarOpen ? "260px" : "40px",
                     transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
                   }}>
