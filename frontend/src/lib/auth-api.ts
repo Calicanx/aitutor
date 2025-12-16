@@ -33,6 +33,18 @@ export interface SetupResponse {
   setup_token: string;
 }
 
+export interface AccountInfo {
+  user_id: string;
+  email: string;
+  name: string;
+  date_of_birth: string;
+  location: string;
+  credits: {
+    balance: number;
+    currency: string;
+  };
+}
+
 class AuthAPI {
   async getGoogleAuthUrl(): Promise<{ authorization_url: string; state: string }> {
     const response = await fetch(`${AUTH_SERVICE_URL}/auth/google`);
@@ -143,6 +155,25 @@ class AuthAPI {
 
     if (!response.ok) {
       throw new Error('Failed to get current user');
+    }
+
+    return response.json();
+  }
+
+  async getAccountInfo(): Promise<AccountInfo> {
+    const token = localStorage.getItem('jwt_token');
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await httpClient.fetch(`${AUTH_SERVICE_URL}/account/info`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get account info');
     }
 
     return response.json();

@@ -412,6 +412,66 @@ async def get_current_user_info(request: Request):
     }
 
 
+@app.get("/account/info")
+async def get_account_info(request: Request):
+    """Get user account information including credits"""
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    
+    token = auth_header.split(" ")[1]
+    payload = verify_token(token)
+    
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    # Get user from database
+    user_profile = user_manager.load_user(payload["sub"])
+    
+    if not user_profile:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get full user data from MongoDB
+    from managers.mongodb_manager import mongo_db
+    user_data = mongo_db.users.find_one({"user_id": user_profile.user_id})
+    
+    # Get email and name (handle both Google OAuth and email/password)
+    email = user_data.get("google_email", "") if user_data else ""
+    if not email:
+        email = user_data.get("email", "") if user_data else ""
+    
+    name = user_data.get("google_name", "") if user_data else ""
+    if not name:
+        name = user_data.get("name", "") if user_data else ""
+    
+    # Get date of birth
+    date_of_birth = user_data.get("date_of_birth", "") if user_data else ""
+    
+    # Get location (default to empty string if not set)
+    location = user_data.get("location", "") if user_data else ""
+    
+    # Get credits (default to 0.0 balance with USD currency if not set)
+    credits = user_data.get("credits", {}) if user_data else {}
+    if not credits:
+        credits = {"balance": 0.0, "currency": "USD"}
+    else:
+        # Ensure balance and currency exist
+        if "balance" not in credits:
+            credits["balance"] = 0.0
+        if "currency" not in credits:
+            credits["currency"] = "USD"
+    
+    return {
+        "user_id": user_profile.user_id,
+        "email": email,
+        "name": name,
+        "date_of_birth": date_of_birth,
+        "location": location,
+        "credits": credits
+    }
+
+
 @app.post("/auth/logout")
 async def logout():
     """Logout endpoint (frontend clears token)"""

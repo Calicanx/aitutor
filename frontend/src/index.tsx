@@ -27,6 +27,8 @@ import ComingSoonGuard from "./components/coming-soon/ComingSoonGuard"; // Comme
 
 const LoginPage = lazy(() => import("./components/auth/LoginPage"));
 const LandingPageWrapper = lazy(() => import("./components/landing/LandingPageWrapper"));
+const AccountPage = lazy(() => import("./components/account/AccountPage"));
+const PricingPage = lazy(() => import("./components/pricing/PricingPage"));
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
@@ -146,6 +148,9 @@ root.render(
               <Switch>
                 <Route path="/app/auth/setup" component={LoginPage} />
                 <Route path="/app/login" component={LoginPage} />
+                <Route path="/app/account" component={AccountPage} />
+                <Route path="/app/pricing" component={PricingPage} />
+                <Route path="/pricing" component={PricingPage} />
                 <Route path="/app" exact component={LandingPageOrApp} />
                 <Route path="/app" component={App} />
                 <Route path="/" exact component={LandingPageOrApp} />

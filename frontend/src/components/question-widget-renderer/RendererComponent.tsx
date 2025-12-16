@@ -32,9 +32,10 @@ const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_U
 
 interface RendererComponentProps {
     onSkillChange?: (skill: string) => void;
+    onQuestionChange?: (questionId: string | null) => void;
 }
 
-const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
+const RendererComponent = ({ onSkillChange, onQuestionChange }: RendererComponentProps) => {
     const { user } = useAuth();
     const { setTotalHints, setCurrentHintIndex, showHints, setShowHints } = useHint();
     const queryClient = useQueryClient();
@@ -149,11 +150,15 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
         }
     }, [isError, error]);
 
-    // Log when question is displayed (once per item change)
+    // Log when question is displayed (once per item change) and emit question ID
     useEffect(() => {
         if (perseusItems.length > 0 && !isLoading) {
             const currentItem = perseusItems[item];
             const metadata = (currentItem as any).dash_metadata || {};
+            const dashQuestionId = metadata.dash_question_id || null;
+
+            // Emit question ID change for LearningAssetsPanel
+            onQuestionChange?.(dashQuestionId);
 
             // Log question displayed
             apiUtils.post(`${DASH_API_URL}/api/question-displayed`, {
@@ -162,8 +167,11 @@ const RendererComponent = ({ onSkillChange }: RendererComponentProps) => {
             }).catch((err) => {
                 console.error('Failed to log question displayed:', err);
             });
+        } else {
+            // No question loaded, emit null
+            onQuestionChange?.(null);
         }
-    }, [item, perseusItems, isLoading, user_id]);
+    }, [item, perseusItems, isLoading, user_id, onQuestionChange]);
 
     // Mock skill state update
     useEffect(() => {

@@ -607,6 +607,63 @@ def recommend_next_questions(request: Request, req: RecommendNextRequest):
         logger.error(f"[ERROR] Failed to load recommended questions: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load recommended questions: {e}")
 
+
+@app.get("/api/learning-assets/videos/{question_id}")
+async def get_learning_videos(
+    question_id: str,
+    request: Request,
+    preferred_language: str = "English"
+):
+    """
+    Get learning videos for a question, filtered by language.
+    
+    Args:
+        question_id: The dash_question_id (e.g., "41.1.1.1.1_xde8147b8edb82294")
+        preferred_language: Preferred language for videos (default: "English")
+    
+    Returns:
+        List of learning videos (max 6) filtered by language
+    """
+    from managers.mongodb_manager import mongo_db
+    
+    try:
+        # Get question from scraped_questions collection
+        question_doc = mongo_db.scraped_questions.find_one({"questionId": question_id})
+        
+        if not question_doc:
+            logger.warning(f"[LEARNING_ASSETS] Question not found: {question_id}")
+            return []
+        
+        # Extract learning_videos array
+        learning_videos = question_doc.get("learning_videos", [])
+        
+        if not learning_videos:
+            logger.info(f"[LEARNING_ASSETS] No learning videos found for question: {question_id}")
+            return []
+        
+        # Filter by preferred_language
+        filtered_videos = [
+            video for video in learning_videos
+            if video.get("language", "English").lower() == preferred_language.lower()
+        ]
+        
+        # If no videos in preferred language, return all videos
+        if not filtered_videos:
+            logger.info(f"[LEARNING_ASSETS] No videos in {preferred_language}, returning all videos")
+            filtered_videos = learning_videos
+        
+        # Return first 6 videos (sorting by score will be in Phase 3)
+        result = filtered_videos[:6]
+        
+        logger.info(f"[LEARNING_ASSETS] Returning {len(result)} videos for question {question_id} (language: {preferred_language})")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to get learning videos for question {question_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get learning videos: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("DASH_PORT", 8000))  # DASH API on 8000

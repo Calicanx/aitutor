@@ -49,6 +49,8 @@ import {
   Home,
   X,
   Eye,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 
 const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
@@ -69,6 +71,10 @@ export type FloatingControlPanelProps = {
   onToggleScreen: (enabled: boolean) => void;
   // MediaMixer canvas ref for display
   mediaMixerCanvasRef: RefObject<HTMLCanvasElement>;
+  // Privacy mode props
+  privacyMode: boolean;
+  onTogglePrivacy: (enabled: boolean) => void;
+  processedEdgesRef: RefObject<ImageData | null>;
 };
 
 function FloatingControlPanel({
@@ -83,6 +89,9 @@ function FloatingControlPanel({
   onToggleCamera,
   onToggleScreen,
   mediaMixerCanvasRef,
+  privacyMode,
+  onTogglePrivacy,
+  processedEdgesRef,
 }: FloatingControlPanelProps) {
   const { client, connected, connect, disconnect, interruptAudio } = useTutorContext();
   const { theme } = useTheme();
@@ -314,21 +323,43 @@ function FloatingControlPanel({
     let isRunning = false; // Track if loop is running to prevent multiple concurrent loops
 
     function sendVideoFrame() {
-      const canvas = mediaMixerCanvasRef.current;
-
-      if (!canvas || !connected || !isRunning) {
+      if (!connected || !isRunning) {
         return;
       }
 
-      if (canvas.width + canvas.height > 0) {
-        const base64 = canvas.toDataURL("image/jpeg", 1.0);
-        const data = base64.slice(base64.indexOf(",") + 1, Infinity);
+      // If privacy mode is ON, use processed edges instead of full canvas
+      if (privacyMode && processedEdgesRef.current) {
+        const edges = processedEdgesRef.current;
+        // Create a temporary canvas to convert ImageData to JPEG
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = edges.width;
+        tempCanvas.height = edges.height;
+        const tempCtx = tempCanvas.getContext('2d');
         
-        // Send to Gemini (existing functionality)
-        client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
+        if (tempCtx) {
+          tempCtx.putImageData(edges, 0, 0);
+          const base64 = tempCanvas.toDataURL("image/jpeg", 1.0);
+          const data = base64.slice(base64.indexOf(",") + 1, Infinity);
+          
+          // Send to Gemini (existing functionality)
+          client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
 
-        // Also send via WebSocket (fire-and-forget, non-blocking)
-        feedWebSocketService.sendMedia(data);
+          // Also send via WebSocket (fire-and-forget, non-blocking)
+          feedWebSocketService.sendMedia(data);
+        }
+      } else {
+        // Normal mode: use MediaMixer canvas
+        const canvas = mediaMixerCanvasRef.current;
+        if (canvas && canvas.width + canvas.height > 0) {
+          const base64 = canvas.toDataURL("image/jpeg", 1.0);
+          const data = base64.slice(base64.indexOf(",") + 1, Infinity);
+          
+          // Send to Gemini (existing functionality)
+          client.sendRealtimeInput([{ mimeType: "image/jpeg", data }]);
+
+          // Also send via WebSocket (fire-and-forget, non-blocking)
+          feedWebSocketService.sendMedia(data);
+        }
       }
       
       // Schedule next frame only if still connected and running
@@ -353,7 +384,7 @@ function FloatingControlPanel({
         clearTimeout(timeoutId);
       }
     };
-  }, [connected, activeVideoStream, client]); // Removed refs from dependencies - they don't trigger re-renders
+  }, [connected, activeVideoStream, client, privacyMode, processedEdgesRef]);
 
   const handleConnect = useCallback(async () => {
     if (connected) {
@@ -783,6 +814,25 @@ function FloatingControlPanel({
               </button>
             )}
 
+            {supportsVideo && cameraEnabled && (
+              <button
+                onClick={() => onTogglePrivacy(!privacyMode)}
+                className={cn(
+                  "w-8 h-8 md:w-9 md:h-9 border-[2px] border-black dark:border-white flex items-center justify-center transition-all shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 duration-100",
+                  privacyMode
+                    ? "bg-[#C4B5FD] dark:bg-[#C4B5FD] text-black dark:text-black"
+                    : "bg-[#FFFDF5] dark:bg-[#000000] text-black dark:text-white hover:bg-[#C4B5FD] dark:hover:bg-[#C4B5FD] dark:hover:text-black",
+                )}
+                title={privacyMode ? "Disable Privacy Mode" : "Enable Privacy Mode"}
+              >
+                {privacyMode ? (
+                  <ToggleRight className="w-3.5 h-3.5 font-bold" />
+                ) : (
+                  <ToggleLeft className="w-3.5 h-3.5 font-bold" />
+                )}
+              </button>
+            )}
+
             {supportsVideo && (
               <button
                 onClick={() => onToggleScreen(!screenEnabled)}
@@ -965,6 +1015,53 @@ function FloatingControlPanel({
                   )}
                 >
                   {cameraEnabled ? "Off" : "On"}
+                </button>
+              </div>
+            )}
+
+            {/* Privacy Mode Control */}
+            {supportsVideo && cameraEnabled && (
+              <div
+                onClick={() => onTogglePrivacy(!privacyMode)}
+                className={cn(
+                  "flex items-center justify-between p-2 md:p-2.5 border-[2px] border-black dark:border-white transition-all duration-100 cursor-pointer shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)]",
+                  privacyMode
+                    ? "bg-[#C4B5FD]"
+                    : "bg-[#FFFDF5] dark:bg-[#000000]",
+                )}
+              >
+                <div className="flex items-center gap-1.5 md:gap-2">
+                  <div
+                    className={cn(
+                      "flex items-center justify-center w-6 h-6 md:w-7 md:h-7 border-[2px] border-black dark:border-white transition-colors",
+                      privacyMode
+                        ? "bg-[#FFFDF5] dark:bg-[#000000] text-black dark:text-white"
+                        : "bg-[#FFFDF5] dark:bg-[#000000] text-black dark:text-white",
+                    )}
+                  >
+                    {privacyMode ? (
+                      <ToggleRight className="w-3 h-3 md:w-3.5 md:h-3.5 font-bold" />
+                    ) : (
+                      <ToggleLeft className="w-3 h-3 md:w-3.5 md:h-3.5 font-bold" />
+                    )}
+                  </div>
+                  <span className="text-[9px] md:text-[10px] font-black text-black dark:text-white uppercase tracking-wide">
+                    Privacy
+                  </span>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTogglePrivacy(!privacyMode);
+                  }}
+                  className={cn(
+                    "text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 md:py-1.5 transition-all border-[2px] border-black dark:border-white shadow-[1px_1px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] active:translate-x-1 active:translate-y-1 active:shadow-none uppercase",
+                    privacyMode
+                      ? "bg-[#FFFDF5] dark:bg-[#000000] text-black dark:text-white"
+                      : "bg-[#C4B5FD] text-black",
+                  )}
+                >
+                  {privacyMode ? "Off" : "On"}
                 </button>
               </div>
             )}
@@ -1161,6 +1258,8 @@ function FloatingControlPanel({
                 isCameraEnabled={cameraEnabled}
                 isScreenShareEnabled={screenEnabled}
                 isCanvasEnabled={isPaintActive}
+                privacyMode={privacyMode}
+                processedEdgesRef={processedEdgesRef}
               />
             </div>
           </div>

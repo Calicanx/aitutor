@@ -35,6 +35,7 @@ const SidePanel = lazy(() => import("./components/side-panel/SidePanel"));
 const GradingSidebar = lazy(() => import("./components/grading-sidebar/GradingSidebar"));
 const ScratchpadCapture = lazy(() => import("./components/scratchpad-capture/ScratchpadCapture"));
 const FloatingControlPanel = lazy(() => import("./components/floating-control-panel/FloatingControlPanel"));
+const LearningAssetsPanel = lazy(() => import("./components/learning-assets/LearningAssetsPanel"));
 
 function App() {
   // Developer mode hook for Gemini Console visibility
@@ -52,6 +53,7 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isGradingSidebarOpen, setIsGradingSidebarOpen] = useState(false);
   const [currentSkill, setCurrentSkill] = useState<string | null>(null);
+  const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(null);
 
   // Ref to hold mediaMixer instance for use in callbacks
   const mediaMixerRef = useRef<any>(null);
@@ -65,7 +67,10 @@ function App() {
     toggleCamera,
     toggleScreen,
     cameraVideoRef,
-    screenVideoRef
+    screenVideoRef,
+    privacyMode,
+    setPrivacyMode,
+    processedEdgesRef
   } = useMediaCapture({});
 
   // MediaMixer hook for local video mixing - uses state from useMediaCapture
@@ -144,13 +149,20 @@ function App() {
                       onToggle={toggleSidebar}
                     />
                   )}
+                  {!isDeveloperMode && (
+                    <LearningAssetsPanel
+                      questionId={currentQuestionId}
+                      open={isSidebarOpen}
+                      onToggle={toggleSidebar}
+                    />
+                  )}
                   <GradingSidebar
                     open={isGradingSidebarOpen}
                     onToggle={toggleGradingSidebar}
                     currentSkill={currentSkill}
                   />
                   <main style={{
-                    marginRight: (isDeveloperMode && isSidebarOpen) ? "260px" : "0",
+                    marginRight: isSidebarOpen ? "260px" : "0",
                     marginLeft: isGradingSidebarOpen ? "260px" : "40px",
                     transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
                   }}>
@@ -160,7 +172,10 @@ function App() {
                         <ScratchpadCapture onFrameCaptured={(canvas) => {
                           mediaMixer.updateScratchpadFrame(canvas);
                         }}>
-                          <QuestionDisplay onSkillChange={setCurrentSkill} />
+                          <QuestionDisplay 
+                            onSkillChange={setCurrentSkill}
+                            onQuestionChange={setCurrentQuestionId}
+                          />
                           {isScratchpadOpen && (
                             <div className="scratchpad-container">
                               <Scratchpad />
@@ -182,6 +197,9 @@ function App() {
                         onToggleCamera={toggleCamera}
                         onToggleScreen={toggleScreen}
                         mediaMixerCanvasRef={mediaMixer.canvasRef}
+                        privacyMode={privacyMode}
+                        onTogglePrivacy={setPrivacyMode}
+                        processedEdgesRef={processedEdgesRef}
                       />
                     </div>
                   </main>

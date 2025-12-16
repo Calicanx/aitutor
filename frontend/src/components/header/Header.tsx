@@ -20,6 +20,7 @@ import cn from "classnames";
 import { Moon, Sun, User, Settings, LogOut, Terminal } from "lucide-react";
 import { useTheme } from "../theme/theme-provier";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -136,9 +137,11 @@ export default function Header({ sidebarOpen, onToggleSidebar, isDeveloperMode, 
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem>
-                                <User className="mr-2 h-4 w-4" />
-                                <span>Account</span>
+                            <DropdownMenuItem asChild>
+                                <Link to="/app/account" className="flex items-center">
+                                    <User className="mr-2 h-4 w-4" />
+                                    <span>Account</span>
+                                </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem>
                                 <Settings className="mr-2 h-4 w-4" />

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
 interface UseMediaCaptureProps {
   onCameraFrame?: (imageData: ImageData) => void;
@@ -8,6 +8,7 @@ interface UseMediaCaptureProps {
 export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptureProps) => {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenEnabled, setScreenEnabled] = useState(false);
+  const [privacyMode, setPrivacyMode] = useState(false);
 
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -15,11 +16,14 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
   const screenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const processedEdgesRef = useRef<ImageData | null>(null);
+  const privacyCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Initialize canvases
   useEffect(() => {
     cameraCanvasRef.current = document.createElement('canvas');
     screenCanvasRef.current = document.createElement('canvas');
+    privacyCanvasRef.current = document.createElement('canvas');
     cameraVideoRef.current = document.createElement('video');
     cameraVideoRef.current.autoplay = true;
     cameraVideoRef.current.playsInline = true;
@@ -32,6 +36,133 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
       stopScreen();
     };
   }, []);
+
+  // Create Web Worker for Canny edge detection (lazy initialization)
+  const cannyWorker = useMemo(() => {
+    if (typeof Worker === 'undefined') {
+      console.warn('Web Workers not supported');
+      return null;
+    }
+    try {
+      console.log('Creating Canny filter worker...');
+      const worker = new Worker(new URL('../workers/canny-filter.worker.ts', import.meta.url), { type: 'module' });
+      console.log('Canny filter worker created successfully');
+      return worker;
+    } catch (error) {
+      console.error('Failed to create Canny filter worker:', error);
+      return null;
+    }
+  }, []);
+
+  // Cleanup worker on unmount
+  useEffect(() => {
+    return () => {
+      if (cannyWorker) {
+        cannyWorker.terminate();
+      }
+    };
+  }, [cannyWorker]);
+
+  // Process video frames with Canny edge detection when privacy mode is ON
+  useEffect(() => {
+    console.log('Privacy mode effect triggered:', { privacyMode, cannyWorker: !!cannyWorker, cameraEnabled, cameraVideoRef: !!cameraVideoRef.current });
+
+    if (!privacyMode || !cannyWorker || !cameraEnabled || !cameraVideoRef.current) {
+      processedEdgesRef.current = null;
+      return;
+    }
+
+    console.log('Privacy mode effect: Starting frame processing');
+
+    let isProcessing = false;
+    let frameInterval: number | null = null;
+
+    const processFrame = () => {
+      if (isProcessing || !cameraVideoRef.current || !privacyMode) {
+        return;
+      }
+
+      const video = cameraVideoRef.current;
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        return;
+      }
+
+      isProcessing = true;
+
+      try {
+        // Create temporary canvas to capture frame
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = video.videoWidth || 1280;
+        tempCanvas.height = video.videoHeight || 720;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        if (!tempCtx) {
+          isProcessing = false;
+          return;
+        }
+
+        tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Send width, height, and data using ArrayBuffer for efficient zero-copy transfer
+        // Create a copy of the buffer to transfer (original buffer remains in main thread)
+        const dataBuffer = imageData.data.buffer.slice(0);
+        console.log('Sending frame to Canny worker:', { width: imageData.width, height: imageData.height });
+        cannyWorker.postMessage({
+          width: imageData.width,
+          height: imageData.height,
+          data: dataBuffer,
+          lowThreshold: 50,
+          highThreshold: 100
+        }, [dataBuffer]); // Transfer ownership for zero-copy performance
+      } catch (error) {
+        console.error('Error processing frame for privacy mode:', error);
+        isProcessing = false;
+      }
+    };
+
+    // Handle worker response
+    const handleWorkerMessage = (e: MessageEvent) => {
+      isProcessing = false;
+
+      if (e.data.success && e.data.width && e.data.height && e.data.data) {
+        // Reconstruct ImageData from width, height, and ArrayBuffer
+        try {
+          console.log('Received Canny edges from worker:', { width: e.data.width, height: e.data.height });
+          const dataArray = e.data.data instanceof ArrayBuffer
+            ? new Uint8ClampedArray(e.data.data)
+            : Array.isArray(e.data.data)
+            ? new Uint8ClampedArray(e.data.data)
+            : new Uint8ClampedArray(e.data.data);
+
+          const reconstructedEdges = new ImageData(
+            dataArray,
+            e.data.width,
+            e.data.height
+          );
+          processedEdgesRef.current = reconstructedEdges;
+        } catch (error) {
+          console.error('Error reconstructing ImageData from worker:', error);
+        }
+      } else if (e.data.error) {
+        console.error('Canny edge detection error:', e.data.error);
+      }
+    };
+
+    cannyWorker.addEventListener('message', handleWorkerMessage);
+
+    // Process frames at 2 FPS (500ms interval) when privacy mode is ON
+    frameInterval = window.setInterval(processFrame, 500);
+    console.log('Privacy mode effect: Frame processing interval started');
+
+    return () => {
+      if (frameInterval !== null) {
+        clearInterval(frameInterval);
+      }
+      cannyWorker.removeEventListener('message', handleWorkerMessage);
+      processedEdgesRef.current = null;
+    };
+  }, [privacyMode, cannyWorker, cameraEnabled, cameraVideoRef]);
 
   const stopCamera = useCallback(() => {
     console.log('Stopping camera...');
@@ -201,6 +332,9 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
     toggleCamera,
     toggleScreen,
     cameraVideoRef,
-    screenVideoRef
+    screenVideoRef,
+    privacyMode,
+    setPrivacyMode,
+    processedEdgesRef
   };
 };
