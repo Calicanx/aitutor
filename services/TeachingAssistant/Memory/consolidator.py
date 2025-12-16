@@ -1,16 +1,23 @@
 import os
+import sys
 import json
 import time
-import logging
 import asyncio
 from typing import Dict, Any, List
+from pathlib import Path
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from shared.logging_config import get_logger
 from .schema import MemoryType
 from .vector_store import MemoryStore
 from .extractor import MemoryExtractor
 from ..core.decorators import with_retry, with_circuit_breaker, CircuitBreaker
 from ..core.exceptions import LLMGenerationError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Circuit breaker for LLM services
 llm_circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
@@ -49,28 +56,29 @@ class SessionClosingCache:
             data_dir = f"services/TeachingAssistant/Memory/data/{self.user_id}/memory/TeachingAssistant"
             file_path = f"{data_dir}/TA-closing-retrieval.json"
             
-            # Check if file exists
-            if os.path.exists(file_path):
-                # Initialize with empty structure
-                closing_data = {
-                    "session_id": self.session_id,
-                    "timestamp": time.time(),
-                    "new_memories": [],
-                    "emotional_arc": [],
-                    "key_moments": [],
-                    "unfinished_topics": [],
-                    "topics_covered": [],
-                    "session_summary": "",
-                    "goodbye_message": "",
-                    "next_session_hooks": []
-                }
-                
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(closing_data, f, indent=2, ensure_ascii=False)
-                
-                logger.info(f"Cleared closing cache for new session: {self.session_id}")
-            else:
-                logger.info(f"No existing closing cache to clear for user: {self.user_id}")
+            # Use os.makedirs to ensure directory exists (exist_ok=True)
+            os.makedirs(data_dir, exist_ok=True)
+            
+            # Initialize with empty structure
+            closing_data = {
+                "session_id": self.session_id,
+                "timestamp": time.time(),
+                "new_memories": [],
+                "emotional_arc": [],
+                "key_moments": [],
+                "unfinished_topics": [],
+                "topics_covered": [],
+                "session_summary": "",
+                "goodbye_message": "",
+                "next_session_hooks": []
+            }
+            
+            # Always overwrite/create the file with empty data
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(closing_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Cleared closing cache for new session: {self.session_id}")
+
         except Exception as e:
             logger.error(f"Error clearing closing cache: {e}", exc_info=True)
 
@@ -126,7 +134,7 @@ class SessionClosingCache:
             return
 
         batch_size = len(valid_exchanges)
-        logger.info("Processing batch of %s exchanges for memory extraction", batch_size)
+        logger.info("[MEMORY_CONSOLIDATION] Processing batch of %s exchanges for memory extraction", batch_size)
         
         try:
             # Extract memories and analysis from the batch
@@ -151,9 +159,16 @@ class SessionClosingCache:
             
             # Save extracted memories to store (Pinecone + local)
             if extracted_memories:
+                # Count by type before saving
+                type_counts = {}
+                for mem in extracted_memories:
+                    mem_type = mem.type.value
+                    type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
+                
                 logger.info(
-                    "Saving %s memories from batch to store",
+                    "[MEMORY_CONSOLIDATION] Saving %s memories to store (breakdown: %s)",
                     len(extracted_memories),
+                    type_counts,
                 )
                 # Async wrapper for vector store save (network I/O)
                 await asyncio.to_thread(store.save_memories_batch, extracted_memories)
@@ -161,25 +176,27 @@ class SessionClosingCache:
                 # Also add to cache for session consolidation
                 self.cache["new_memories"].extend(extracted_memories)
                 logger.info(
-                    "Successfully saved %s memories from %s exchanges",
+                    "[MEMORY_CONSOLIDATION] Successfully saved %s memories from %s exchanges to Pinecone and local storage",
                     len(extracted_memories),
                     batch_size,
                 )
             else:
-                logger.info("No memories extracted from batch of %s exchanges", batch_size)
+                logger.info("[MEMORY_CONSOLIDATION] No memories extracted from batch of %s exchanges", batch_size)
             
             # Clear the buffer after processing
             self.exchange_buffer.clear()
             logger.info("Cleared exchange buffer")
             
-            # Trigger regeneration after each batch of 3 exchanges, but throttle
-            now = time.time()
-            last_regen = self.cache.get("last_regen_time", 0)
-            if now - last_regen >= 60:  # at most once per minute
-                self.cache["last_regen_time"] = now
-                logger.info("Triggering closing cache regeneration (async)")
-                # Fire and forget task
-                asyncio.create_task(self.regenerate_closing_async(extractor))
+            # Trigger regeneration after each batch of 3 exchanges
+            # REMOVED THROTTLING: Condition 2 requires this update after every 3 exchanges
+            # now = time.time()
+            # last_regen = self.cache.get("last_regen_time", 0)
+            # if now - last_regen >= 60:
+            
+            self.cache["last_regen_time"] = time.time()
+            logger.info("Triggering closing cache regeneration (async)")
+            # Fire and forget task
+            asyncio.create_task(self.regenerate_closing_async(extractor))
             
         except Exception as e:
             logger.error(f"Error processing exchange batch: {e}", exc_info=True)
@@ -414,29 +431,52 @@ class MemoryConsolidator:
         self.extractor = extractor
 
     async def consolidate_session(self, user_id: str, session_id: str, closing_cache: SessionClosingCache):
-        logger.info("Consolidating session %s for user %s", session_id, user_id)
+        logger.info("[MEMORY_CONSOLIDATION] Starting session consolidation for session %s, user %s", session_id, user_id)
         
         # Flush any remaining exchanges in buffer (< 3)
         await closing_cache.flush_remaining_exchanges(self.extractor, self.store)
         
-        # Note: Memories are already saved in real-time batches, no need to save again
-        logger.info("All memories already saved in real-time batches")
+        # Count total memories generated
+        total_memories = len(closing_cache.cache.get('new_memories', []))
+        memory_counts = {}
+        for mem in closing_cache.cache.get('new_memories', []):
+            mem_type = mem.type.value if hasattr(mem, 'type') else 'unknown'
+            memory_counts[mem_type] = memory_counts.get(mem_type, 0) + 1
+        
+        logger.info("[MEMORY_CONSOLIDATION] Total memories generated this session: %s (breakdown: %s)", 
+                   total_memories, memory_counts)
+        logger.info("[MEMORY_CONSOLIDATION] All memories already saved in real-time batches to Pinecone and local storage")
 
         logger.info(
-            "Session stats - Emotions: %s, Key moments: %s, Topics: %s",
+            "[MEMORY_CONSOLIDATION] Session stats - Emotions: %s, Key moments: %s, Topics covered: %s, Unfinished topics: %s",
             len(closing_cache.cache['emotional_arc']),
             len(closing_cache.cache['key_moments']),
             len(closing_cache.cache['topics_covered']),
+            len(closing_cache.cache.get('unfinished_topics', [])),
         )
         
         # Offload file I/O to thread
         await asyncio.to_thread(self._save_closing, user_id, closing_cache)
         
-        # Generate opening context (LLM calls inside)
-        opening_context = await self._generate_opening_context_async(user_id, closing_cache)
+        # Generate opening context (LLM calls inside) in BACKGROUND to avoid blocking session end
+        # This ensures the user gets the closing message immediately.
+        # It also creates the hook for the next session.
+        asyncio.create_task(self._generate_and_save_opening_background(user_id, closing_cache))
         
-        await asyncio.to_thread(self._save_opening, user_id, opening_context)
-        logger.info("Session consolidation complete for %s", session_id)
+        logger.info("[MEMORY_CONSOLIDATION] Session consolidation complete for %s (Opening context generation running in background)", session_id)
+
+    async def _generate_and_save_opening_background(self, user_id: str, closing_cache: SessionClosingCache):
+        """
+        Background task to generate and save opening context.
+        This runs in parallel after the session is closed.
+        """
+        try:
+            logger.info("Starting background opening context generation for user %s", user_id)
+            opening_context = await self._generate_opening_context_async(user_id, closing_cache)
+            await asyncio.to_thread(self._save_opening, user_id, opening_context)
+            logger.info("Background opening context generation complete for user %s", user_id)
+        except Exception as e:
+            logger.error(f"Error in background opening context generation: {e}", exc_info=True)
 
     async def _generate_opening_context_async(self, user_id: str, closing_cache: SessionClosingCache) -> dict:
         """Generate personalized opening context for next session using LLM (Async wrapper)."""

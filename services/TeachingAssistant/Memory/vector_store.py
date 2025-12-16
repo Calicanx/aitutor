@@ -1,17 +1,24 @@
 import os
+import sys
 import json
-import logging
 import time
 import re
 from typing import List, Optional, Dict
+from pathlib import Path
 from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from shared.logging_config import get_logger
 from .schema import Memory, MemoryType
 from .embeddings import get_embeddings_batch
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MemoryStore:
@@ -150,10 +157,17 @@ class MemoryStore:
 
     def save_memories_batch(self, memories: List[Memory]):
         if not memories:
-            logger.warning("save_memories_batch called with empty list")
+            logger.warning("[MEMORY_STORE] save_memories_batch called with empty list")
             return
 
-        logger.info(f"Saving batch of {len(memories)} memories to Pinecone and local storage")
+        # Count by type
+        type_counts = {}
+        for mem in memories:
+            mem_type = mem.type.value
+            type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
+
+        logger.info("[MEMORY_STORE] Saving batch of %s memories to Pinecone and local storage (breakdown: %s)", 
+                   len(memories), type_counts)
 
         memories_by_type = {}
         for mem in memories:
@@ -162,11 +176,19 @@ class MemoryStore:
             memories_by_type[mem.type].append(mem)
 
         for mem_type, mems in memories_by_type.items():
-            logger.info(f"Processing {len(mems)} {mem_type.value} memories...")
+            logger.info("[MEMORY_STORE] Processing %s %s memories...", len(mems), mem_type.value)
+            
+            # Log each memory being saved
+            for i, mem in enumerate(mems, 1):
+                emotion_str = f", emotion: {mem.metadata.get('emotion', 'none')}" if mem.metadata.get('emotion') else ""
+                logger.info("[MEMORY_STORE]   Memory %s/%s: [%s] (importance: %.2f%s) - %s",
+                          i, len(mems), mem_type.value.upper(), mem.importance, emotion_str, mem.text[:80])
+            
             texts = [m.text for m in mems]
             
             try:
                 embeddings = get_embeddings_batch(texts)
+                logger.info("[MEMORY_STORE] Generated embeddings for %s %s memories", len(embeddings), mem_type.value)
 
                 vectors = []
                 for mem, emb in zip(mems, embeddings):
@@ -188,18 +210,23 @@ class MemoryStore:
                     })
 
                 self.index.upsert(vectors=vectors, namespace=mem_type.value)
-                logger.info(f"Saved {len(vectors)} vectors to Pinecone (namespace: {mem_type.value})")
+                logger.info("[MEMORY_STORE] Saved %s vectors to Pinecone (namespace: %s)", len(vectors), mem_type.value)
             except Exception as e:
-                logger.error(f"❌ Error saving {mem_type.value} memories to Pinecone: {e}", exc_info=True)
+                logger.error("[MEMORY_STORE] Error saving %s memories to Pinecone: %s", mem_type.value, e, exc_info=True)
                 raise
 
+        # Save to local files
+        logger.info("[MEMORY_STORE] Saving %s memories to local JSON files...", len(memories))
+        saved_count = 0
         for mem in memories:
             try:
                 self._save_to_local(mem)
+                saved_count += 1
             except Exception as e:
-                logger.error(f"Error saving memory {mem.id} to local file: {e}", exc_info=True)
+                logger.error("[MEMORY_STORE] Error saving memory %s to local file: %s", mem.id, e, exc_info=True)
         
-        logger.info(f"Successfully saved all {len(memories)} memories")
+        logger.info("[MEMORY_STORE] Successfully saved all %s memories (%s to Pinecone, %s to local files)", 
+                   len(memories), len(memories), saved_count)
 
     def search(self, query: str, student_id: str, mem_type: Optional[MemoryType] = None, 
                top_k: int = 10, exclude_session_id: Optional[str] = None) -> List[Dict]:
@@ -209,7 +236,7 @@ class MemoryStore:
         snippet = (query or "")[:50]
         safe_snippet = snippet.encode("ascii", "ignore").decode("ascii", "ignore")
         logger.info(
-            "Searching in index: %s for student_id: %s, query: %s...",
+            "[MEMORY_STORE] Searching in index: %s for student_id: %s, query: %s...",
             self.index_name,
             student_id,
             safe_snippet,
@@ -222,7 +249,7 @@ class MemoryStore:
             filter_dict["session_id"] = {"$ne": exclude_session_id}
 
         namespaces = [mem_type.value] if mem_type else [mt.value for mt in MemoryType]
-        logger.info(f"   Searching namespaces: {namespaces}, top_k: {top_k}, filter: {filter_dict}")
+        logger.info("[MEMORY_STORE]   Searching namespaces: %s, top_k: %s, filter: %s", namespaces, top_k, filter_dict)
 
         results = []
         for namespace in namespaces:
@@ -234,7 +261,7 @@ class MemoryStore:
                     filter=filter_dict,
                     include_metadata=True
                 )
-                logger.info(f"   Namespace '{namespace}': Found {len(response.matches)} matches")
+                logger.info("[MEMORY_STORE]   Namespace '%s': Found %s matches", namespace, len(response.matches))
                 for i, match in enumerate(response.matches):
                     # Skip matches with missing metadata
                     if not match.metadata:
@@ -276,7 +303,7 @@ class MemoryStore:
         results.sort(key=lambda x: x["score"], reverse=True)
         final_results = results[:top_k]
         logger.info(
-            "Search complete: Returning %s results from index '%s'",
+            "[MEMORY_STORE] Search complete: Returning %s results from index '%s'",
             len(final_results),
             self.index_name,
         )

@@ -310,6 +310,15 @@ class TeachingAssistant:
                                     topic=event.data.get('topic', 'general'),
                                     session_id=event.session_id
                                 ))
+                            
+                            # Real-time Conversation Saving (Condition 5)
+                            # Save the updated context to file immediately to prevent data loss
+                            if context:
+                                asyncio.create_task(self._save_conversation_async(
+                                    event.user_id,
+                                    event.session_id,
+                                    context
+                                ))
                     
                     # Process event through skills
                     injections = self.event_processor.process_event(event)

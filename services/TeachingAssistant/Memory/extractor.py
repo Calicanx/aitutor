@@ -1,16 +1,23 @@
 import os
+import sys
 import json
-import logging
 from typing import List, Optional, Dict, Any
 import google.generativeai as genai
 from dotenv import load_dotenv
+from pathlib import Path
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from shared.logging_config import get_logger
 from .schema import Memory, MemoryType
 
 load_dotenv()
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MemoryExtractor:
@@ -51,21 +58,30 @@ class MemoryExtractor:
             exchanges_text += f"AI: {exchange['ai_text']}\n"
             exchanges_text += f"Topic: {exchange['topic']}\n"
         
-        prompt = f"""Analyze these {len(exchanges)} conversation exchanges to extract memories and tracking data.
-
+        prompt = f"""Analyze these {len(exchanges)} conversation exchanges to update the Student Profile.
+        
 {exchanges_text}
 
-Task 1: Extract MEMORIES (academic, personal, preference, context) worth remembering.
+Task 1: Extract STUDENT MEMORIES.
+CRITICAL INSTRUCTION: Focus ONLY on the Student.
+- DO NOT record what the AI did, said, or how the AI behaved.
+- DO NOT record meta-observations like "The student is interacting with an AI".
+- Record specific facts about the student:
+  - Concepts they understood or misunderstood (Academic)
+  - Emotional reactions and their causes (Context)
+  - Personal preferences, hobbies, or life details mentioned (Personal/Preference)
+  - Specific errors made or questions asked (Academic)
+
 Task 2: Detect EMOTIONS (frustrated, confused, excited, anxious, tired, happy, or neutral) for each exchange.
-Task 3: Identify KEY MOMENTS (breakthroughs, struggles, important events) - max 1 per exchange.
-Task 4: Identify UNFINISHED TOPICS that should continue next time.
+Task 3: Identify KEY MOMENTS (breakthroughs, major struggles) - max 1 per exchange.
+Task 4: Identify UNFINISHED TOPICS that need follow-up.
 
 Return a SINGLE JSON object with this structure:
 {{
   "memories": [
     {{
       "type": "academic|personal|preference|context",
-      "text": "memorable detail",
+      "text": "Specific fact about the student (e.g. 'Student confused discriminants with determinants', 'Student mentioned they play basketball', 'Student prefers visual explanations', 'Student seems anxious about exams')",
       "importance": 0.0-1.0,
       "metadata": {{ "emotion": "...", "topic": "..." }}
     }}
@@ -75,8 +91,14 @@ Return a SINGLE JSON object with this structure:
   "unfinished_topics": ["topic description 1", ...]
 }}
 
-Select best fitting emotion for each exchange (or "neutral").
-Only include key moments and unfinished topics if they are significant.
+IMPORTANT: Ensure you categorize memories correctly:
+- ACADEMIC: specific content knowledge gaps or potential.
+- PERSONAL: hobbies, daily life, sports, interests (outside math).
+- PREFERENCE: learning styles (visual/auditory), pacing, interaction style.
+- CONTEXT: emotional state, energy level, external factors (exams coming up).
+
+Try to identify at least one memory for each relevant category if the conversation supports it.
+
 Return ONLY valid JSON."""
 
         try:
@@ -110,12 +132,34 @@ Return ONLY valid JSON."""
                 "unfinished_topics": [t for t in data.get("unfinished_topics", []) if t and t != "None"]
             }
 
+            # Detailed logging for memory extraction
             if len(memories) > 0:
-                logger.info("   MEMORIES: %s", len(memories))
+                # Count by type
+                memory_counts = {}
+                for mem in memories:
+                    mem_type = mem.type.value
+                    memory_counts[mem_type] = memory_counts.get(mem_type, 0) + 1
+                
+                logger.info("[MEMORY_EXTRACTION] Extracted %s memories from %s exchanges", len(memories), len(exchanges))
+                logger.info("[MEMORY_EXTRACTION] Memory breakdown: %s", memory_counts)
+                
+                # Log each memory with type and importance
+                for i, mem in enumerate(memories, 1):
+                    emotion_str = f", emotion: {mem.metadata.get('emotion', 'none')}" if mem.metadata.get('emotion') else ""
+                    logger.info("[MEMORY_EXTRACTION] Memory %s/%s: [%s] (importance: %.2f%s) - %s", 
+                              i, len(memories), mem.type.value.upper(), mem.importance, emotion_str, mem.text[:100])
+            else:
+                logger.info("[MEMORY_EXTRACTION] No memories extracted from %s exchanges", len(exchanges))
+                
             if result["emotions"]:
-                logger.info("   EMOTIONS: %s", result["emotions"])
+                safe_emotions = [str(e).encode("ascii", "replace").decode("ascii") for e in result["emotions"]]
+                logger.info("[MEMORY_EXTRACTION] Detected emotions: %s", safe_emotions)
             if result["key_moments"]:
-                logger.info("   KEY MOMENTS: %s", result["key_moments"])
+                safe_moments = [str(k).encode("ascii", "replace").decode("ascii") for k in result["key_moments"]]
+                logger.info("[MEMORY_EXTRACTION] Key moments: %s", safe_moments)
+            if result["unfinished_topics"]:
+                safe_topics = [str(t).encode("ascii", "replace").decode("ascii") for t in result["unfinished_topics"]]
+                logger.info("[MEMORY_EXTRACTION] Unfinished topics: %s", safe_topics)
                 
             return result
             

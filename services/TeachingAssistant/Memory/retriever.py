@@ -1,7 +1,15 @@
 import os
+import sys
 import json
 import time
 from typing import Dict, List, Set, Optional
+from pathlib import Path
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from shared.logging_config import get_logger
 from .schema import Memory, MemoryType
 from .vector_store import MemoryStore
 
@@ -15,8 +23,7 @@ class MemoryRetriever:
 
     def on_user_turn(self, session_id: str, user_id: str, user_text: str, 
                      timestamp: float, adam_text: str = ""):
-        import logging
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         
         if session_id not in self._conversation_history:
             self._conversation_history[session_id] = []
@@ -45,12 +52,12 @@ class MemoryRetriever:
         snippet = (user_text or "")[:50]
         safe_snippet = snippet.encode("ascii", "ignore").decode("ascii", "ignore")
         logger.info(
-            "Starting TA-light retrieval for session %s, user_id: %s, query: %s...",
+            "[MEMORY_RETRIEVAL] Starting TA-light retrieval for session %s, user_id: %s, query: %s...",
             session_id,
             user_id,
             safe_snippet,
         )
-        logger.info("Using MemoryStore with index: %s", self.store.index_name)
+        logger.info("[MEMORY_RETRIEVAL] Using MemoryStore with index: %s", self.store.index_name)
         light_results = self.store.search(
             query=user_text,
             student_id=user_id,
@@ -58,21 +65,32 @@ class MemoryRetriever:
             exclude_session_id=session_id
         )
         self._session_retrievals[session_id]["light"] = light_results
+        
         if light_results:
-            logger.info("%s", "=" * 60)
-            logger.info("MEMORIES RETRIEVED (%s total):", len(light_results))
-            for r in light_results[:5]:  # Show top 5
+            # Count by type
+            type_counts = {}
+            for r in light_results:
+                mem_type = r["memory"].type.value
+                type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
+            
+            logger.info("[MEMORY_RETRIEVAL] Found %s memories (breakdown: %s)", len(light_results), type_counts)
+            logger.info("[MEMORY_RETRIEVAL] Top memories:")
+            for i, r in enumerate(light_results[:5], 1):  # Show top 5
+                # Sanitize text for logging to prevent UnicodeEncodeError
+                safe_text = r["memory"].text.encode("ascii", "replace").decode("ascii")
+                emotion_str = f", emotion: {r['memory'].metadata.get('emotion', 'none')}" if r['memory'].metadata.get('emotion') else ""
                 logger.info(
-                    "   [%s] (score: %.2f) %s",
+                    "[MEMORY_RETRIEVAL]   %s. [%s] (score: %.3f%s) - %s",
+                    i,
                     r["memory"].type.value.upper(),
                     r["score"],
-                    r["memory"].text,
+                    emotion_str,
+                    safe_text[:80],
                 )
             if len(light_results) > 5:
-                logger.info("   ... and %s more", len(light_results) - 5)
-            logger.info("%s", "=" * 60)
+                logger.info("[MEMORY_RETRIEVAL]   ... and %s more memories", len(light_results) - 5)
         else:
-            logger.info("No memories retrieved for this query")
+            logger.info("[MEMORY_RETRIEVAL] No memories found for query: %s...", safe_snippet)
         self._save_retrieval(session_id, user_id, "light", light_results)
 
         current_time = time.time()
@@ -82,22 +100,21 @@ class MemoryRetriever:
             self._session_retrievals[session_id]["last_deep_time"] = current_time
 
     def _do_deep_retrieval(self, session_id: str, user_id: str):
-        import logging
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         
         history = self._conversation_history.get(session_id, [])
         recent_turns = history[-10:] if len(history) >= 10 else history
         conversation_text = " ".join([turn["text"] for turn in recent_turns])
         
         logger.info(
-            "Starting TA-deep retrieval for session %s (3+ minutes since last deep retrieval)",
+            "[MEMORY_RETRIEVAL] Starting TA-deep retrieval for session %s (3+ minutes since last deep retrieval)",
             session_id,
         )
-        logger.info("Using MemoryStore with index: %s", self.store.index_name)
+        logger.info("[MEMORY_RETRIEVAL] Using MemoryStore with index: %s", self.store.index_name)
         convo_snippet = (conversation_text or "")[:100]
         convo_safe = convo_snippet.encode("ascii", "ignore").decode("ascii", "ignore")
-        logger.info("Conversation context: %s...", convo_safe)
+        logger.info("[MEMORY_RETRIEVAL] Conversation context: %s...", convo_safe)
         
         deep_results = {}
         total_results = 0
@@ -127,7 +144,19 @@ class MemoryRetriever:
                     deep_results[mem_type.value] = []
 
         self._session_retrievals[session_id]["deep"] = deep_results
-        logger.info("TA-deep retrieval found %s memories across all types (Parallel)", total_results)
+        
+        # Log detailed breakdown
+        type_breakdown = {mem_type.value: len(results) for mem_type, results in deep_results.items()}
+        logger.info("[MEMORY_RETRIEVAL] TA-deep retrieval found %s total memories (breakdown: %s)", total_results, type_breakdown)
+        
+        # Log top memories by type
+        for mem_type, results in deep_results.items():
+            if results:
+                logger.info("[MEMORY_RETRIEVAL]   %s: %s memories", mem_type.upper(), len(results))
+                for i, r in enumerate(results[:2], 1):  # Show top 2 per type
+                    safe_text = r["memory"].text.encode("ascii", "replace").decode("ascii")
+                    logger.info("[MEMORY_RETRIEVAL]     %s. (score: %.3f) - %s", i, r["score"], safe_text[:60])
+        
         self._save_retrieval(session_id, user_id, "deep", deep_results)
     
     def get_memory_injection(self, session_id: str) -> Optional[str]:
@@ -189,8 +218,7 @@ Use these memories naturally to personalize your response. Do not reference them
     
     def _save_retrieval(self, session_id: str, user_id: str, retrieval_type: str, results):
         """Save retrieval results to JSON file. Handles both list (light) and dict (deep) results."""
-        import logging
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         
         data_dir = f"services/TeachingAssistant/Memory/data/{user_id}/memory/TeachingAssistant"
         os.makedirs(data_dir, exist_ok=True)
@@ -239,7 +267,7 @@ Use these memories naturally to personalize your response. Do not reference them
                 else 0
             )
             logger.info(
-                "Saved %s retrieval to %s (%s results)",
+                "[MEMORY_RETRIEVAL] Saved %s retrieval to %s (%s results)",
                 retrieval_type,
                 file_path,
                 result_count,
