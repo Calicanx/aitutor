@@ -189,14 +189,10 @@ function cannyEdgeDetection(imageData: ImageData, lowThreshold: number, highThre
 self.onmessage = (e: MessageEvent) => {
   const { width, height, data, lowThreshold, highThreshold } = e.data;
 
-  console.log('[Canny Worker] Received message:', { width, height, dataSize: data?.byteLength, lowThreshold, highThreshold });
-
   try {
     if (!width || !height || !data) {
       throw new Error(`Invalid image data received: width=${width}, height=${height}, data=${!!data}`);
     }
-
-    console.log('[Canny Worker] Starting edge detection...');
 
     // Reconstruct ImageData from width, height, and data
     let imageDataArray: Uint8ClampedArray;
@@ -221,8 +217,6 @@ self.onmessage = (e: MessageEvent) => {
 
     // Use ArrayBuffer for efficient zero-copy transfer
     const resultBuffer = resultImageData.data.buffer.slice(0);
-
-    console.log('[Canny Worker] Sending result:', { width: resultImageData.width, height: resultImageData.height, bufferSize: resultBuffer.byteLength });
 
     // Send result with transferable ArrayBuffer for optimal performance
     self.postMessage({

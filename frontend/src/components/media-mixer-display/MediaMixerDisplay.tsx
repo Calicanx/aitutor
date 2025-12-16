@@ -133,8 +133,6 @@ const MediaMixerDisplay: React.FC<MediaMixerDisplayProps> = ({
           const edges = processedEdgesRef.current;
           const sectionHeight = sourceCanvas.height / 3;
 
-          console.log('[MediaMixerDisplay] Drawing edges in camera section:', { width: edges.width, height: edges.height });
-
           // Draw the source canvas normally (all three sections)
           ctx.drawImage(sourceCanvas, 0, 0, displayCanvas.width, displayCanvas.height);
 

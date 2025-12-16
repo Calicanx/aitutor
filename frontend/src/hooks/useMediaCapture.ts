@@ -44,9 +44,7 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
       return null;
     }
     try {
-      console.log('Creating Canny filter worker...');
       const worker = new Worker(new URL('../workers/canny-filter.worker.ts', import.meta.url), { type: 'module' });
-      console.log('Canny filter worker created successfully');
       return worker;
     } catch (error) {
       console.error('Failed to create Canny filter worker:', error);
@@ -65,14 +63,10 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
 
   // Process video frames with Canny edge detection when privacy mode is ON
   useEffect(() => {
-    console.log('Privacy mode effect triggered:', { privacyMode, cannyWorker: !!cannyWorker, cameraEnabled, cameraVideoRef: !!cameraVideoRef.current });
-
     if (!privacyMode || !cannyWorker || !cameraEnabled || !cameraVideoRef.current) {
       processedEdgesRef.current = null;
       return;
     }
-
-    console.log('Privacy mode effect: Starting frame processing');
 
     let isProcessing = false;
     let frameInterval: number | null = null;
@@ -107,7 +101,6 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
         // Send width, height, and data using ArrayBuffer for efficient zero-copy transfer
         // Create a copy of the buffer to transfer (original buffer remains in main thread)
         const dataBuffer = imageData.data.buffer.slice(0);
-        console.log('Sending frame to Canny worker:', { width: imageData.width, height: imageData.height });
         cannyWorker.postMessage({
           width: imageData.width,
           height: imageData.height,
@@ -128,7 +121,6 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
       if (e.data.success && e.data.width && e.data.height && e.data.data) {
         // Reconstruct ImageData from width, height, and ArrayBuffer
         try {
-          console.log('Received Canny edges from worker:', { width: e.data.width, height: e.data.height });
           const dataArray = e.data.data instanceof ArrayBuffer
             ? new Uint8ClampedArray(e.data.data)
             : Array.isArray(e.data.data)
@@ -153,7 +145,6 @@ export const useMediaCapture = ({ onCameraFrame, onScreenFrame }: UseMediaCaptur
 
     // Process frames at 2 FPS (500ms interval) when privacy mode is ON
     frameInterval = window.setInterval(processFrame, 500);
-    console.log('Privacy mode effect: Frame processing interval started');
 
     return () => {
       if (frameInterval !== null) {
