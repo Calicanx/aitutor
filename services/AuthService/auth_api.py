@@ -236,7 +236,8 @@ async def complete_setup(request: CompleteSetupRequest):
                 "name": google_user_data["name"],
                 "age": user_profile.age,
                 "current_grade": user_profile.current_grade,
-                "user_type": "student"
+                "user_type": "student",
+                "preferred_language": request.preferred_language
             },
             "is_new_user": True
         }
@@ -311,7 +312,8 @@ async def email_signup(request: EmailSignupRequest):
                 "name": request.name,
                 "age": age,
                 "current_grade": user_profile.current_grade,
-                "user_type": request.user_type
+                "user_type": request.user_type,
+                "preferred_language": request.preferred_language
             },
             "is_new_user": True
         }
@@ -362,7 +364,8 @@ async def email_login(request: EmailLoginRequest):
                 "name": user_data.get("name", ""),
                 "age": user_data.get("age", 5),
                 "current_grade": user_data.get("current_grade", "K"),
-                "user_type": user_data.get("user_type", "student")
+                "user_type": user_data.get("user_type", "student"),
+                "preferred_language": user_data.get("preferred_language", "English")
             },
             "is_new_user": False
         }
@@ -404,7 +407,8 @@ async def get_current_user_info(request: Request):
         "name": user_data.get("google_name", "") if user_data else "",
         "age": user_profile.age,
         "current_grade": user_profile.current_grade,
-        "user_type": user_data.get("user_type", "student") if user_data else "student"
+        "user_type": user_data.get("user_type", "student") if user_data else "student",
+        "preferred_language": user_data.get("preferred_language", "English") if user_data else "English"
     }
 
 

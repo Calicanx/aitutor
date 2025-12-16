@@ -22,6 +22,7 @@ export interface AuthResponse {
     age: number;
     current_grade: string;
     user_type: string;
+    preferred_language?: string;
   };
   is_new_user: boolean;
 }
