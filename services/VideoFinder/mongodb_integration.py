@@ -106,25 +106,45 @@ class MongoDBVideoFinder:
         """
         Add videos to suggested_videos collection for approval.
         Initializes tracking fields: score=0, views=0, helpful_count=0
+        Prevents duplicate videos in suggested_videos or learning_videos.
         """
         try:
             if not videos:
                 logger.info(f"[VIDEO_FINDER] No videos to add for question {question_id}")
                 return 0
 
+            # Get existing question to check for duplicates
+            question_doc = mongo_db.scraped_questions.find_one({"questionId": question_id})
+
+            existing_video_ids = set()
+            if question_doc:
+                # Get video IDs from both suggested and learning videos
+                suggested = question_doc.get("suggested_videos", [])
+                learning = question_doc.get("learning_videos", [])
+
+                for video in suggested + learning:
+                    existing_video_ids.add(video.get("video_id", ""))
+
             added_count = 0
             for video in videos:
                 try:
+                    video_id = video.get('id', '')
+
+                    # Skip if video already exists (deduplication)
+                    if video_id in existing_video_ids:
+                        logger.info(f"[VIDEO_FINDER] Skipping duplicate video {video_id} for {question_id}")
+                        continue
+
                     # Detect language
                     language = self.detect_video_language(
-                        video.get('id', ''),
+                        video_id,
                         video.get('title', ''),
                         video.get('description', '')
                     )
 
                     # Create pending video object with initialized tracking fields
                     pending_video = {
-                        "video_id": video.get('id'),
+                        "video_id": video_id,
                         "title": video.get('title'),
                         "channel": video.get('channel_title', ''),
                         "language": language,
@@ -142,7 +162,8 @@ class MongoDBVideoFinder:
                     )
 
                     added_count += 1
-                    logger.info(f"[VIDEO_FINDER] Added video {video.get('id')} ({language}) to {question_id}")
+                    existing_video_ids.add(video_id)  # Add to set to prevent duplicates in this batch
+                    logger.info(f"[VIDEO_FINDER] Added video {video_id} ({language}) to {question_id}")
 
                 except Exception as e:
                     logger.error(f"[VIDEO_FINDER] Error adding video for {question_id}: {e}")

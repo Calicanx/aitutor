@@ -19,6 +19,7 @@ import "./App.scss";
 import "./styles/mobile-fixes.css"; // Mobile UI fixes
 import { TutorProvider } from "./features/tutor";
 import AuthGuard from "./components/auth/AuthGuard";
+import AssessmentGuard from "./components/auth/AssessmentGuard";
 import Header from "./components/header/Header";
 import BackgroundShapes from "./components/background-shapes/BackgroundShapes";
 import QuestionDisplay from "./components/question-display/QuestionDisplay";
@@ -134,14 +135,15 @@ function App() {
     <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
       <div className="App">
         <AuthGuard>
-          <TutorProvider>
-            <HintProvider>
-              <Header
-                sidebarOpen={isSidebarOpen}
-                onToggleSidebar={toggleSidebar}
-                isDeveloperMode={isDeveloperMode}
-                onToggleDeveloperMode={toggleDeveloperMode}
-              />
+          <AssessmentGuard subject="math">
+            <TutorProvider>
+              <HintProvider>
+                <Header
+                  sidebarOpen={isSidebarOpen}
+                  onToggleSidebar={toggleSidebar}
+                  isDeveloperMode={isDeveloperMode}
+                  onToggleDeveloperMode={toggleDeveloperMode}
+                />
               <div className="streaming-console">
                 <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
                   {isDeveloperMode && (
@@ -212,6 +214,7 @@ function App() {
               <Toaster richColors closeButton />
             </HintProvider>
           </TutorProvider>
+          </AssessmentGuard>
         </AuthGuard>
       </div>
     </ThemeProvider>

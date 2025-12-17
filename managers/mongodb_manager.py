@@ -96,6 +96,11 @@ class MongoDBManager:
         return self._db['scraped_questions']
 
     @property
+    def subject_assessments(self):
+        """Get subject_assessments collection"""
+        return self._db['subject_assessments']
+
+    @property
     def sessions(self):
         """Get sessions collection for active tutoring session state"""
         return self._db['sessions']

@@ -723,6 +723,7 @@ def start_assessment(
         # Distribution: 2 (grade-2), 4 (grade-1), 2 (current), 2 (grade+1)
         questions = []
         exclude_question_ids = set()
+        exclude_skill_ids = set()  # Track skills to diversify questions
         current_time = time.time()
 
         for grade_offset, count in [(-2, 2), (-1, 4), (0, 2), (1, 2)]:
@@ -730,19 +731,40 @@ def start_assessment(
             logger.info(f"[ASSESSMENT] Fetching {count} questions for grade offset {grade_offset} (target grade: {target_grade})")
 
             # Get questions from DASH system with grade filtering
+            # Try to get diverse questions by limiting questions from same skill
             for i in range(count):
-                next_q = dash_system.get_next_question_flexible(
-                    user_id,
-                    current_time,
-                    exclude_question_ids=list(exclude_question_ids),
-                    user_profile=user_profile
-                )
-                if next_q:
-                    # Check if question is in target grade range
-                    skill_ids = next_q.skill_ids if next_q.skill_ids else []
-                    if skill_ids:
-                        questions.append(next_q)
-                        exclude_question_ids.add(next_q.question_id)
+                attempts = 0
+                max_attempts = 5  # Try up to 5 times to find a question from a different skill
+
+                while attempts < max_attempts:
+                    next_q = dash_system.get_next_question_flexible(
+                        user_id,
+                        current_time,
+                        exclude_question_ids=list(exclude_question_ids),
+                        user_profile=user_profile,
+                        exclude_skill_ids=list(exclude_skill_ids) if exclude_skill_ids else None
+                    )
+
+                    if next_q:
+                        skill_ids = next_q.skill_ids if next_q.skill_ids else []
+
+                        # Accept this question and track the skill for diversity
+                        if skill_ids:
+                            questions.append(next_q)
+                            exclude_question_ids.add(next_q.question_id)
+                            # After getting first question in this grade group, exclude this skill for diversity
+                            if i == 0:
+                                exclude_skill_ids.add(skill_ids[0])
+                            break
+                        else:
+                            # No skill IDs, skip this question
+                            exclude_question_ids.add(next_q.question_id)
+                            attempts += 1
+                            continue
+                    else:
+                        break
+
+                    attempts += 1
 
         if len(questions) < 10:
             logger.warning(f"[ASSESSMENT] Only found {len(questions)}/10 questions")
@@ -752,7 +774,8 @@ def start_assessment(
                     user_id,
                     current_time,
                     exclude_question_ids=list(exclude_question_ids),
-                    user_profile=user_profile
+                    user_profile=user_profile,
+                    exclude_skill_ids=list(exclude_skill_ids) if exclude_skill_ids else None
                 )
                 if next_q:
                     questions.append(next_q)
@@ -878,12 +901,29 @@ def complete_assessment(
                 "correct_count": results["correct"]
             }
 
+        # Convert SkillState objects to dictionaries for MongoDB serialization
+        skill_states_dict = {}
+        for skill_id, skill_state in user_profile.skill_states.items():
+            # Handle both SkillState objects and dictionaries
+            if hasattr(skill_state, 'to_dict'):
+                skill_states_dict[skill_id] = skill_state.to_dict()
+            elif isinstance(skill_state, dict):
+                skill_states_dict[skill_id] = skill_state
+            else:
+                # Fallback: try to extract attributes
+                skill_states_dict[skill_id] = {
+                    "memory_strength": getattr(skill_state, 'memory_strength', 0.0),
+                    "last_practice_time": getattr(skill_state, 'last_practice_time', current_time),
+                    "practice_count": getattr(skill_state, 'practice_count', 0),
+                    "correct_count": getattr(skill_state, 'correct_count', 0)
+                }
+
         # Save back to MongoDB
         mongo_db.users.update_one(
             {"user_id": user_id},
             {
                 "$set": {
-                    "skill_states": user_profile.skill_states,
+                    "skill_states": skill_states_dict,
                     "last_updated": current_time
                 }
             }
@@ -1088,6 +1128,122 @@ def reject_video(
     except Exception as e:
         logger.error(f"[VIDEO_REJECTION] Error rejecting video: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to reject video: {str(e)}")
+
+
+@app.get("/api/admin/videos/suggested")
+def get_suggested_videos(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0
+):
+    """
+    Get all suggested videos waiting for approval.
+    Returns questions with their suggested videos.
+    """
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+
+    logger.info(f"[ADMIN_PANEL] Fetching suggested videos (limit: {limit}, offset: {offset})")
+
+    try:
+        # Find questions with suggested_videos
+        questions = list(mongo_db.scraped_questions.find({
+            "suggested_videos": {"$exists": True, "$ne": []}
+        }).skip(offset).limit(limit))
+
+        # Format response
+        result = []
+        for question in questions:
+            question_id = question.get("questionId", "")
+            suggested_videos = question.get("suggested_videos", [])
+
+            # Get question text for context
+            question_text = ""
+            try:
+                assessment_data = question.get("assessmentData", {})
+                item_data_str = assessment_data.get("data", {}).get("assessmentItem", {}).get("item", {}).get("itemData", "")
+                if item_data_str:
+                    import json
+                    item_data = json.loads(item_data_str)
+                    question_obj = item_data.get("question", {})
+                    question_text = question_obj.get("content", "")
+                    # Clean up Perseus widgets
+                    import re
+                    question_text = re.sub(r'\[\[☃[^\]]+\]\]', '', question_text)
+                    question_text = re.sub(r'\*\*', '', question_text)
+                    question_text = re.sub(r'\$\\\\[^$]+\$', '', question_text).strip()[:100]
+            except Exception as e:
+                logger.warning(f"[ADMIN_PANEL] Error parsing question text for {question_id}: {e}")
+
+            result.append({
+                "question_id": question_id,
+                "question_text": question_text,
+                "suggested_videos_count": len(suggested_videos),
+                "videos": suggested_videos
+            })
+
+        logger.info(f"[ADMIN_PANEL] Returning {len(result)} questions with suggested videos")
+        return result
+
+    except Exception as e:
+        logger.error(f"[ADMIN_PANEL] Error fetching suggested videos: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch suggested videos: {str(e)}")
+
+
+@app.get("/api/admin/videos/stats")
+def get_videos_stats(
+    request: Request
+):
+    """
+    Get statistics about suggested and approved videos.
+    """
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+
+    logger.info(f"[ADMIN_PANEL] Fetching video statistics")
+
+    try:
+        # Count questions with suggested videos
+        questions_with_suggested = mongo_db.scraped_questions.count_documents({
+            "suggested_videos": {"$exists": True, "$ne": []}
+        })
+
+        # Get total count of suggested videos
+        total_suggested = 0
+        suggested_questions = list(mongo_db.scraped_questions.find({
+            "suggested_videos": {"$exists": True, "$ne": []}
+        }))
+        for q in suggested_questions:
+            total_suggested += len(q.get("suggested_videos", []))
+
+        # Count questions with approved videos
+        questions_with_approved = mongo_db.scraped_questions.count_documents({
+            "learning_videos": {"$exists": True, "$ne": []}
+        })
+
+        # Get total count of approved videos
+        total_approved = 0
+        approved_questions = list(mongo_db.scraped_questions.find({
+            "learning_videos": {"$exists": True, "$ne": []}
+        }))
+        for q in approved_questions:
+            total_approved += len(q.get("learning_videos", []))
+
+        stats = {
+            "questions_with_suggested": questions_with_suggested,
+            "total_suggested_videos": total_suggested,
+            "questions_with_approved": questions_with_approved,
+            "total_approved_videos": total_approved
+        }
+
+        logger.info(f"[ADMIN_PANEL] Video stats: {stats}")
+        return stats
+
+    except Exception as e:
+        logger.error(f"[ADMIN_PANEL] Error fetching video statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch statistics: {str(e)}")
 
 
 if __name__ == "__main__":

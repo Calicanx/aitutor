@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { ServerItemRenderer } from "../../package/perseus/src/server-item-renderer";
 import { storybookDependenciesV2 } from "../../package/perseus/testing/test-dependencies";
 import { RenderStateRoot } from "@khanacademy/wonder-blocks-core";
@@ -6,7 +6,6 @@ import { PerseusI18nContextProvider } from "../../package/perseus/src/components
 import { mockStrings } from "../../package/perseus/src/strings";
 import { scorePerseusItem } from "@khanacademy/perseus-score";
 import { keScoreFromPerseusScore } from "../../package/perseus/src/util/scoring";
-import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { KEScore } from "@khanacademy/perseus-core";
 
@@ -27,6 +26,13 @@ const AssessmentQuestion: React.FC<Props> = ({
   const [isAnswered, setIsAnswered] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [keScore, setKeScore] = useState<KEScore | null>(null);
+
+  // Reset answer state when question changes
+  useEffect(() => {
+    setIsAnswered(false);
+    setShowFeedback(false);
+    setKeScore(null);
+  }, [question]);
 
   const handleSubmit = () => {
     if (!rendererRef.current) return;
@@ -49,17 +55,31 @@ const AssessmentQuestion: React.FC<Props> = ({
   };
 
   return (
-    <div>
+    <div style={{ marginTop: '32px' }}>
       <div style={{
-        marginBottom: '20px',
-        fontSize: '14px',
-        color: '#666',
-        textAlign: 'center'
+        marginBottom: '24px',
+        fontSize: '16px',
+        fontWeight: 700,
+        color: 'var(--neo-black)',
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        border: '5px solid var(--neo-black)',
+        padding: '16px',
+        backgroundColor: 'var(--neo-yellow)',
+        boxShadow: '2px 2px 0 var(--neo-black)'
       }}>
-        Question {questionNumber}/{totalQuestions}
+        Question {questionNumber} of {totalQuestions}
       </div>
 
-      <div className="border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 text-black dark:text-white p-4 shadow-[2px_2px_0_0_rgba(0,0,0,1)]">
+      <div style={{
+        border: '5px solid var(--neo-black)',
+        backgroundColor: 'var(--neo-bg)',
+        color: 'var(--neo-black)',
+        padding: '24px',
+        boxShadow: '3px 3px 0 var(--neo-black)',
+        marginBottom: '24px'
+      }}>
         <PerseusI18nContextProvider locale="en" strings={mockStrings}>
           <RenderStateRoot>
             <ServerItemRenderer
@@ -83,26 +103,93 @@ const AssessmentQuestion: React.FC<Props> = ({
       </div>
 
       {!isAnswered && (
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <Button onClick={handleSubmit}>Submit Answer</Button>
+        <div style={{ marginBottom: '24px' }}>
+          <button
+            onClick={handleSubmit}
+            style={{
+              width: '100%',
+              padding: '16px 32px',
+              fontSize: '16px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              backgroundColor: 'var(--neo-yellow)',
+              color: 'var(--neo-black)',
+              border: '5px solid var(--neo-black)',
+              cursor: 'pointer',
+              boxShadow: '2px 2px 0 var(--neo-black)',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseDown={(e) => {
+              (e.target as HTMLElement).style.boxShadow = '1px 1px 0 var(--neo-black)';
+              (e.target as HTMLElement).style.transform = 'translateY(2px) translateX(2px)';
+            }}
+            onMouseUp={(e) => {
+              (e.target as HTMLElement).style.boxShadow = '2px 2px 0 var(--neo-black)';
+              (e.target as HTMLElement).style.transform = 'translateY(0) translateX(0)';
+            }}
+          >
+            Submit Answer
+          </button>
         </div>
       )}
 
       {showFeedback && keScore && (
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-            {keScore.correct ? (
-              <>
-                <CheckCircle2 style={{ color: '#4CAF50' }} />
-                <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>Correct!</span>
-              </>
-            ) : (
-              <>
-                <XCircle style={{ color: '#f44336' }} />
-                <span style={{ color: '#f44336', fontWeight: 'bold' }}>Incorrect</span>
-              </>
-            )}
-          </div>
+        <div style={{
+          marginBottom: '24px',
+          padding: '16px',
+          border: '5px solid var(--neo-black)',
+          backgroundColor: keScore.correct ? '#E8F5E9' : '#FFEBEE',
+          boxShadow: '2px 2px 0 var(--neo-black)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px'
+        }}>
+          {keScore.correct ? (
+            <>
+              <CheckCircle2 size={32} style={{ color: '#2E7D32', flexShrink: 0 }} />
+              <span style={{
+                color: '#2E7D32',
+                fontWeight: 700,
+                fontSize: '18px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Correct!
+              </span>
+            </>
+          ) : (
+            <>
+              <XCircle size={32} style={{ color: '#C62828', flexShrink: 0 }} />
+              <span style={{
+                color: '#C62828',
+                fontWeight: 700,
+                fontSize: '18px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Incorrect
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
+      {showFeedback && !isAnswered && (
+        <div style={{
+          padding: '16px',
+          border: '5px solid var(--neo-black)',
+          backgroundColor: 'var(--neo-yellow)',
+          boxShadow: '2px 2px 0 var(--neo-black)',
+          textAlign: 'center',
+          fontSize: '14px',
+          fontWeight: 700,
+          color: 'var(--neo-black)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em'
+        }}>
+          Moving to next question...
         </div>
       )}
     </div>

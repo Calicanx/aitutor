@@ -37,22 +37,23 @@ class VideoFinder:
     def __init__(self):
         """Initialize the VideoFinder with API keys from environment."""
         # Load API keys from environment
-        self.gemini_api_key = os.getenv('GOOGLE_API_KEY')
+        # Try both GEMINI_API_KEY and GOOGLE_API_KEY
+        self.gemini_api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
         self.youtube_api_key = os.getenv('YOUTUBE_API_KEY')
-        
+
         if not self.gemini_api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable not set. Get key from: https://makersuite.google.com/app/apikey")
-        
+            raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY environment variable not set. Get key from: https://makersuite.google.com/app/apikey")
+
         if not self.youtube_api_key:
             raise ValueError("YOUTUBE_API_KEY environment variable not set. Get key from: https://console.cloud.google.com/apis/credentials")
-        
+
         # Initialize Gemini
         genai.configure(api_key=self.gemini_api_key)
         self.gemini_model = genai.GenerativeModel('models/gemini-2.5-pro')
-        
+
         # Initialize YouTube API
         self.youtube = build('youtube', 'v3', developerKey=self.youtube_api_key)
-        
+
         print("✅ APIs initialized successfully")
         print(f"   - Gemini API: Connected")
         print(f"   - YouTube API: Connected")

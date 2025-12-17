@@ -857,7 +857,7 @@ class DASHSystem:
             'avg_time_ratio': avg_time_ratio
         }
 
-    def get_next_question_flexible(self, student_id: str, current_time: float, exclude_question_ids: Optional[List[str]] = None, force_grade_range: bool = False, user_profile: Optional['UserProfile'] = None) -> Optional[Question]:
+    def get_next_question_flexible(self, student_id: str, current_time: float, exclude_question_ids: Optional[List[str]] = None, force_grade_range: bool = False, user_profile: Optional['UserProfile'] = None, exclude_skill_ids: Optional[List[str]] = None) -> Optional[Question]:
         """
         Flexible question selection that expands search when primary skills exhausted.
         Maintains full DASH intelligence (adaptive difficulty, learning journey).
@@ -868,6 +868,7 @@ class DASHSystem:
             exclude_question_ids: Question IDs to exclude
             force_grade_range: If True, search all grade-appropriate skills (not just recommended)
             user_profile: Optional pre-loaded user profile to avoid redundant MongoDB calls
+            exclude_skill_ids: Skill IDs to exclude from selection (for diversifying questions)
 
         Returns:
             Question with full DASH intelligence, or None if truly no questions available
@@ -927,6 +928,10 @@ class DASHSystem:
         
         # Try each skill in learning journey order with adaptive difficulty
         for skill_id, skill, probability in skill_probabilities:
+            # Skip excluded skills (for diversifying assessment questions)
+            if exclude_skill_ids and skill_id in exclude_skill_ids:
+                continue
+
             # Calculate target difficulty (same as normal DASH)
             base_difficulty = skill.difficulty
             target_difficulty = base_difficulty + difficulty_adjustment
