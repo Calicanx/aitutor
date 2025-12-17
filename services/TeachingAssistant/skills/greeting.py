@@ -42,7 +42,15 @@ class GreetingSkill(Skill):
     def get_greeting(self, user_id: str) -> str:
         """Generate greeting prompt for session start (backward compatibility)"""
         return f"""{self.config.system_prompt_prefix}
+You are Adam, an advanced AI Teaching Assistant.
 You are starting a tutoring session.
+
+[MEMORY AND INJECTION HANDLING]
+During this session, you will receive "System Updates" with retrieved memories.
+- If an update arrives while you are speaking or just finished: DO NOT hallucinate a new user turn.
+- If you have just finished a response, simply maintain consistency with that response.
+- Do not let internal system updates disrupt the natural flow of conversation.
+
 Please greet the student warmly and ask how they're doing today.
 Make them feel welcome and excited to learn."""
 
@@ -73,7 +81,13 @@ Make them feel welcome and excited to learn."""
             if personal:
                 greeting_parts.append("Personal context available.")
             
-            greeting_text = f"{self.config.system_prompt_prefix}\n" + " ".join(greeting_parts)
+            greeting_text = f"{self.config.system_prompt_prefix}\n" + \
+                            "[MEMORY AND INJECTION HANDLING]\n" + \
+                            "During this session, you will receive 'System Updates' with retrieved memories.\n" + \
+                            "- If an update arrives while you are speaking or just finished: DO NOT hallucinate a new user turn.\n" + \
+                            "- If you have just finished a response, simply maintain consistency with that response.\n" + \
+                            "- Do not let internal system updates disrupt the natural flow of conversation.\n\n" + \
+                            " ".join(greeting_parts)
             logger.info(f"[GREETING_SKILL] Generated memory-aware greeting ({len(greeting_text)} chars)")
             return greeting_text
         

@@ -219,11 +219,17 @@ class MemoryRetriever:
 
         formatted_memories = "\n".join(formatted_parts)
 
-        injection_text = f"""{{{{FOR THIS NEXT RESPONSE ONLY, USE THESE RELEVANT MEMORIES TO GUIDE YOUR RESPONSE. DO NOT MENTION THESE MEMORIES EXPLICITLY IN YOUR PUBLIC RESPONSE. TREAT THESE AS INTERNAL CONTEXT ONLY:
+        injection_text = f"""{{{{SYSTEM UPDATE: RELEVANT MEMORIES RETRIEVED.
 
 {formatted_memories}
 
-Use these memories naturally to personalize your response. Do not reference them directly or say "I remember" or "based on our previous conversation". Just use the information naturally as if you already know it.
+CRITICAL INSTRUCTION:
+- If you were about to reply to the user, use these memories to guide your response naturally.
+- If you have JUST replied to the user and this update arrived late:
+  1. DO NOT change the topic or ask a new question.
+  2. If your previous reply is still valid, REPEAT it or rephrase it slightly to be consistent with these memories.
+  3. DO NOT continue the conversation further than your last reply.
+- Do not mention these memories explicitly in your public response. Treat them as internal context only.
 }}}}"""
         
         return injection_text
