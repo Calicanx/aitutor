@@ -117,12 +117,12 @@ class TeachingAssistant:
         )
 
     def start_session(self, user_id: str) -> dict:
-        """Start a new session, returns greeting prompt and session info"""
+        """Start a new session, returns session info (greeting moved to start() method)"""
         session = self.session_manager.create_session(user_id)
-        greeting = self.greeting_skill.get_greeting(user_id)
+        # Greeting is now handled in self.start() to ensure it's memory-aware
         return {
             "session_id": session["session_id"],
-            "prompt": greeting,
+            "prompt": "",  # Will be populated by ta.start() in the API layer
             "session_info": self.session_manager.get_session_info(session["session_id"])
         }
 
@@ -211,43 +211,42 @@ class TeachingAssistant:
         # Create context
         self.context_manager.create_context(session_id, user_id, start_time)
         
-        # Initialize memory components
-        memory_store = self._get_or_create_memory_store(user_id)
-        
-        if user_id not in self.memory_consolidators:
-            self.memory_consolidators[user_id] = MemoryConsolidator(memory_store, self.memory_extractor)
-        
-        memory_retriever = MemoryRetriever(memory_store)
-        self.memory_retrievers[session_id] = memory_retriever
-        
-        closing_cache = SessionClosingCache(session_id, user_id)
-        self.closing_caches[session_id] = closing_cache
-        
-
-        
-        # Get greeting (memory-aware)
+        # 1. Generate Greeting FIRST (Fast Path)
+        # We try to use cached opening data if available, but don't block heavily.
         logger.info(f"[TEACHING_ASSISTANT] Requesting greeting for session {session_id}")
-        greeting = self.greeting_skill.start_session(user_id, session_id)
+        greeting = await self.greeting_skill.start_session(user_id, session_id)
         logger.info(f"[TEACHING_ASSISTANT] Greeting received: {bool(greeting)}, Length: {len(greeting) if greeting else 0}")
 
-        # Also record greeting into conversation context so it appears in saved history
+        # Also record greeting into conversation context immediately so it's ready
         context = self.context_manager.get_context(session_id)
         if context and greeting:
-            # Use session start_time as an approximate timestamp for the greeting
             ts = context.start_time or time.time()
             context.add_turn(speaker="adam", text=greeting, timestamp=ts)
 
-        # Send greeting via instruction queue - REMOVED to avoid duplicates
-        # The greeting is returned to the API and sent in the HTTP response instead
-        # if greeting:
-        #     logger.info(f"[TEACHING_ASSISTANT] Sending greeting to injection manager for session {session_id}")
-        #     await self.injection_manager.send_to_adam(greeting, session_id, user_id)
-        #     logger.info(f"[TEACHING_ASSISTANT] Greeting sent successfully")
-        # else:
-        #     if not greeting:
-        #         logger.warning(f"[TEACHING_ASSISTANT] No greeting generated for session {session_id}")
+        # 2. Initialize Memory Components in Background (Async)
+        # This prevents pinecone/memory setup from blocking the greeting response.
+        asyncio.create_task(self._initialize_memory_components_async(user_id, session_id))
 
         return greeting
+
+    async def _initialize_memory_components_async(self, user_id: str, session_id: str):
+        """Initialize memory components (Pinecone, etc.) in background"""
+        try:
+            # Initialize memory components
+            memory_store = self._get_or_create_memory_store(user_id)
+            
+            if user_id not in self.memory_consolidators:
+                self.memory_consolidators[user_id] = MemoryConsolidator(memory_store, self.memory_extractor)
+            
+            memory_retriever = MemoryRetriever(memory_store)
+            self.memory_retrievers[session_id] = memory_retriever
+            
+            closing_cache = SessionClosingCache(session_id, user_id)
+            self.closing_caches[session_id] = closing_cache
+            
+            logger.info(f"[TEACHING_ASSISTANT] Background memory initialization complete for session {session_id}")
+        except Exception as e:
+            logger.error(f"[TEACHING_ASSISTANT] Error in background memory initialization: {e}", exc_info=True)
 
     async def ongoing(self):
         """Main event processing loop"""

@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import threading
 from typing import Dict, List, Set, Optional
 from pathlib import Path
 
@@ -20,33 +21,35 @@ class MemoryRetriever:
         self._turn_counts: Dict[str, int] = {}
         self._session_retrievals: Dict[str, dict] = {}
         self._injected_memory_ids: Dict[str, Set[str]] = {}
+        self._lock = threading.Lock()  # Lock for thread safety
 
     def on_user_turn(self, session_id: str, user_id: str, user_text: str, 
                      timestamp: float, adam_text: str = ""):
         logger = get_logger(__name__)
         
-        if session_id not in self._conversation_history:
-            self._conversation_history[session_id] = []
-            self._turn_counts[session_id] = 0
-            self._session_retrievals[session_id] = {"light": [], "deep": {}}
-            self._injected_memory_ids[session_id] = set()
-            self._session_retrievals[session_id]["last_deep_time"] = time.time()
+        with self._lock:
+            if session_id not in self._conversation_history:
+                self._conversation_history[session_id] = []
+                self._turn_counts[session_id] = 0
+                self._session_retrievals[session_id] = {"light": [], "deep": {}}
+                self._injected_memory_ids[session_id] = set()
+                self._session_retrievals[session_id]["last_deep_time"] = time.time()
 
-        self._turn_counts[session_id] += 1
-        self._conversation_history[session_id].append({
-            "speaker": "user",
-            "text": user_text,
-            "timestamp": timestamp
-        })
-        if adam_text:
+            self._turn_counts[session_id] += 1
             self._conversation_history[session_id].append({
-                "speaker": "adam",
-                "text": adam_text,
+                "speaker": "user",
+                "text": user_text,
                 "timestamp": timestamp
             })
+            if adam_text:
+                self._conversation_history[session_id].append({
+                    "speaker": "adam",
+                    "text": adam_text,
+                    "timestamp": timestamp
+                })
 
-        if len(self._conversation_history[session_id]) > 15:
-            self._conversation_history[session_id] = self._conversation_history[session_id][-15:]
+            if len(self._conversation_history[session_id]) > 15:
+                self._conversation_history[session_id] = self._conversation_history[session_id][-15:]
 
         # Sanitize user_text snippet for consoles that don't support full Unicode
         snippet = (user_text or "")[:50]
@@ -64,7 +67,8 @@ class MemoryRetriever:
             top_k=10,
             exclude_session_id=session_id
         )
-        self._session_retrievals[session_id]["light"] = light_results
+        with self._lock:
+            self._session_retrievals[session_id]["light"] = light_results
         
         if light_results:
             # Count by type
@@ -103,8 +107,11 @@ class MemoryRetriever:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         logger = get_logger(__name__)
         
-        history = self._conversation_history.get(session_id, [])
-        recent_turns = history[-10:] if len(history) >= 10 else history
+        with self._lock:
+            history = self._conversation_history.get(session_id, [])
+            # Create a copy of the list to use outside the lock
+            recent_turns = list(history[-10:]) if len(history) >= 10 else list(history)
+            
         conversation_text = " ".join([turn["text"] for turn in recent_turns])
         
         logger.info(
@@ -143,7 +150,8 @@ class MemoryRetriever:
                     logger.error(f"Error in deep retrieval for {mem_type.value}: {e}")
                     deep_results[mem_type.value] = []
 
-        self._session_retrievals[session_id]["deep"] = deep_results
+        with self._lock:
+            self._session_retrievals[session_id]["deep"] = deep_results
         
         # Log detailed breakdown
         type_breakdown = {mem_type.value: len(results) for mem_type, results in deep_results.items()}
@@ -163,18 +171,22 @@ class MemoryRetriever:
         if session_id not in self._session_retrievals:
             return None
         
-        retrievals = self._session_retrievals[session_id]
-        injected_ids = self._injected_memory_ids[session_id]
+        with self._lock:
+            retrievals = self._session_retrievals.get(session_id, {})
+            # Make copies to work with outside lock
+            light_results = list(retrievals.get("light", []))
+            deep_results = retrievals.get("deep", {}).copy()
+            injected_ids = self._injected_memory_ids[session_id]
         
         memories_to_inject = []
-        for result in retrievals.get("light", []):
+        for result in light_results:
             mem_id = result["memory"].id
             if mem_id not in injected_ids:
                 memories_to_inject.append(result)
                 injected_ids.add(mem_id)
 
         for mem_type in MemoryType:
-            for result in retrievals.get("deep", {}).get(mem_type.value, []):
+            for result in deep_results.get(mem_type.value, []):
                 mem_id = result["memory"].id
                 if mem_id not in injected_ids:
                     memories_to_inject.append(result)

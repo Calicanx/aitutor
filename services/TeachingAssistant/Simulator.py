@@ -190,7 +190,7 @@ class AutomatedSimulator:
         if user_text.strip():
             await self.send_transcript(user_text, "user")
             # Wait for memory processing
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
         
         # Send tutor (Adam) transcript
         if adam_text.strip():

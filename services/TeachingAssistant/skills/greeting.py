@@ -5,6 +5,7 @@ Session timing is handled by SessionManager in MongoDB.
 """
 
 import time
+import asyncio
 from typing import Optional
 import logging
 
@@ -45,10 +46,10 @@ You are starting a tutoring session.
 Please greet the student warmly and ask how they're doing today.
 Make them feel welcome and excited to learn."""
 
-    def start_session(self, user_id: str, session_id: str) -> str:
+    async def start_session(self, user_id: str, session_id: str) -> str:
         """Generate memory-aware greeting prompt for session start"""
         logger.info(f"[GREETING_SKILL] Generating greeting for user {user_id}, session {session_id}")
-        opening = self._load_opening(user_id)
+        opening = await self._load_opening(user_id)
         logger.info(f"[GREETING_SKILL] Loaded opening data: {bool(opening)}")
         
         # Clear opening cache after loading (so it's fresh for next session)
@@ -101,7 +102,7 @@ and encourage them for next session."""
             if next_hooks:
                 closing_parts.append(f"Next time: {', '.join(next_hooks)}")
             
-            closing_text = f"{self.config.system_prompt_prefix}\n" + " ".join(closing_parts)
+            closing_text = f"{self.config.system_prompt_prefix}\nStudent wants to leave the session.\n" + " ".join(closing_parts)
             logger.info(f"[GREETING_SKILL] Generated memory-aware closing ({len(closing_text)} chars)")
             return closing_text
         
@@ -115,10 +116,29 @@ and encourage them for next session."""
 Check with the student if they're there, and if they want to continue...
 We have some very interesting problems to solve."""
 
-    def _load_opening(self, user_id: str) -> Optional[dict]:
-        """Load opening data from memory retrieval file"""
+    async def _load_opening(self, user_id: str) -> Optional[dict]:
+        """
+        Load opening data from memory retrieval file.
+        Implements 'Smart Wait' logic: polls for file if session restart is suspected.
+        """
         file_path = self.config.get_opening_retrieval_path(user_id)
-        return load_json_file(file_path)
+        
+        # Try waiting for up to 3 seconds for the file to appear/update
+        # This handles cases where user restarts immediately after ending session
+        poll_start = time.time()
+        poll_timeout = 3.0  # seconds
+        
+        while time.time() - poll_start < poll_timeout:
+            data = load_json_file(file_path)
+            if data:
+                # Optional: Check timestamp if we have a way to know last session end time
+                # For now, just finding the file is "good enough" if we clear it after use
+                return data
+            
+            # File not found or empty, wait a bit
+            await asyncio.sleep(0.5)
+            
+        return None
 
     def _load_closing(self, user_id: str, session_id: str) -> Optional[dict]:
         """Load closing data from memory retrieval file"""
