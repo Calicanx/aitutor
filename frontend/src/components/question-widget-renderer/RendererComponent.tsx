@@ -33,9 +33,16 @@ const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_U
 interface RendererComponentProps {
     onSkillChange?: (skill: string) => void;
     onQuestionChange?: (questionId: string | null) => void;
+    watchedVideoIds?: string[];
+    onAnswerSubmitted?: () => void;
 }
 
-const RendererComponent = ({ onSkillChange, onQuestionChange }: RendererComponentProps) => {
+const RendererComponent = ({ 
+    onSkillChange, 
+    onQuestionChange,
+    watchedVideoIds = [],
+    onAnswerSubmitted
+}: RendererComponentProps) => {
     const { user } = useAuth();
     const { setTotalHints, setCurrentHintIndex, showHints, setShowHints } = useHint();
     const queryClient = useQueryClient();
@@ -287,10 +294,11 @@ const RendererComponent = ({ onSkillChange, onQuestionChange }: RendererComponen
             try {
                 const currentItem = perseusItems[item];
                 const metadata = (currentItem as any).dash_metadata || {};
+                const questionId = metadata.dash_question_id || `q_${item}`;
 
                 await apiUtils.post(`${DASH_API_URL}/api/submit-answer`, {
                     user_id: user_id,
-                    question_id: metadata.dash_question_id || `q_${item}`,
+                    question_id: questionId,
                     skill_ids: metadata.skill_ids || ["counting_1_10"],
                     is_correct: keScore.correct,
                     response_time_seconds: responseTimeSeconds
@@ -298,6 +306,22 @@ const RendererComponent = ({ onSkillChange, onQuestionChange }: RendererComponen
                 
                 // Invalidate skill-scores cache to trigger refetch with updated data
                 queryClient.invalidateQueries({ queryKey: ["skill-scores"] });
+                
+                // Track watched videos if answer was submitted
+                if (watchedVideoIds && watchedVideoIds.length > 0) {
+                    try {
+                        for (const videoId of watchedVideoIds) {
+                            await apiUtils.post(
+                                `${DASH_API_URL}/api/videos/mark-helpful?question_id=${encodeURIComponent(questionId)}&video_id=${encodeURIComponent(videoId)}&is_correct=${keScore.correct}`,
+                                {}
+                            );
+                        }
+                        // Reset watched videos after tracking
+                        onAnswerSubmitted?.();
+                    } catch (err) {
+                        console.error("Failed to track video helpfulness:", err);
+                    }
+                }
             } catch (err) {
                 console.error("Failed to submit answer to DASH:", err);
             }

@@ -54,6 +54,7 @@ function App() {
   const [isGradingSidebarOpen, setIsGradingSidebarOpen] = useState(false);
   const [currentSkill, setCurrentSkill] = useState<string | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(null);
+  const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);
 
   // Ref to hold mediaMixer instance for use in callbacks
   const mediaMixerRef = useRef<any>(null);
@@ -154,6 +155,7 @@ function App() {
                       questionId={currentQuestionId}
                       open={isSidebarOpen}
                       onToggle={toggleSidebar}
+                      onVideosWatched={setWatchedVideoIds}
                     />
                   )}
                   <GradingSidebar
@@ -175,6 +177,8 @@ function App() {
                           <QuestionDisplay 
                             onSkillChange={setCurrentSkill}
                             onQuestionChange={setCurrentQuestionId}
+                            watchedVideoIds={watchedVideoIds}
+                            onAnswerSubmitted={() => setWatchedVideoIds([])}
                           />
                           {isScratchpadOpen && (
                             <div className="scratchpad-container">

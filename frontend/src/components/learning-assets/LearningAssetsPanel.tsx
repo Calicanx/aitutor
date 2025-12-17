@@ -18,23 +18,27 @@ interface LearningAssetsPanelProps {
   questionId: string | null;
   open: boolean;
   onToggle: () => void;
+  onVideosWatched?: (videoIds: string[]) => void;
 }
 
 const LearningAssetsPanel: React.FC<LearningAssetsPanelProps> = ({
   questionId,
   open,
-  onToggle
+  onToggle,
+  onVideosWatched
 }) => {
   const { user } = useAuth();
   const [videos, setVideos] = useState<LearningVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!questionId || !open) {
       setVideos([]);
       setSelectedVideoId(null);
+      setWatchedVideoIds([]);
       return;
     }
 
@@ -80,6 +84,15 @@ const LearningAssetsPanel: React.FC<LearningAssetsPanelProps> = ({
 
   const handleVideoSelect = (videoId: string) => {
     setSelectedVideoId(videoId);
+    // Track that this video was watched
+    if (!watchedVideoIds.includes(videoId)) {
+      const updatedWatchedIds = [...watchedVideoIds, videoId];
+      setWatchedVideoIds(updatedWatchedIds);
+      // Notify parent component
+      if (onVideosWatched) {
+        onVideosWatched(updatedWatchedIds);
+      }
+    }
   };
 
   return (

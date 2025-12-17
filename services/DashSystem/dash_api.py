@@ -4,9 +4,10 @@ import os
 import json
 import logging
 from typing import List, Dict, Optional
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Add the project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from services.DashSystem.dash_system import DASHSystem, Question
+from services.DashSystem.dash_system import DASHSystem, Question, GradeLevel
 from shared.auth_middleware import get_current_user
 from shared.cache_middleware import CacheControlMiddleware
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
@@ -441,6 +442,15 @@ class RecommendNextRequest(BaseModel):
     current_question_ids: List[str]
     count: int = 5
 
+class AssessmentAnswer(BaseModel):
+    question_id: str
+    skill_id: str
+    is_correct: bool
+
+class CompleteAssessmentRequest(BaseModel):
+    subject: str
+    answers: List[AssessmentAnswer]
+
 @app.post("/api/submit-answer")
 def submit_answer(request: Request, answer: AnswerSubmission):
     """
@@ -652,7 +662,10 @@ async def get_learning_videos(
             logger.info(f"[LEARNING_ASSETS] No videos in {preferred_language}, returning all videos")
             filtered_videos = learning_videos
         
-        # Return first 6 videos (sorting by score will be in Phase 3)
+        # Sort by score (descending) - highest helping scores first
+        filtered_videos.sort(key=lambda v: v.get("score", 0), reverse=True)
+        
+        # Return top 6 videos
         result = filtered_videos[:6]
         
         logger.info(f"[LEARNING_ASSETS] Returning {len(result)} videos for question {question_id} (language: {preferred_language})")
@@ -662,6 +675,419 @@ async def get_learning_videos(
     except Exception as e:
         logger.error(f"[ERROR] Failed to get learning videos for question {question_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get learning videos: {str(e)}")
+
+
+# ===== ASSESSMENT ENDPOINTS (PHASE 3) =====
+
+@app.post("/assessment/start/{subject}")
+def start_assessment(
+    subject: str,
+    request: Request
+):
+    """
+    Start assessment for a subject.
+    Returns 10 questions with explicit grade distribution.
+    Distribution: 2 (grade-2), 4 (grade-1), 2 (current), 2 (grade+1)
+    """
+    ensure_dash_system()
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+    logger.info(f"\n{'='*80}")
+    logger.info(f"[ASSESSMENT] Starting assessment for subject: {subject}, user: {user_id}")
+    logger.info(f"{'='*80}\n")
+
+    try:
+        # Check if already completed
+        existing = mongo_db.subject_assessments.find_one({
+            "user_id": user_id,
+            "subject": subject,
+            "assessment_completed": True
+        })
+
+        if existing:
+            logger.info(f"[ASSESSMENT] User already completed {subject} assessment")
+            return {
+                "error": "Assessment already completed",
+                "score": existing.get("score"),
+                "date": existing.get("assessment_date")
+            }
+
+        # Get user's current grade
+        user_profile = dash_system.load_user_or_create(user_id)
+        current_grade_value = GradeLevel[user_profile.current_grade].value
+
+        logger.info(f"[ASSESSMENT] User grade: {user_profile.current_grade} (value: {current_grade_value})")
+
+        # Get questions with explicit grade distribution
+        # Distribution: 2 (grade-2), 4 (grade-1), 2 (current), 2 (grade+1)
+        questions = []
+        exclude_question_ids = set()
+        current_time = time.time()
+
+        for grade_offset, count in [(-2, 2), (-1, 4), (0, 2), (1, 2)]:
+            target_grade = max(1, current_grade_value + grade_offset)
+            logger.info(f"[ASSESSMENT] Fetching {count} questions for grade offset {grade_offset} (target grade: {target_grade})")
+
+            # Get questions from DASH system with grade filtering
+            for i in range(count):
+                next_q = dash_system.get_next_question_flexible(
+                    user_id,
+                    current_time,
+                    exclude_question_ids=list(exclude_question_ids),
+                    user_profile=user_profile
+                )
+                if next_q:
+                    # Check if question is in target grade range
+                    skill_ids = next_q.skill_ids if next_q.skill_ids else []
+                    if skill_ids:
+                        questions.append(next_q)
+                        exclude_question_ids.add(next_q.question_id)
+
+        if len(questions) < 10:
+            logger.warning(f"[ASSESSMENT] Only found {len(questions)}/10 questions")
+            # Pad with remaining questions if needed
+            while len(questions) < 10:
+                next_q = dash_system.get_next_question_flexible(
+                    user_id,
+                    current_time,
+                    exclude_question_ids=list(exclude_question_ids),
+                    user_profile=user_profile
+                )
+                if next_q:
+                    questions.append(next_q)
+                    exclude_question_ids.add(next_q.question_id)
+                else:
+                    break
+
+        if len(questions) < 10:
+            logger.error(f"[ASSESSMENT] Not enough questions available ({len(questions)}/10)")
+            raise HTTPException(status_code=400, detail="Not enough questions for assessment")
+
+        # Load Perseus items for the questions
+        perseus_items = load_perseus_items_for_dash_questions_from_mongodb(questions)
+
+        if not perseus_items or len(perseus_items) < 10:
+            logger.error(f"[ASSESSMENT] Failed to load all Perseus items ({len(perseus_items)}/10)")
+            raise HTTPException(status_code=400, detail="Failed to load assessment questions")
+
+        # Mark assessment as started
+        mongo_db.subject_assessments.update_one(
+            {"user_id": user_id, "subject": subject},
+            {
+                "$set": {
+                    "assessment_started_at": datetime.now(),
+                    "assessment_completed": False,
+                    "status": "in_progress"
+                }
+            },
+            upsert=True
+        )
+
+        logger.info(f"[ASSESSMENT] Loaded {len(perseus_items)} questions for {subject} assessment")
+
+        return {
+            "status": "started",
+            "subject": subject,
+            "questions": perseus_items,
+            "total": len(perseus_items)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ASSESSMENT] Error starting assessment: {e}")
+        import traceback
+        logger.error(f"[ASSESSMENT] Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to start assessment: {str(e)}")
+
+
+@app.post("/assessment/complete")
+def complete_assessment(
+    request: Request,
+    payload: CompleteAssessmentRequest
+):
+    """
+    Complete assessment and initialize skill states.
+    Stores assessment results and initializes user's skill_states for learning plan.
+    """
+    ensure_dash_system()
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+    subject = payload.subject
+    answers = payload.answers
+
+    logger.info(f"\n{'='*80}")
+    logger.info(f"[ASSESSMENT_COMPLETE] Completing assessment for subject: {subject}")
+    logger.info(f"  Total answers: {len(answers)}")
+    logger.info(f"{'='*80}\n")
+
+    try:
+        # Calculate score and group by skill
+        correct_count = sum(1 for a in answers if a.is_correct)
+        skill_results = {}
+
+        for answer in answers:
+            skill_id = answer.skill_id
+            if skill_id not in skill_results:
+                skill_results[skill_id] = {"correct": 0, "total": 0}
+            skill_results[skill_id]["total"] += 1
+            if answer.is_correct:
+                skill_results[skill_id]["correct"] += 1
+
+        # Update assessment record
+        mongo_db.subject_assessments.update_one(
+            {"user_id": user_id, "subject": subject},
+            {
+                "$set": {
+                    "assessment_completed": True,
+                    "assessment_date": datetime.now(),
+                    "score": correct_count,
+                    "total": len(answers),
+                    "skill_results": {k: v for k, v in skill_results.items()},
+                    "answers": [a.dict() for a in answers],
+                    "learning_plan_generated": True
+                }
+            },
+            upsert=True
+        )
+
+        logger.info(f"[ASSESSMENT_COMPLETE] Score: {correct_count}/{len(answers)}")
+        logger.info(f"[ASSESSMENT_COMPLETE] Skill results: {skill_results}")
+
+        # Initialize skill_states in UserProfile from assessment results
+        user_profile = dash_system.load_user_or_create(user_id)
+
+        if not hasattr(user_profile, 'skill_states'):
+            user_profile.skill_states = {}
+
+        current_time = time.time()
+
+        for skill_id, results in skill_results.items():
+            # Calculate memory strength: 1.0 if correct, 0.5 if some correct, 0.0 if all wrong
+            if results["correct"] > 0:
+                memory_strength = 1.0 if results["correct"] / results["total"] >= 0.5 else 0.5
+            else:
+                memory_strength = 0.0
+
+            user_profile.skill_states[skill_id] = {
+                "memory_strength": memory_strength,
+                "last_practice_time": current_time,
+                "practice_count": results["total"],
+                "correct_count": results["correct"]
+            }
+
+        # Save back to MongoDB
+        mongo_db.users.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "skill_states": user_profile.skill_states,
+                    "last_updated": current_time
+                }
+            }
+        )
+
+        logger.info(f"[ASSESSMENT_COMPLETE] Initialized {len(user_profile.skill_states)} skill states")
+
+        return {
+            "status": "completed",
+            "score": correct_count,
+            "total": len(answers),
+            "percentage": (correct_count / len(answers) * 100) if answers else 0
+        }
+
+    except Exception as e:
+        logger.error(f"[ASSESSMENT_COMPLETE] Error completing assessment: {e}")
+        import traceback
+        logger.error(f"[ASSESSMENT_COMPLETE] Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to complete assessment: {str(e)}")
+
+
+@app.get("/assessment/status/{subject}")
+def check_assessment_status(
+    subject: str,
+    request: Request
+):
+    """
+    Check if user has completed assessment for a subject.
+    Used to prevent re-assessment.
+    """
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+
+    try:
+        assessment = mongo_db.subject_assessments.find_one({
+            "user_id": user_id,
+            "subject": subject
+        })
+
+        if not assessment:
+            return {
+                "completed": False,
+                "score": None,
+                "date": None
+            }
+
+        return {
+            "completed": assessment.get("assessment_completed", False),
+            "score": assessment.get("score"),
+            "date": assessment.get("assessment_date"),
+            "total": assessment.get("total")
+        }
+
+    except Exception as e:
+        logger.error(f"[ASSESSMENT_STATUS] Error checking status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to check assessment status: {str(e)}")
+
+
+# ===== VIDEO TRACKING ENDPOINTS (PHASE 3) =====
+
+@app.post("/api/videos/mark-helpful")
+def mark_video_helpful(
+    request: Request,
+    question_id: str,
+    video_id: str,
+    is_correct: bool
+):
+    """
+    Track when video helps student answer correctly.
+    Increments score and helpful_count when is_correct=true.
+    Always increments views.
+    """
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+
+    logger.info(f"[VIDEO_TRACKING] Marking video {video_id} for question {question_id} (correct: {is_correct})")
+
+    try:
+        if is_correct:
+            # Increment score and helpful_count when answer is correct
+            mongo_db.scraped_questions.update_one(
+                {
+                    "questionId": question_id,
+                    "learning_videos.video_id": video_id
+                },
+                {
+                    "$inc": {
+                        "learning_videos.$.score": 1,
+                        "learning_videos.$.helpful_count": 1,
+                        "learning_videos.$.views": 1
+                    }
+                }
+            )
+        else:
+            # Always increment views
+            mongo_db.scraped_questions.update_one(
+                {
+                    "questionId": question_id,
+                    "learning_videos.video_id": video_id
+                },
+                {
+                    "$inc": {"learning_videos.$.views": 1}
+                }
+            )
+
+        logger.info(f"[VIDEO_TRACKING] Successfully tracked video {video_id}")
+        return {"success": True, "status": "tracked"}
+
+    except Exception as e:
+        logger.error(f"[VIDEO_TRACKING] Error tracking video: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to track video: {str(e)}")
+
+
+@app.post("/api/videos/approve")
+def approve_video(
+    request: Request,
+    question_id: str,
+    video_id: str
+):
+    """
+    Move video from suggested_videos to learning_videos.
+    Initializes tracking fields.
+    """
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+
+    logger.info(f"[VIDEO_APPROVAL] Approving video {video_id} for question {question_id}")
+
+    try:
+        # Find the suggested video
+        doc = mongo_db.scraped_questions.find_one(
+            {
+                "questionId": question_id,
+                "suggested_videos.video_id": video_id
+            },
+            {"suggested_videos.$": 1}
+        )
+
+        if not doc or not doc.get("suggested_videos"):
+            logger.warning(f"[VIDEO_APPROVAL] Video not found in suggested_videos")
+            raise HTTPException(status_code=404, detail="Video not found")
+
+        video = doc["suggested_videos"][0]
+
+        # Initialize tracking fields
+        video_to_add = {
+            "video_id": video.get("video_id"),
+            "title": video.get("title"),
+            "language": video.get("language", "en"),
+            "score": 0,
+            "views": 0,
+            "helpful_count": 0,
+            "approved_at": datetime.now()
+        }
+
+        # Move to learning_videos
+        mongo_db.scraped_questions.update_one(
+            {"questionId": question_id},
+            {
+                "$push": {"learning_videos": video_to_add},
+                "$pull": {"suggested_videos": {"video_id": video_id}}
+            }
+        )
+
+        logger.info(f"[VIDEO_APPROVAL] Video {video_id} approved and moved to learning_videos")
+        return {"success": True, "status": "approved"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[VIDEO_APPROVAL] Error approving video: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve video: {str(e)}")
+
+
+@app.post("/api/videos/reject")
+def reject_video(
+    request: Request,
+    question_id: str,
+    video_id: str
+):
+    """
+    Remove video from suggested_videos.
+    """
+    from managers.mongodb_manager import mongo_db
+
+    user_id = get_current_user(request)
+
+    logger.info(f"[VIDEO_REJECTION] Rejecting video {video_id} for question {question_id}")
+
+    try:
+        mongo_db.scraped_questions.update_one(
+            {"questionId": question_id},
+            {"$pull": {"suggested_videos": {"video_id": video_id}}}
+        )
+
+        logger.info(f"[VIDEO_REJECTION] Video {video_id} rejected and removed")
+        return {"success": True, "status": "rejected"}
+
+    except Exception as e:
+        logger.error(f"[VIDEO_REJECTION] Error rejecting video: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reject video: {str(e)}")
 
 
 if __name__ == "__main__":

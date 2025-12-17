@@ -29,6 +29,7 @@ const LoginPage = lazy(() => import("./components/auth/LoginPage"));
 const LandingPageWrapper = lazy(() => import("./components/landing/LandingPageWrapper"));
 const AccountPage = lazy(() => import("./components/account/AccountPage"));
 const PricingPage = lazy(() => import("./components/pricing/PricingPage"));
+const AssessmentFlow = lazy(() => import("./components/assessment/AssessmentFlow"));
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
@@ -151,6 +152,7 @@ root.render(
                 <Route path="/app/account" component={AccountPage} />
                 <Route path="/app/pricing" component={PricingPage} />
                 <Route path="/pricing" component={PricingPage} />
+                <Route path="/app/assessment/:subject" component={AssessmentFlow} />
                 <Route path="/app" exact component={LandingPageOrApp} />
                 <Route path="/app" component={App} />
                 <Route path="/" exact component={LandingPageOrApp} />
