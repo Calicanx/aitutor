@@ -166,12 +166,38 @@ def extract_question_text(question):
 
         logger.info(f"📝 Raw question text: {question_text[:100]}...")
 
-        # Clean up Perseus formatting
+        # Clean up Perseus formatting - comprehensive cleaning
         import re
         cleaned_text = question_text
-        cleaned_text = re.sub(r'\[\[☃[^\]]+\]\]', '', cleaned_text)  # Remove Perseus widgets
-        cleaned_text = re.sub(r'\*\*', '', cleaned_text)  # Remove bold markers
-        cleaned_text = re.sub(r'\$\\\\[^$]+\$', '', cleaned_text)  # Remove LaTeX
+
+        # 1. Remove Perseus widget markers: [[☃...]]
+        cleaned_text = re.sub(r'\[\[☃[^\]]+\]\]', '', cleaned_text)
+
+        # 2. Remove LaTeX expressions with single/double dollar signs: $...$ or $$...$$
+        cleaned_text = re.sub(r'\$+[^\$]*\$+', '', cleaned_text)
+
+        # 3. Remove LaTeX commands with backslashes: \command, \Large, etc
+        cleaned_text = re.sub(r'\\[a-zA-Z]+', '', cleaned_text)
+
+        # 4. Remove curly braces with content: {...}
+        cleaned_text = re.sub(r'\{[^\}]*\}', '', cleaned_text)
+
+        # 5. Remove markdown image syntax: ![...](...)
+        cleaned_text = re.sub(r'!\[([^\]]*)\]\(([^\)]*)\)', '', cleaned_text)
+
+        # 6. Remove image URIs with web+graphie or similar patterns
+        cleaned_text = re.sub(r'web\+graphie://[^\s)]+', '', cleaned_text)
+
+        # 7. Remove asterisks used for emphasis: *text* or **text**
+        cleaned_text = re.sub(r'\*+', '', cleaned_text)
+
+        # 8. Remove excessive whitespace (multiple spaces, tabs, newlines)
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+
+        # 9. Clean up trailing dots and commas after stripping
+        cleaned_text = cleaned_text.strip()
+        cleaned_text = re.sub(r'^[\.\,\s]+', '', cleaned_text)  # Remove leading dots/commas/spaces
+        cleaned_text = re.sub(r'[\.\,\s]+$', '', cleaned_text)  # Remove trailing dots/commas/spaces
         cleaned_text = cleaned_text.strip()
 
         logger.info(f"✅ Cleaned question text: {cleaned_text[:100]}...")

@@ -124,11 +124,38 @@ class VideoFinder:
                         question_content = self.find_nested_key(item_data, 'content')
 
                         if question_content and isinstance(question_content, str):
-                            # Clean up Perseus widgets and markdown
+                            # Clean up Perseus widgets and markdown - comprehensive cleaning
                             import re
-                            cleaned = re.sub(r'\[\[☃[^\]]+\]\]', '', question_content)
-                            cleaned = re.sub(r'\*\*', '', cleaned)
-                            cleaned = re.sub(r'\$\\\\[^$]+\$', '', cleaned)  # Remove LaTeX
+                            cleaned = question_content
+
+                            # 1. Remove Perseus widget markers: [[☃...]]
+                            cleaned = re.sub(r'\[\[☃[^\]]+\]\]', '', cleaned)
+
+                            # 2. Remove LaTeX expressions with single/double dollar signs: $...$ or $$...$$
+                            cleaned = re.sub(r'\$+[^\$]*\$+', '', cleaned)
+
+                            # 3. Remove LaTeX commands with backslashes: \command, \Large, etc
+                            cleaned = re.sub(r'\\[a-zA-Z]+', '', cleaned)
+
+                            # 4. Remove curly braces with content: {...}
+                            cleaned = re.sub(r'\{[^\}]*\}', '', cleaned)
+
+                            # 5. Remove markdown image syntax: ![...](...)
+                            cleaned = re.sub(r'!\[([^\]]*)\]\(([^\)]*)\)', '', cleaned)
+
+                            # 6. Remove image URIs with web+graphie or similar patterns
+                            cleaned = re.sub(r'web\+graphie://[^\s)]+', '', cleaned)
+
+                            # 7. Remove asterisks used for emphasis: *text* or **text**
+                            cleaned = re.sub(r'\*+', '', cleaned)
+
+                            # 8. Remove excessive whitespace (multiple spaces, tabs, newlines)
+                            cleaned = re.sub(r'\s+', ' ', cleaned)
+
+                            # 9. Clean up trailing dots and commas after stripping
+                            cleaned = cleaned.strip()
+                            cleaned = re.sub(r'^[\.\,\s]+', '', cleaned)  # Remove leading dots/commas/spaces
+                            cleaned = re.sub(r'[\.\,\s]+$', '', cleaned)  # Remove trailing dots/commas/spaces
                             cleaned = cleaned.strip()
 
                             if cleaned:
