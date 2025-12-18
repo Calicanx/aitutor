@@ -137,7 +137,10 @@ class SessionManager:
             {"session_id": session_id},
             {"$push": {"pending_instructions": instruction}}
         )
-        logger.info(f"[SESSION_MANAGER] Pushed instruction {instruction['instruction_id']} to session {session_id}")
+
+        # Log with colored tag - full instruction text
+        logger.info(f"[INSTRUCTION CREATED] {instruction['instruction_id']}: {instruction_text}")
+
         return instruction["instruction_id"]
 
     def get_pending_instructions(self, session_id: str) -> List[Dict[str, Any]]:

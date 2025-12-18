@@ -745,7 +745,9 @@ def push_instruction(request: InstructionRequest, http_request: Request):
         # Push to session's instruction queue
         instruction_id = ta.session_manager.push_instruction(session_id, full_instruction)
 
-        logger.info(f"[INSTRUCTION] Pushed instruction {instruction_id} to session {session_id}")
+        # Log the instruction content
+        truncated_instruction = request.instruction[:150] + "..." if len(request.instruction) > 150 else request.instruction
+        logger.info(f"[INSTRUCTION CREATED] {instruction_id}: {truncated_instruction}")
 
         return {
             "success": True,
@@ -786,7 +788,9 @@ def push_instruction_admin(request: InstructionRequest, api_key: str = None):
         # Push instruction
         instruction_id = ta.session_manager.push_instruction(request.session_id, full_instruction)
 
-        logger.info(f"[INSTRUCTION/ADMIN] Pushed instruction {instruction_id} to session {request.session_id}")
+        # Log the instruction content
+        truncated_instruction = request.instruction[:150] + "..." if len(request.instruction) > 150 else request.instruction
+        logger.info(f"[INSTRUCTION CREATED/ADMIN] {instruction_id}: {truncated_instruction}")
 
         return {
             "success": True,
@@ -953,6 +957,11 @@ def send_instruction_to_tutor(http_request: Request):
         if instructions:
             instruction = instructions[0]
             ta.session_manager.mark_instruction_delivered(session_id, instruction["instruction_id"])
+
+            # Log the instruction being sent to tutor
+            truncated_instruction = instruction["text"][:150] + "..." if len(instruction["text"]) > 150 else instruction["text"]
+            logger.info(f"[INSTRUCTION → TUTOR] {truncated_instruction}")
+
             return PromptResponse(
                 prompt=instruction["text"],
                 session_info=ta.get_session_info(session_id)

@@ -275,7 +275,12 @@ class TeachingAssistant:
                         speaker = event.data.get('speaker')
                         text = event.data.get('text', '')
                         timestamp = event.timestamp
-                        
+
+                        # Log conversation content
+                        if text:
+                            truncated_text = text[:100] + "..." if len(text) > 100 else text
+                            logger.info(f"[CONVERSATION] {speaker.upper()}: {truncated_text}")
+
                         context = self.context_manager.get_context(event.session_id)
                         closing_cache = self.closing_caches.get(event.session_id)
                         memory_retriever = self.memory_retrievers.get(event.session_id)

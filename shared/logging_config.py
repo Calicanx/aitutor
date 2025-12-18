@@ -49,11 +49,28 @@ class ColoredFormatter(logging.Formatter):
         'CRITICAL': '\033[35m',   # Magenta
     }
     RESET = '\033[0m'
-    
+    BLUE = '\033[34m'
+    RED = '\033[31m'
+
     def format(self, record: logging.LogRecord) -> str:
-        color = self.COLORS.get(record.levelname, self.RESET)
-        record.levelname = f"{color}{record.levelname}{self.RESET}"
-        return super().format(record)
+        # Make a copy of the record to avoid modifying the original
+        record_copy = logging.makeLogRecord(record.__dict__)
+        color = self.COLORS.get(record_copy.levelname, self.RESET)
+        record_copy.levelname = f"{color}{record_copy.levelname}{self.RESET}"
+
+        # Color specific message tags
+        message = record_copy.getMessage()
+        if '[CONVERSATION]' in message:
+            message = message.replace('[CONVERSATION]', f'{self.BLUE}[CONVERSATION]{self.RESET}')
+        if '[INSTRUCTION → TUTOR]' in message or '[INSTRUCTION' in message:
+            message = message.replace('[INSTRUCTION → TUTOR]', f'{self.RED}[INSTRUCTION → TUTOR]{self.RESET}')
+            message = message.replace('[INSTRUCTION CREATED]', f'{self.RED}[INSTRUCTION CREATED]{self.RESET}')
+            message = message.replace('[INSTRUCTION CREATED/ADMIN]', f'{self.RED}[INSTRUCTION CREATED/ADMIN]{self.RESET}')
+
+        record_copy.msg = message
+        record_copy.args = ()
+
+        return super().format(record_copy)
 
 
 def setup_logger(
@@ -86,15 +103,13 @@ def setup_logger(
         console_formatter = formatter
         file_formatter = formatter
     else:
-        # Use a simpler format for file logging (no colors, with timestamps)
-        file_formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)s | %(message)s | %(filename)s:%(lineno)d',
-            datefmt='%Y-%m-%d %H:%M:%S'
+        # Use colored format for BOTH file and console (no timestamps)
+        file_formatter = ColoredFormatter(
+            '%(levelname)-8s | %(message)s | %(filename)s:%(lineno)d'
         )
         # Use colored format for console (no timestamps, cleaner for interactive use)
         console_formatter = ColoredFormatter(
-            '%(levelname)s | %(message)s | %(filename)s:%(lineno)d',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            '%(levelname)s | %(message)s | %(filename)s:%(lineno)d'
         )
     
     # Create console handler
