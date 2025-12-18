@@ -21,6 +21,7 @@ import { audioContext } from "../../lib/utils";
 import VolMeterWorket from "../../lib/worklets/vol-meter";
 import { LiveConnectConfig } from "@google/genai";
 import { useAuth } from "../../contexts/AuthContext";
+import { apiUtils } from "../../lib/api-utils";
 
 export type UseTutorResults = {
   client: TutorClient;
@@ -85,12 +86,22 @@ export function useTutor(): UseTutorResults {
     const onAudio = (data: ArrayBuffer) =>
       audioStreamerRef.current?.addPCM16(new Uint8Array(data));
 
+    const onTokenUsage = async (usage: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number }) => {
+      try {
+        const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
+        await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/tutor/token-usage`, usage);
+      } catch (err) {
+        console.error("Failed to track token usage:", err);
+      }
+    };
+
     client
       .on("error", onError)
       .on("open", onOpen)
       .on("close", onClose)
       .on("interrupted", stopAudioStreamer)
-      .on("audio", onAudio);
+      .on("audio", onAudio)
+      .on("tokenUsage", onTokenUsage);
 
     return () => {
       client
@@ -99,6 +110,7 @@ export function useTutor(): UseTutorResults {
         .off("close", onClose)
         .off("interrupted", stopAudioStreamer)
         .off("audio", onAudio)
+        .off("tokenUsage", onTokenUsage)
         .disconnect();
     };
   }, [client]);

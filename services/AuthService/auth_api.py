@@ -554,6 +554,11 @@ async def get_gemini_token(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to create token: {str(e)}")
 
 
+# Register Payment API router (Phase 4 - Week 2)
+from services.PaymentService.api import router as payment_router
+app.include_router(payment_router)
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8003))

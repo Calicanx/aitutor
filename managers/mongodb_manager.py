@@ -104,7 +104,17 @@ class MongoDBManager:
     def sessions(self):
         """Get sessions collection for active tutoring session state"""
         return self._db['sessions']
-    
+
+    @property
+    def session_costs(self):
+        """Get session_costs collection for cost tracking"""
+        return self._db['session_costs']
+
+    @property
+    def payments(self):
+        """Get payments collection for payment records"""
+        return self._db['payments']
+
     def test_connection(self):
         """Test if MongoDB connection is working"""
         try:

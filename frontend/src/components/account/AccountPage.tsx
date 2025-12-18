@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { authAPI, AccountInfo } from '../../lib/auth-api';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -7,6 +8,7 @@ import cn from 'classnames';
 import { User, MapPin, Calendar, DollarSign, Loader2 } from 'lucide-react';
 
 const AccountPage: React.FC = () => {
+  const navigate = useNavigate();
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +49,7 @@ const AccountPage: React.FC = () => {
   };
 
   const handleBuyCredits = () => {
-    // Placeholder for Phase 4: Stripe integration
-    alert('Buy Credits feature coming soon!');
+    navigate('/app/pricing');
   };
 
   if (loading) {

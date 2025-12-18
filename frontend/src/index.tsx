@@ -31,6 +31,7 @@ const AccountPage = lazy(() => import("./components/account/AccountPage"));
 const PricingPage = lazy(() => import("./components/pricing/PricingPage"));
 const AssessmentFlow = lazy(() => import("./components/assessment/AssessmentFlow"));
 const AdminVideoPanel = lazy(() => import("./components/admin/AdminVideoPanel"));
+const CostTrackingPage = lazy(() => import("./components/admin/CostTrackingPage"));
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement,
@@ -154,6 +155,7 @@ root.render(
                 <Route path="/app/pricing" component={PricingPage} />
                 <Route path="/pricing" component={PricingPage} />
                 <Route path="/app/admin/videos" component={AdminVideoPanel} />
+                <Route path="/app/admin/cost-tracking" component={CostTrackingPage} />
                 <Route path="/app/assessment/:subject" component={AssessmentFlow} />
                 <Route path="/app" exact component={LandingPageOrApp} />
                 <Route path="/app" component={App} />

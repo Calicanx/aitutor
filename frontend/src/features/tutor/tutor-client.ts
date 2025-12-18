@@ -59,6 +59,8 @@ export interface TutorClientEventTypes {
   ) => void;
   // Emitted when the current turn is complete
   turncomplete: () => void;
+  // Emitted when token usage data is received from Gemini
+  tokenUsage: (usage: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number }) => void;
 }
 
 export class TutorClient extends EventEmitter<TutorClientEventTypes> {
@@ -223,6 +225,22 @@ export class TutorClient extends EventEmitter<TutorClientEventTypes> {
         const content = { modelTurn: { parts } };
         this.emit("content", content);
         this.log(`server.content`, message);
+      }
+    }
+
+    // Extract and emit token usage if available
+    if (message.usageMetadata) {
+      // Use type assertion to access properties that may not be in the type definition
+      const usage = message.usageMetadata as any;
+      const tokenUsage = {
+        promptTokenCount: usage.promptTokenCount || usage.inputTokenCount || 0,
+        candidatesTokenCount: usage.candidatesTokenCount || usage.outputTokenCount || usage.candidateTokenCount || 0,
+        totalTokenCount: usage.totalTokenCount || 0
+      };
+      
+      // Only emit if we have actual token counts
+      if (tokenUsage.totalTokenCount > 0) {
+        this.emit("tokenUsage", tokenUsage);
       }
     }
   }

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../ui/card';
 import { Button } from '../ui/button';
 import cn from 'classnames';
 import { Check, Star } from 'lucide-react';
+import { paymentAPI } from '../../lib/payment-api';
 
 interface PricingTier {
   name: string;
@@ -60,9 +61,34 @@ const pricingTiers: PricingTier[] = [
 ];
 
 const PricingPage: React.FC = () => {
-  const handleSelectPlan = (tierName: string) => {
-    // Placeholder for Phase 4: Stripe integration
-    alert(`${tierName} plan selected! Payment integration coming soon.`);
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSelectPlan = async (tierName: string) => {
+    try {
+      setIsLoading(tierName);
+      setError(null);
+
+      const planMap: { [key: string]: 'starter' | 'pro' | 'premium' } = {
+        'Starter': 'starter',
+        'Pro': 'pro',
+        'Premium': 'premium'
+      };
+
+      const plan = planMap[tierName];
+      const session = await paymentAPI.createCheckoutSession(plan);
+
+      // Redirect to Stripe checkout
+      if (session.checkout_url) {
+        window.location.href = session.checkout_url;
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create checkout session';
+      setError(errorMessage);
+      console.error('Checkout error:', err);
+    } finally {
+      setIsLoading(null);
+    }
   };
 
   return (
@@ -152,22 +178,37 @@ const PricingPage: React.FC = () => {
               <CardFooter>
                 <Button
                   onClick={() => handleSelectPlan(tier.name)}
+                  disabled={isLoading !== null}
                   className={cn(
                     "w-full py-3 font-black text-black transition-all transform",
                     "border-[2px] border-black shadow-[2px_2px_0_0_rgba(0,0,0,1)]",
                     "active:translate-x-1 active:translate-y-1 active:shadow-none",
                     "uppercase",
+                    isLoading === tier.name && "opacity-50 cursor-not-allowed",
                     tier.isPopular
                       ? "bg-[#C4B5FD] hover:bg-[#C4B5FD]"
                       : "bg-[#FFD93D] hover:bg-[#FFD93D]"
                   )}
                 >
-                  {tier.buttonText}
+                  {isLoading === tier.name ? 'Processing...' : tier.buttonText}
                 </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
+
+        {error && (
+          <div className={cn(
+            "mt-8 text-center p-4 border-[3px] border-red-500",
+            "bg-red-50 dark:bg-red-900/20 shadow-[2px_2px_0_0_rgba(239,68,68,1)]"
+          )}>
+            <p className={cn(
+              "text-sm font-bold text-red-600 dark:text-red-400"
+            )}>
+              {error}
+            </p>
+          </div>
+        )}
 
         <div className={cn(
           "mt-8 md:mt-12 text-center p-6 border-[3px] border-black dark:border-white",

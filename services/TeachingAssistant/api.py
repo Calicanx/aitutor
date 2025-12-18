@@ -45,6 +45,10 @@ app.add_middleware(UnpluggedTimingMiddleware)
 # Cache Control (Phase 7)
 app.add_middleware(CacheControlMiddleware)
 
+# Cost Tracking Middleware (Phase 4) - Track API calls for cost calculation
+from services.shared.cost_tracking_middleware import CostTrackingMiddleware
+app.add_middleware(CostTrackingMiddleware)
+
 # Add GZip compression middleware (Phase 7)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
@@ -121,6 +125,12 @@ class QuestionAnsweredRequest(BaseModel):
     is_correct: bool
 
 
+class TokenUsageRequest(BaseModel):
+    promptTokenCount: int = 0
+    candidatesTokenCount: int = 0
+    totalTokenCount: int = 0
+
+
 class PromptResponse(BaseModel):
     prompt: str
     session_info: dict
@@ -151,6 +161,13 @@ def start_session(http_request: Request, request: Optional[StartSessionRequest] 
     user_id = get_current_user(http_request)
     try:
         result = ta.start_session(user_id)
+        session_id = result["session_id"]
+
+        # Initialize cost tracking for this session
+        from services.CostTracking.cost_tracker import CostTracker
+        cost_tracker = CostTracker(session_id, user_id)
+        cost_tracker.start_session()
+
         return PromptResponse(
             prompt=result["prompt"],
             session_info=result["session_info"]
@@ -208,7 +225,14 @@ def end_session(http_request: Request, request: Optional[EndSessionRequest] = No
                 session_info={'session_active': False, 'user_id': user_id}
             )
 
-        result = ta.end_session(session["session_id"])
+        session_id = session["session_id"]
+
+        # Finalize cost tracking for this session
+        from services.CostTracking.cost_tracker import CostTracker
+        cost_tracker = CostTracker(session_id, user_id)
+        cost_tracker.end_session()
+
+        result = ta.end_session(session_id)
 
         # Pre-load next session questions in background (non-blocking)
         try:
@@ -261,6 +285,58 @@ def record_question(http_request: Request, request: QuestionAnsweredRequest):
     except Exception as e:
         logger.error(f"Error in record_question: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/tutor/token-usage")
+async def record_tutor_token_usage(http_request: Request, request: TokenUsageRequest):
+    """Record token usage from tutor service (Gemini Live API)"""
+    try:
+        user_id = get_current_user(http_request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user from token: {e}", exc_info=True)
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    try:
+        # Get active session for this user
+        session = ta.get_active_session(user_id)
+        if not session:
+            return {"status": "no_session"}
+        
+        session_id = session["session_id"]
+        
+        # Store token usage in session_costs
+        from managers.mongodb_manager import mongo_db
+        from datetime import datetime
+        mongo_db.session_costs.update_one(
+            {"session_id": session_id},
+            {
+                "$push": {
+                    "tutor_token_usage": {
+                        "timestamp": datetime.utcnow(),
+                        "prompt_tokens": request.promptTokenCount,
+                        "candidates_tokens": request.candidatesTokenCount,
+                        "total_tokens": request.totalTokenCount
+                    }
+                },
+                "$inc": {
+                    "api_calls.tutor_api.count": 1,
+                    "api_calls.tutor_api.prompt_tokens": request.promptTokenCount,
+                    "api_calls.tutor_api.output_tokens": request.candidatesTokenCount,
+                    "api_calls.tutor_api.total_tokens": request.totalTokenCount
+                }
+            },
+            upsert=True
+        )
+        
+        logger.debug(f"[TOKEN_USAGE] Recorded {request.totalTokenCount} tokens for session {session_id}")
+        return {"status": "recorded"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error recording token usage: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to record token usage: {str(e)}")
 
 
 @app.get("/session/info")
@@ -766,6 +842,11 @@ def send_instruction_to_tutor(http_request: Request):
     except Exception as e:
         logger.error(f"Error in send_instruction_to_tutor: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Include Cost Tracking API routes (Phase 4)
+from services.CostTracking.api import router as cost_router
+app.include_router(cost_router)
 
 
 if __name__ == "__main__":
