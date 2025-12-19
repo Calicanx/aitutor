@@ -92,6 +92,13 @@ class CompleteSetupRequest(BaseModel):
     interests: Optional[List[str]] = []
     learning_style: Optional[str] = None
 
+class UpdateAccountRequest(BaseModel):
+    name: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    location: Optional[str] = None
+    gender: Optional[str] = None
+    preferred_language: Optional[str] = None
+
 
 @app.get("/health")
 async def health_check():
@@ -455,6 +462,15 @@ async def get_account_info(request: Request):
     # Get location (default to empty string if not set)
     location = user_data.get("location", "") if user_data else ""
     
+    # Get gender
+    gender = user_data.get("gender", "") if user_data else ""
+    
+    # Get preferred language
+    preferred_language = user_data.get("preferred_language", "") if user_data else ""
+    
+    # Get user type
+    user_type = user_data.get("user_type", "student") if user_data else "student"
+    
     # Get credits (default to 0.0 balance with USD currency if not set)
     credits = user_data.get("credits", {}) if user_data else {}
     if not credits:
@@ -472,8 +488,94 @@ async def get_account_info(request: Request):
         "name": name,
         "date_of_birth": date_of_birth,
         "location": location,
+        "gender": gender,
+        "preferred_language": preferred_language,
+        "user_type": user_type,
         "credits": credits
     }
+
+
+@app.put("/account/update")
+async def update_account_info(request: Request, update_data: UpdateAccountRequest):
+    """Update user account information"""
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    
+    token = auth_header.split(" ")[1]
+    payload = verify_token(token)
+    
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    user_id = payload["sub"]
+    
+    # Get user from database
+    user_profile = user_manager.load_user(user_id)
+    
+    if not user_profile:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get full user data from MongoDB
+    from managers.mongodb_manager import mongo_db
+    user_data = mongo_db.users.find_one({"user_id": user_id})
+    
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Build update dictionary with only provided fields
+    update_dict = {}
+    
+    if update_data.name is not None:
+        # Update both google_name and name fields
+        if user_data.get("auth_method") == "google":
+            update_dict["google_name"] = update_data.name
+        else:
+            update_dict["name"] = update_data.name
+    
+    if update_data.date_of_birth is not None:
+        update_dict["date_of_birth"] = update_data.date_of_birth.isoformat()
+        # Recalculate age and current_grade
+        today = datetime.now().date()
+        age = today.year - update_data.date_of_birth.year - ((today.month, today.day) < (update_data.date_of_birth.month, update_data.date_of_birth.day))
+        current_grade = calculate_grade_from_age(age)
+        update_dict["age"] = age
+        update_dict["current_grade"] = current_grade
+        # Also update in UserProfile
+        user_profile.age = age
+        user_profile.current_grade = current_grade
+    
+    if update_data.location is not None:
+        update_dict["location"] = update_data.location
+    
+    if update_data.gender is not None:
+        # Validate gender
+        if update_data.gender not in ["Male", "Female", "Other", "Prefer not to say"]:
+            raise HTTPException(status_code=400, detail="Invalid gender value")
+        update_dict["gender"] = update_data.gender
+    
+    if update_data.preferred_language is not None:
+        # Validate language
+        if update_data.preferred_language not in ["English", "Hindi", "Spanish", "French"]:
+            raise HTTPException(status_code=400, detail="Invalid language value")
+        update_dict["preferred_language"] = update_data.preferred_language
+    
+    # Update MongoDB
+    if update_dict:
+        mongo_db.users.update_one(
+            {"user_id": user_id},
+            {"$set": update_dict}
+        )
+        
+        # Save updated UserProfile if age/grade changed
+        if "age" in update_dict or "current_grade" in update_dict:
+            user_manager.save_user(user_profile)
+        
+        logger.info(f"[ACCOUNT] Updated account info for user {user_id}: {list(update_dict.keys())}")
+    
+    # Return updated account info
+    return await get_account_info(request)
 
 
 @app.get("/auth/detect-location")

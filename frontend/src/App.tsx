@@ -141,8 +141,6 @@ function App() {
                 <Header
                   sidebarOpen={isSidebarOpen}
                   onToggleSidebar={toggleSidebar}
-                  isDeveloperMode={isDeveloperMode}
-                  onToggleDeveloperMode={toggleDeveloperMode}
                 />
               <div className="streaming-console">
                 <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
@@ -158,6 +156,7 @@ function App() {
                       open={isSidebarOpen}
                       onToggle={toggleSidebar}
                       onVideosWatched={setWatchedVideoIds}
+                      isDeveloperMode={isDeveloperMode}
                     />
                   )}
                   <GradingSidebar
