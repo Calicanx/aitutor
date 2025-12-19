@@ -425,6 +425,7 @@ class UserManager:
         date_of_birth=None,
         gender: str = "Prefer not to say",
         preferred_language: str = "English",
+        location: str = None,
         subjects: List[str] = None,
         learning_goals: List[str] = None,
         interests: List[str] = None,
@@ -485,6 +486,7 @@ class UserManager:
             "date_of_birth": date_of_birth.isoformat() if date_of_birth else None,
             "gender": gender,
             "preferred_language": preferred_language,
+            "location": location,
             "subjects": subjects or [],
             "learning_goals": learning_goals or [],
             "interests": interests or [],
@@ -515,6 +517,7 @@ class UserManager:
         date_of_birth,
         gender: str,
         preferred_language: str,
+        location: str = None,
         user_type: str = "student"
     ) -> UserProfile:
         """
@@ -572,6 +575,7 @@ class UserManager:
             "date_of_birth": date_of_birth.isoformat() if date_of_birth else None,
             "gender": gender,
             "preferred_language": preferred_language,
+            "location": location,
             "user_type": user_type,
             "email_verified": False,  # For future email verification
             "last_login": current_time,

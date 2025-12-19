@@ -73,6 +73,7 @@ class EmailSignupRequest(BaseModel):
     date_of_birth: date
     gender: str
     preferred_language: str
+    location: Optional[str] = None
     user_type: str = "student"
 
 class EmailLoginRequest(BaseModel):
@@ -85,6 +86,7 @@ class CompleteSetupRequest(BaseModel):
     date_of_birth: date  # Changed from age
     gender: str
     preferred_language: str
+    location: Optional[str] = None
     subjects: Optional[List[str]] = []
     learning_goals: Optional[List[str]] = []
     interests: Optional[List[str]] = []
@@ -210,6 +212,7 @@ async def complete_setup(request: CompleteSetupRequest):
             date_of_birth=request.date_of_birth,
             gender=request.gender,
             preferred_language=request.preferred_language,
+            location=request.location,
             subjects=request.subjects,
             learning_goals=request.learning_goals,
             interests=request.interests,
@@ -292,6 +295,7 @@ async def email_signup(request: EmailSignupRequest):
             date_of_birth=request.date_of_birth,
             gender=request.gender,
             preferred_language=request.preferred_language,
+            location=request.location,
             user_type=request.user_type
         )
 
@@ -470,6 +474,55 @@ async def get_account_info(request: Request):
         "location": location,
         "credits": credits
     }
+
+
+@app.get("/auth/detect-location")
+async def detect_location(request: Request):
+    """Detect user's country from IP address"""
+    try:
+        # Get client IP from headers (handles proxies/load balancers)
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        if not client_ip:
+            client_ip = request.headers.get("X-Real-IP", "")
+        if not client_ip:
+            client_ip = request.client.host if request.client else None
+        
+        if not client_ip:
+            return {"country": None, "error": "Could not determine IP address"}
+        
+        # Use ipapi.co for geolocation (free tier: 30k/month)
+        import httpx
+        async with httpx.AsyncClient() as client:
+            try:
+                # Free tier doesn't require API key, but you can add one for higher limits
+                api_key = os.getenv("IPAPI_API_KEY", "")  # Optional
+                url = f"https://ipapi.co/{client_ip}/json/"
+                if api_key:
+                    url += f"?key={api_key}"
+                
+                resp = await client.get(url, timeout=5.0)
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    country = data.get("country_name", "")
+                    country_code = data.get("country_code", "")
+                    
+                    return {
+                        "country": country,
+                        "country_code": country_code,
+                        "ip": client_ip
+                    }
+                else:
+                    logger.warning(f"ipapi.co returned status {resp.status_code}")
+                    return {"country": None, "error": "Geolocation service unavailable"}
+                    
+            except Exception as e:
+                logger.error(f"Error calling ipapi.co: {e}")
+                return {"country": None, "error": str(e)}
+                
+    except Exception as e:
+        logger.error(f"Error detecting location: {e}")
+        return {"country": None, "error": str(e)}
 
 
 @app.post("/auth/logout")

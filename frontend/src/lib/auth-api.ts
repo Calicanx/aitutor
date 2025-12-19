@@ -60,6 +60,7 @@ class AuthAPI {
     dateOfBirth: string,
     gender: string,
     preferredLanguage: string,
+    location: string,
     profileData: {
       subjects: string[];
       learningGoals: string[];
@@ -78,6 +79,7 @@ class AuthAPI {
         date_of_birth: dateOfBirth,
         gender: gender,
         preferred_language: preferredLanguage,
+        location: location,
         subjects: profileData.subjects,
         learning_goals: profileData.learningGoals,
         interests: profileData.interests,
@@ -100,6 +102,7 @@ class AuthAPI {
     dateOfBirth: string,
     gender: string,
     preferredLanguage: string,
+    location: string,
     userType: string = "student"
   ): Promise<AuthResponse> {
     const response = await fetch(`${AUTH_SERVICE_URL}/auth/signup`, {
@@ -114,6 +117,7 @@ class AuthAPI {
         date_of_birth: dateOfBirth,
         gender,
         preferred_language: preferredLanguage,
+        location: location,
         user_type: userType
       }),
     });

@@ -1,11 +1,13 @@
 /**
  * Signup form for new users - Multi-step wizard
  */
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { authAPI } from "../../lib/auth-api";
+import { detectLocationFromIP } from "../../lib/geolocation";
+import { getCountryList, findMatchingCountryName } from "../../lib/countries";
 import BackgroundShapes from "../background-shapes/BackgroundShapes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +30,7 @@ const signupSchema = z.object({
   dateOfBirth: z.string().min(1, "Date of birth is required"),
   gender: z.string().min(1, "Please select your gender"),
   preferredLanguage: z.string().min(1, "Please select your preferred language"),
+  location: z.string().min(1, "Please select your location"),
   // Step 2
   subjects: z.array(z.string()).min(1, "Select at least one subject"),
   learningGoals: z.array(z.string()).min(1, "Select at least one goal"),
@@ -77,18 +80,21 @@ const LEARNING_STYLES = [
 ];
 const LANGUAGES = ["English", "Hindi", "Spanish", "French"];
 const GENDERS = ["Male", "Female", "Other", "Prefer not to say"];
+const COUNTRIES = getCountryList();
 
 
 const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onComplete, onCancel }) => {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [countrySearch, setCountrySearch] = useState("");
 
   const {
     control,
     handleSubmit,
     trigger,
     watch,
+    setValue,
     formState: { errors, isValid },
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema) as any,
@@ -97,6 +103,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
       dateOfBirth: "",
       gender: "",
       preferredLanguage: "",
+      location: "",
       subjects: [],
       learningGoals: [],
       interests: [],
@@ -105,10 +112,58 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
     mode: "onChange",
   });
 
+  // Detect location and pre-populate DOB/gender from Google
+  useEffect(() => {
+    // Detect location from IP
+    detectLocationFromIP().then((data) => {
+      if (data.country) {
+        // Try to match detected country name with country-list names
+        const matchedCountry = findMatchingCountryName(data.country);
+        if (matchedCountry) {
+          setValue("location", matchedCountry);
+        }
+      }
+    });
+
+    // If setupToken exists, decode it to get Google user data (birthday/gender)
+    if (setupToken) {
+      try {
+        // Decode JWT to get Google user data (birthday/gender if available)
+        const tokenParts = setupToken.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          
+          // Pre-populate DOB if available from Google
+          if (payload.birthday) {
+            setValue("dateOfBirth", payload.birthday);
+          }
+          
+          // Pre-populate gender if available from Google
+          if (payload.gender) {
+            setValue("gender", payload.gender);
+          }
+        }
+      } catch (e) {
+        console.error("Error decoding setup token:", e);
+      }
+    }
+  }, [setupToken, setValue]);
+
+  // Filter countries based on search
+  const filteredCountries = useMemo(() => {
+    if (!countrySearch.trim()) {
+      return COUNTRIES;
+    }
+    const searchLower = countrySearch.toLowerCase();
+    return COUNTRIES.filter(country => 
+      country.name.toLowerCase().includes(searchLower)
+    );
+  }, [countrySearch]);
+
   const nextStep = async () => {
     let isValidStep = false;
     if (step === 1) {
-      isValidStep = await trigger(["userType", "dateOfBirth", "gender", "preferredLanguage"]);
+      isValidStep = await trigger(["userType", "dateOfBirth", "gender", "preferredLanguage", "location"]);
     } else if (step === 2) {
       isValidStep = await trigger(["subjects", "learningGoals"]);
     }
@@ -127,7 +182,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
     setSubmitError("");
 
     try {
-      const response = await authAPI.completeSetup(setupToken, data.userType, data.dateOfBirth, data.gender, data.preferredLanguage, {
+      const response = await authAPI.completeSetup(setupToken, data.userType, data.dateOfBirth, data.gender, data.preferredLanguage, data.location, {
         subjects: data.subjects,
         learningGoals: data.learningGoals,
         interests: data.interests,
@@ -281,6 +336,50 @@ const SignupForm: React.FC<SignupFormProps> = ({ setupToken, googleUser, onCompl
                     )}
                   />
                   {errors.preferredLanguage && <p className="text-sm font-medium text-destructive">{errors.preferredLanguage.message}</p>}
+                </div>
+
+                <div className="space-y-3">
+                  <Label htmlFor="location" className="text-base font-semibold">
+                    Where do you live?
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    We'll customize content based on your location
+                  </p>
+                  <Controller
+                    name="location"
+                    control={control}
+                    render={({ field }) => (
+                      <Select onValueChange={(value) => { field.onChange(value); setCountrySearch(''); }} value={field.value}>
+                        <SelectTrigger className="h-12 text-lg">
+                          <SelectValue placeholder="Select your country" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          <div className="sticky top-0 z-10 bg-popover p-2 border-b" onClick={(e) => e.stopPropagation()}>
+                            <Input
+                              placeholder="Search countries..."
+                              value={countrySearch}
+                              onChange={(e) => setCountrySearch(e.target.value)}
+                              className="h-9"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          {filteredCountries.length === 0 ? (
+                            <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                              No countries found
+                            </div>
+                          ) : (
+                            filteredCountries.map((country) => (
+                              <SelectItem key={country.code} value={country.name}>
+                                {country.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  {errors.location && <p className="text-sm font-medium text-destructive">{errors.location.message}</p>}
                 </div>
               </div>
             )}

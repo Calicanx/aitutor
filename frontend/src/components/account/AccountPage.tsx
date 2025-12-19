@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useHistory } from 'react-router-dom';
 import { authAPI, AccountInfo } from '../../lib/auth-api';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,7 +8,7 @@ import cn from 'classnames';
 import { User, MapPin, Calendar, DollarSign, Loader2 } from 'lucide-react';
 
 const AccountPage: React.FC = () => {
-  const navigate = useNavigate();
+  const history = useHistory();
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ const AccountPage: React.FC = () => {
   };
 
   const handleBuyCredits = () => {
-    navigate('/app/pricing');
+    history.push('/app/pricing');
   };
 
   if (loading) {
