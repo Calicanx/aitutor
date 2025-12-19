@@ -15,7 +15,7 @@
  */
 import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Route, Switch } from "react-router-dom";
+import { BrowserRouter, Route, Switch, Redirect } from "react-router-dom";
 import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
@@ -155,9 +155,10 @@ root.render(
                 <Route path="/pricing" component={PricingPage} />
                 <Route path="/app/admin/videos" component={AdminVideoPanel} />
                 <Route path="/app/assessment/:subject" component={AssessmentFlow} />
+                <Route path="/landing/:id" component={LandingPageWrapper} /> {/* Dynamic landing page routes */}
                 <Route path="/app" exact component={LandingPageOrApp} />
                 <Route path="/app" component={App} />
-                <Route path="/" exact component={LandingPageOrApp} />
+                <Route path="/" exact render={() => <Redirect to="/comingsoon" />} />
                 <Route component={LandingPageOrApp} /> {/* Catch-all route - fallback to landing page */}
               </Switch>
             </Suspense>
