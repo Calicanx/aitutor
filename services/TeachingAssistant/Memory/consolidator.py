@@ -91,11 +91,39 @@ class SessionClosingCache:
         async with self._lock:
             # Buffer the exchange if we have both sides of the dialogue
             if student_text and ai_text:
-                self.exchange_buffer.append({
-                    "student_text": student_text,
-                    "ai_text": ai_text,
-                    "topic": topic or "general"
-                })
+
+                
+                current_time = time.time()
+                
+                # Check for fragmentation/merging with previous exchange
+                merged = False
+                if self.exchange_buffer:
+                    last_exchange = self.exchange_buffer[-1]
+                    last_time = last_exchange.get("_timestamp", 0)
+                    
+                    # If this message arrived very quickly (< 2.0s) after the last one, 
+                    # OR if the AI response hasn't happened yet (implying user is still typing in bursts),
+                    # we might want to merge.
+                    #
+                    # Heuristic: If user text is short and rapid, it's likely a fragment.
+                    if (current_time - last_time < 2.0):
+                        logger.info("Merging fragmented user input: '%s' + '%s'", last_exchange["student_text"], student_text)
+                        
+                        last_exchange["student_text"] += " " + student_text
+                        # Update AI text only if new one has content (overwriting empty with content)
+                        if ai_text:
+                            last_exchange["ai_text"] = ai_text # Update with latest response
+                        
+                        last_exchange["_timestamp"] = current_time # Reset timer
+                        merged = True
+
+                if not merged:
+                    self.exchange_buffer.append({
+                        "student_text": student_text,
+                        "ai_text": ai_text,
+                        "topic": topic,
+                        "_timestamp": current_time
+                    })
                 
                 # Track topics (simple deduplication)
                 if topic and topic not in self.cache["topics_covered"]:
