@@ -423,14 +423,7 @@ class MemoryStore:
         # Process each memory individually to apply deduplication
         for i, mem in enumerate(memories, 1):
             try:
-                # Check if memory should be filtered
-                should_skip, skip_reason = self._should_skip_memory(mem)
-                if should_skip:
-                    logger.info(
-                        f"[BATCH {i}/{len(memories)}] [FILTER] Skipping: {skip_reason}"
-                    )
-                    stats["filtered"] += 1
-                    continue
+
                 
                 # Check for duplicates
                 duplicate = self._find_duplicate_memory(mem)

@@ -62,44 +62,49 @@ class MemoryExtractor:
 {exchanges_text}
 
 Task 1: Extract STUDENT MEMORIES.
-CRITICAL INSTRUCTION: Focus ONLY on the Student.
-- DO NOT record what the AI did, said, or how the AI behaved.
-- DO NOT record meta-observations like "The student is interacting with an AI".
-- DO NOT focus on the written text or language style (text is retrieved from a separate TTS system). Focus on the context and meaning of the text to extract memories.
-- Record specific facts about the student:
-  - Concepts they understood or misunderstood (Academic)
-  - Emotional reactions and their causes (Context)
-  - Personal preferences, hobbies, or life details mentioned (Personal/Preference)
-  - Specific errors made or questions asked (Academic)
+**GOLDEN RULE**: You are recording PERMANENT FACTS about the Student. You are NOT summarizing a conversation.
 
-Task 2: Detect EMOTIONS (frustrated, confused, excited, anxious, tired, happy, or neutral) for each exchange.
-Task 3: Identify KEY MOMENTS (breakthroughs, major struggles) - max 1 per exchange.
-Task 4: Identify UNFINISHED TOPICS that need follow-up.
+1. **STRICT PROHIBITION (Zero Tolerance)**:
+   - **NEVER** mention "The AI", "The Tutor", "The System", "The Assistant", or "The Conversation".
+   - **NEVER** output meta-commentary like "Student responded to the prompt" or "Student interacted with the system".
+   - **BAD Example**: "Student asked the AI for help with algebra."
+   - **GOOD Example**: "Student requested help with algebra."
+   - **BAD Example**: "Student answered the AI correctly."
+   - **GOOD Example**: "Student demonstrated mastery of [specific concept]."
+
+2. **CRITICAL TRANSCRIPTION HANDLING (Audio Artifacts)**:
+   - The "Student" text comes from realtime audio-to-text. It may contain broken words (e.g., "Cu rrent ly", "chem is try").
+   - **REPAIR**: You MUST mentally repair these fragments to capture the INTENT (e.g. treat "chem is try" as "chemistry").
+   - **NO META-MEMORIES**: DO NOT record memories about the text format (e.g., "Student types with spaces" -> DELETE THIS).
+   - **IGNORE GARBAGE**: If text is unintelligible, IGNORE IT. Do not record "Student text is unclear".
+
+3. **CATEGORIES**:
+   - **Academic**: Knowledge gaps, misconceptions, or mastery (e.g., "Understands chain rule", "Confused by integrals").
+   - **Personal**: Hobbies, life details (e.g., "Plays soccer", "Has a dog named Max").
+   - **Preference**: Learning needs (e.g., "Prefers visual examples", "Dislikes long lectures").
+   - **Context**: Emotional state (e.g., "Anxious about upcoming exam").
+
+Task 2: Detect EMOTIONS (frustrated, confused, excited, anxious, tired, happy, or neutral).
+Task 3: Identify KEY MOMENTS (breakthroughs, major struggles).
+Task 4: Identify UNFINISHED TOPICS.
 
 Return a SINGLE JSON object with this structure:
 {{
   "memories": [
     {{
       "type": "academic|personal|preference|context",
-      "text": "Specific fact about the student (e.g. 'Student confused discriminants with determinants', 'Student mentioned they play basketball', 'Student prefers visual explanations', 'Student seems anxious about exams')",
+      "text": "Fact about the student (e.g. 'Struggles with quadratic formula', ' Loves sci-fi movies')",
       "importance": 0.0-1.0,
       "metadata": {{ "emotion": "...", "topic": "..." }}
     }}
   ],
-  "emotions": ["emotion1", "emotion2", ...],
-  "key_moments": ["moment description 1", ...],
-  "unfinished_topics": ["topic description 1", ...]
+  "emotions": ["..."],
+  "key_moments": ["..."],
+  "unfinished_topics": ["..."]
 }}
 
-IMPORTANT: Ensure you categorize memories correctly:
-- ACADEMIC: specific content knowledge gaps or potential.
-- PERSONAL: hobbies, daily life, sports, interests (outside math).
-- PREFERENCE: learning styles (visual/auditory), pacing, interaction style.
-- CONTEXT: emotional state, energy level, external factors (exams coming up).
-
-Try to identify at least one memory for each relevant category if the conversation supports it.
-
-Return ONLY valid JSON."""
+Return ONLY valid JSON.
+"""
 
         try:
             response = self.model.generate_content(prompt)
