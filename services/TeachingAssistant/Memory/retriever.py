@@ -13,6 +13,11 @@ sys.path.insert(0, str(project_root))
 from shared.logging_config import get_logger
 from .schema import Memory, MemoryType
 from .vector_store import MemoryStore
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 class MemoryRetriever:
     def __init__(self, store: MemoryStore):
@@ -48,25 +53,50 @@ class MemoryRetriever:
                     "timestamp": timestamp
                 })
 
-            if len(self._conversation_history[session_id]) > 15:
+        if len(self._conversation_history[session_id]) > 15:
                 self._conversation_history[session_id] = self._conversation_history[session_id][-15:]
 
         # Sanitize user_text snippet for consoles that don't support full Unicode
         snippet = (user_text or "")[:50]
         safe_snippet = snippet.encode("ascii", "ignore").decode("ascii", "ignore")
-        logger.info(
-            "[MEMORY_RETRIEVAL] Starting TA-light retrieval for session %s, user_id: %s, query: %s...",
-            session_id,
-            user_id,
-            safe_snippet,
-        )
-        logger.info("[MEMORY_RETRIEVAL] Using MemoryStore with index: %s", self.store.index_name)
-        light_results = self.store.search(
-            query=user_text,
-            student_id=user_id,
-            top_k=10,
-            exclude_session_id=session_id
-        )
+
+        # --- Contextual Retrieval Analysis ---
+        # Instead of blindly searching for the user's raw text, we ask the LLM:
+        # 1. Do we actually need to retrieve anything? (Skip for "ok", "thanks", etc.)
+        # 2. If yes, what is the best search query to find relevant info?
+        
+        retrieval_analysis = self._analyze_retrieval_context(user_text, adam_text)
+        should_retrieve = retrieval_analysis.get("need_retrieval", True)
+        search_query = retrieval_analysis.get("retrieval_query", user_text)
+
+        light_results = []
+        if should_retrieve:
+            logger.info(
+                "[MEMORY_RETRIEVAL] Starting TA-light retrieval for session %s, user_id: %s",
+                session_id,
+                user_id,
+            )
+            # Sanitize for logging (Windows/CP1252 safety)
+            safe_query = search_query.encode("ascii", "replace").decode("ascii")
+            logger.info("[MEMORY_RETRIEVAL] Contextual Query: '%s' (Original: '%s')", safe_query, safe_snippet)
+            logger.info("[MEMORY_RETRIEVAL] Using MemoryStore with index: %s", self.store.index_name)
+            
+            try:
+                light_results = self.store.search(
+                    query=search_query,
+                    student_id=user_id,
+                    top_k=10,
+                    exclude_session_id=session_id
+                )
+            except Exception as e:
+                logger.error(f"[MEMORY_RETRIEVAL] Error during search: {e}", exc_info=True)
+                light_results = []
+        else:
+            logger.info(
+                "[MEMORY_RETRIEVAL] Skipping TA-light retrieval (Analysis: retrieval not needed for '%s')", 
+                safe_snippet
+            )
+
         with self._lock:
             self._session_retrievals[session_id]["light"] = light_results
         
@@ -98,10 +128,18 @@ class MemoryRetriever:
         self._save_retrieval(session_id, user_id, "light", light_results)
 
         current_time = time.time()
-        last_deep = self._session_retrievals[session_id].get("last_deep_time", 0)
-        if current_time - last_deep >= 180:
-            self._do_deep_retrieval(session_id, user_id)
-            self._session_retrievals[session_id]["last_deep_time"] = current_time
+        
+        # Safely access session data (could be cleared by concurrent thread)
+        session_data = self._session_retrievals.get(session_id)
+        if session_data:
+            last_deep = session_data.get("last_deep_time", 0)
+            if current_time - last_deep >= 180:
+                self._do_deep_retrieval(session_id, user_id)
+                
+                # Update time safely
+                with self._lock:
+                    if session_id in self._session_retrievals:
+                        self._session_retrievals[session_id]["last_deep_time"] = current_time
 
     def _do_deep_retrieval(self, session_id: str, user_id: str):
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -154,7 +192,7 @@ class MemoryRetriever:
             self._session_retrievals[session_id]["deep"] = deep_results
         
         # Log detailed breakdown
-        type_breakdown = {mem_type.value: len(results) for mem_type, results in deep_results.items()}
+        type_breakdown = {mem_type: len(results) for mem_type, results in deep_results.items()}
         logger.info("[MEMORY_RETRIEVAL] TA-deep retrieval found %s total memories (breakdown: %s)", total_results, type_breakdown)
         
         # Log top memories by type
@@ -307,4 +345,61 @@ CRITICAL INSTRUCTION:
             del self._session_retrievals[session_id]
         if session_id in self._injected_memory_ids:
             del self._injected_memory_ids[session_id]
+
+    def _analyze_retrieval_context(self, user_text: str, model_text: str) -> dict:
+        """
+        Analyze conversation context to determine if retrieval is needed and generate an optimized query.
+        Uses a lightweight LLM call.
+        """
+        if not user_text or not user_text.strip():
+            return {"need_retrieval": False, "retrieval_query": ""}
+
+        # Default fallback
+        fallback_result = {"need_retrieval": True, "retrieval_query": user_text}
+
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash-lite")
+            
+            # Truncate for prompt safety
+            safe_user = user_text[:500]
+            safe_model = model_text[:500] if model_text else "Startup/Greeting"
+
+            prompt = f"""Analyze this conversation turn to decide if memory retrieval is necessary using the following Schema.
+            
+            Previous AI: "{safe_model}"
+            User Input: "{safe_user}"
+
+            Goal: Determine if the user's input requires factual context, personal preferences, or academic history to answer effectively.
+            
+            Rules:
+            - FALSE if: Input is a simple acknowledgement ("ok", "got it"), a greeting ("hi"), or short confirmation ("yes").
+            - TRUE if: Input is a question, statement of confusion ("I don't get it"), explicit preference ("I like visuals"), or changing topic.
+            
+            If TRUE, generate a "retrieval_query" that describes WHAT to look for (e.g. if user says "I don't get it", query="student struggles with [current topic] and learning preferences").
+
+            Return strict JSON:
+            {{
+                "need_retrieval": true/false,
+                "retrieval_query": "string"
+            }}
+            """
+            
+            response = model.generate_content(prompt)
+            text = response.text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            
+            result = json.loads(text.strip())
+            
+            # minimal validation
+            if "need_retrieval" in result:
+                return result
+            return fallback_result
+
+        except Exception as e:
+            logger = get_logger(__name__)
+            logger.warning(f"Error in context analysis for retrieval, using fallback: {e}")
+            return fallback_result
     

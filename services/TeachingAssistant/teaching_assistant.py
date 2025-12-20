@@ -233,7 +233,14 @@ class TeachingAssistant:
         """Initialize memory components (Pinecone, etc.) in background"""
         try:
             # Initialize memory components
-            memory_store = self._get_or_create_memory_store(user_id)
+            # Use asyncio.to_thread for MemoryStore creation as it involves blocking network calls
+            if user_id not in self.memory_stores:
+                logger.info(f"[TEACHING_ASSISTANT] Creating MemoryStore for user: {user_id} (Background)")
+                # Offload heavy initialization to thread to avoid blocking event loop
+                memory_store = await asyncio.to_thread(MemoryStore, user_id=user_id)
+                self.memory_stores[user_id] = memory_store
+            else:
+                memory_store = self.memory_stores[user_id]
             
             if user_id not in self.memory_consolidators:
                 self.memory_consolidators[user_id] = MemoryConsolidator(memory_store, self.memory_extractor)
@@ -279,7 +286,9 @@ class TeachingAssistant:
                         # Log conversation content
                         if text:
                             truncated_text = text[:100] + "..." if len(text) > 100 else text
-                            logger.info(f"[CONVERSATION] {speaker.upper()}: {truncated_text}")
+                            
+                            safe_text = truncated_text.encode("ascii", "replace").decode("ascii")
+                            logger.info(f"[CONVERSATION] {speaker.upper()}: {safe_text}")
 
                         context = self.context_manager.get_context(event.session_id)
                         closing_cache = self.closing_caches.get(event.session_id)

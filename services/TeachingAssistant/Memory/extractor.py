@@ -146,8 +146,9 @@ Return ONLY valid JSON."""
                 # Log each memory with type and importance
                 for i, mem in enumerate(memories, 1):
                     emotion_str = f", emotion: {mem.metadata.get('emotion', 'none')}" if mem.metadata.get('emotion') else ""
+                    safe_text = mem.text.encode("ascii", "replace").decode("ascii")
                     logger.info("[MEMORY_EXTRACTION] Memory %s/%s: [%s] (importance: %.2f%s) - %s", 
-                              i, len(memories), mem.type.value.upper(), mem.importance, emotion_str, mem.text[:100])
+                              i, len(memories), mem.type.value.upper(), mem.importance, emotion_str, safe_text[:100])
             else:
                 logger.info("[MEMORY_EXTRACTION] No memories extracted from %s exchanges", len(exchanges))
                 
