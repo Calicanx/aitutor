@@ -57,15 +57,15 @@ class MemoryExtractor:
             exchanges_text += f"Student: {exchange['student_text']}\n"
             exchanges_text += f"AI: {exchange['ai_text']}\n"
             exchanges_text += f"Topic: {exchange['topic']}\n"
-        
         prompt = f"""Analyze these {len(exchanges)} conversation exchanges to update the Student Profile.
-        
+
 {exchanges_text}
 
 Task 1: Extract STUDENT MEMORIES.
 CRITICAL INSTRUCTION: Focus ONLY on the Student.
 - DO NOT record what the AI did, said, or how the AI behaved.
 - DO NOT record meta-observations like "The student is interacting with an AI".
+- DO NOT focus on the written text or language style (text is retrieved from a separate TTS system). Focus on the context and meaning of the text to extract memories.
 - Record specific facts about the student:
   - Concepts they understood or misunderstood (Academic)
   - Emotional reactions and their causes (Context)

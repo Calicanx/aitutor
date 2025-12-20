@@ -29,7 +29,7 @@ class MemoryConfig:
     All parameters are loaded from environment variables with sensible defaults.
     """
     # Deduplication settings
-    similarity_threshold: float = 0.85  # Cosine similarity threshold for duplicates (0.0-1.0)
+    similarity_threshold: float = 0.92  # Cosine similarity threshold for duplicates (0.0-1.0)
     min_word_count: int = 3  # Minimum words required to save a memory
     
     # Junk word filter (common single-word responses that shouldn't be saved)
@@ -47,7 +47,8 @@ class MemoryConfig:
     def __post_init__(self):
         """Load configuration from environment variables."""
         # Deduplication settings
-        self.similarity_threshold = float(os.getenv("MEMORY_SIMILARITY_THRESHOLD", "0.85"))
+        
+        self.similarity_threshold = float(os.getenv("MEMORY_SIMILARITY_THRESHOLD", "0.92"))
         self.min_word_count = int(os.getenv("MEMORY_MIN_WORD_COUNT", "3"))
         
         # Junk words from env or use defaults
@@ -188,34 +189,7 @@ class MemoryStore:
             logger.error(f"❌ Error checking/creating index: {e}", exc_info=True)
             raise
 
-    def _should_skip_memory(self, memory: Memory) -> Tuple[bool, Optional[str]]:
-        """
-        Determine if a memory should be skipped based on filtering rules.
-        
-        Args:
-            memory: The memory to check
-            
-        Returns:
-            Tuple of (should_skip: bool, reason: Optional[str])
-        """
-        # Check word count
-        word_count = len(memory.text.split())
-        if word_count < self.config.min_word_count:
-            reason = f"word count ({word_count}) below minimum ({self.config.min_word_count})"
-            return True, reason
-        
-        # Check for junk words
-        text_lower = memory.text.lower().strip()
-        if text_lower in self.config.junk_words:
-            reason = f"junk word detected: '{memory.text}'"
-            return True, reason
-        
-        # Check for empty/whitespace
-        if not memory.text or memory.text.isspace():
-            reason = "empty or whitespace-only text"
-            return True, reason
-        
-        return False, None
+
 
     def _find_duplicate_memory(self, memory: Memory) -> Optional[Dict]:
         """
@@ -323,11 +297,7 @@ class MemoryStore:
         """
         logger.info(f"[SAVE] Processing memory: {memory.type.value} - '{memory.text[:50]}...'")
         
-        # Step 1: Check if memory should be skipped
-        should_skip, skip_reason = self._should_skip_memory(memory)
-        if should_skip:
-            logger.info(f"[FILTER] Skipping memory: {skip_reason}")
-            return
+
         
         try:
             # Step 2: Check for duplicates
@@ -419,10 +389,9 @@ class MemoryStore:
         Save a batch of memories with intelligent deduplication.
         
         This method processes each memory through save_memory() to ensure:
-        1. Junk filtering is applied
-        2. Duplicate detection runs for each memory
-        3. Counters are updated for duplicates
-        4. Only unique memories are created
+        1. Duplicate detection runs for each memory
+        2. Counters are updated for duplicates
+        3. Only unique memories are created
         
         Args:
             memories: List of Memory objects to save
