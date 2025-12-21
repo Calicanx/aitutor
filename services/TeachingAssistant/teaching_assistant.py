@@ -283,12 +283,7 @@ class TeachingAssistant:
                         text = event.data.get('text', '')
                         timestamp = event.timestamp
 
-                        # Log conversation content
-                        if text:
-                            truncated_text = text[:100] + "..." if len(text) > 100 else text
-                            
-                            safe_text = truncated_text.encode("ascii", "replace").decode("ascii")
-                            logger.info(f"[CONVERSATION] {speaker.upper()}: {safe_text}")
+
 
                         context = self.context_manager.get_context(event.session_id)
                         closing_cache = self.closing_caches.get(event.session_id)
@@ -388,6 +383,12 @@ class TeachingAssistant:
     async def end(self, user_id: str, session_id: str) -> Optional[str]:
         """End session with memory consolidation"""
         try:
+            # 1. Get closing message FIRST (using last generated state)
+            # This ensures we don't wait for final consolidation
+            logger.info(f"[TEACHING_ASSISTANT] Requesting closing for session {session_id}")
+            closing = self.greeting_skill.end_session(user_id, session_id)
+            logger.info(f"[TEACHING_ASSISTANT] Closing received: {bool(closing)}, Length: {len(closing) if closing else 0}")
+            
             # Get context before clearing
             context = self.context_manager.get_context(session_id)
             
@@ -398,13 +399,14 @@ class TeachingAssistant:
                 # Save conversation
                 await self._save_conversation_async(user_id, session_id, context)
             
-            # Consolidate memories
+            # Consolidate memories (BACKGROUND)
             closing_cache = self.closing_caches.get(session_id)
             if closing_cache:
                 consolidator = self.memory_consolidators.get(user_id)
                 if consolidator:
-                    # Async consolidation
-                    await consolidator.consolidate_session(user_id, session_id, closing_cache)
+                    # Async consolidation - FIRE AND FORGET
+                    # Run in background so user doesn't wait
+                    asyncio.create_task(consolidator.consolidate_session(user_id, session_id, closing_cache))
                 del self.closing_caches[session_id]
             
             # Clean up memory retriever
@@ -415,21 +417,6 @@ class TeachingAssistant:
             
             # Clear context
             self.context_manager.clear_context(session_id)
-            
-            # Get closing message (memory-aware)
-            logger.info(f"[TEACHING_ASSISTANT] Requesting closing for session {session_id}")
-            closing = self.greeting_skill.end_session(user_id, session_id)
-            logger.info(f"[TEACHING_ASSISTANT] Closing received: {bool(closing)}, Length: {len(closing) if closing else 0}")
-            
-            # Send closing via instruction queue - REMOVED to avoid duplicates
-            # The closing is returned to the API and sent in the HTTP response instead
-            # if closing:
-            #     logger.info(f"[TEACHING_ASSISTANT] Sending closing to injection manager for session {session_id}")
-            #     await self.injection_manager.send_to_adam(closing, session_id, user_id)
-            #     logger.info(f"[TEACHING_ASSISTANT] Closing sent successfully")
-            # else:
-            #     if not closing:
-            #         logger.warning(f"[TEACHING_ASSISTANT] No closing generated for session {session_id}")
             
             return closing
         except Exception as e:
@@ -528,7 +515,7 @@ class TeachingAssistant:
             
             # Use file_utils for consistent error handling
             if save_json_file(file_path, conversation_data):
-                logger.info(f"[TEACHING_ASSISTANT] Saved conversation to {file_path} ({len(context.conversation_turns)} turns)")
+                logger.debug(f"[TEACHING_ASSISTANT] Saved conversation to {file_path} ({len(context.conversation_turns)} turns)")
             else:
                 raise FileOperationError(f"Failed to save conversation to {file_path}")
         except Exception as e:

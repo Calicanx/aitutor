@@ -127,24 +127,15 @@ We have some very interesting problems to solve."""
     async def _load_opening(self, user_id: str) -> Optional[dict]:
         """
         Load opening data from memory retrieval file.
-        Implements 'Smart Wait' logic: polls for file if session restart is suspected.
+        Checks for file once and returns immediately (no polling).
         """
         file_path = self.config.get_opening_retrieval_path(user_id)
         
-        # Try waiting for up to 3 seconds for the file to appear/update
-        # This handles cases where user restarts immediately after ending session
-        poll_start = time.time()
-        poll_timeout = 3.0  # seconds
-        
-        while time.time() - poll_start < poll_timeout:
-            data = load_json_file(file_path)
-            if data:
-                # Optional: Check timestamp if we have a way to know last session end time
-                # For now, just finding the file is "good enough" if we clear it after use
-                return data
-            
-            # File not found or empty, wait a bit
-            await asyncio.sleep(0.5)
+        # Check ONCE for the opening cache file
+        # If it exists, use it. If not, return None immediately to use default fallback.
+        data = load_json_file(file_path)
+        if data:
+            return data
             
         return None
 

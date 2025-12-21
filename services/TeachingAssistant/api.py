@@ -410,7 +410,8 @@ def record_conversation_turn(http_request: Request):
     try:
         session = ta.get_active_session(user_id)
         if not session:
-            raise HTTPException(status_code=404, detail="No active session")
+            # If session is already closed (race condition with session end), just ignore
+            return {"status": "ignored", "reason": "no_active_session"}
 
         ta.record_conversation_turn(session["session_id"])
         return {"status": "recorded"}

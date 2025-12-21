@@ -70,7 +70,17 @@ class ColoredFormatter(logging.Formatter):
         record_copy.msg = message
         record_copy.args = ()
 
-        return super().format(record_copy)
+        formatted_message = super().format(record_copy)
+
+        # Sanitize for console encoding on Windows to prevent UnicodeEncodeError
+        # This ensures that non-printable characters (like Hindi) don't crash the console
+        if sys.platform == 'win32' and hasattr(sys.stdout, 'encoding') and sys.stdout.encoding:
+            try:
+                return formatted_message.encode(sys.stdout.encoding, 'replace').decode(sys.stdout.encoding)
+            except Exception:
+                pass
+
+        return formatted_message
 
 
 def setup_logger(

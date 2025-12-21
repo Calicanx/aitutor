@@ -107,7 +107,6 @@ class SessionClosingCache:
                     #
                     # Heuristic: If user text is short and rapid, it's likely a fragment.
                     if (current_time - last_time < 2.0):
-                        logger.info("Merging fragmented user input: '%s' + '%s'", last_exchange["student_text"], student_text)
                         
                         last_exchange["student_text"] += " " + student_text
                         # Update AI text only if new one has content (overwriting empty with content)
