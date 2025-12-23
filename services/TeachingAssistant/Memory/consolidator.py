@@ -200,12 +200,25 @@ class SessionClosingCache:
                 # Async wrapper for vector store save (network I/O)
                 await asyncio.to_thread(store.save_memories_batch, extracted_memories)
                 
-                # Also add to cache for session consolidation
-                self.cache["new_memories"].extend(extracted_memories)
+                # CRITICAL FIX: Don't store full Memory objects - just keep statistics
+                # Update cache with metadata only to reduce memory footprint
+                if "memories_count" not in self.cache:
+                    self.cache["memories_count"] = 0
+                    self.cache["memories_by_type"] = {}
+                
+                self.cache["memories_count"] += len(extracted_memories)
+                for mem_type, count in type_counts.items():
+                    self.cache["memories_by_type"][mem_type] = self.cache["memories_by_type"].get(mem_type, 0) + count
+                
                 logger.info(
                     "[MEMORY_CONSOLIDATION] Successfully saved %s memories from %s exchanges to Pinecone and local storage",
                     len(extracted_memories),
                     batch_size,
+                )
+                logger.info(
+                    "[MEMORY_CONSOLIDATION] Total session memories: %s (breakdown: %s)",
+                    self.cache["memories_count"],
+                    self.cache["memories_by_type"]
                 )
             else:
                 logger.info("[MEMORY_CONSOLIDATION] No memories extracted from batch of %s exchanges", batch_size)
@@ -463,12 +476,9 @@ class MemoryConsolidator:
         # Flush any remaining exchanges in buffer (< 3)
         await closing_cache.flush_remaining_exchanges(self.extractor, self.store)
         
-        # Count total memories generated
-        total_memories = len(closing_cache.cache.get('new_memories', []))
-        memory_counts = {}
-        for mem in closing_cache.cache.get('new_memories', []):
-            mem_type = mem.type.value if hasattr(mem, 'type') else 'unknown'
-            memory_counts[mem_type] = memory_counts.get(mem_type, 0) + 1
+        # Get memory statistics (now using count instead of full objects)
+        total_memories = closing_cache.cache.get('memories_count', 0)
+        memory_counts = closing_cache.cache.get('memories_by_type', {})
         
         logger.info("[MEMORY_CONSOLIDATION] Total memories generated this session: %s (breakdown: %s)", 
                    total_memories, memory_counts)

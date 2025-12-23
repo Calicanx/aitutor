@@ -90,6 +90,10 @@ class TeachingAssistant:
         self.memory_retrievers: Dict[str, MemoryRetriever] = {}
         self.closing_caches: Dict[str, SessionClosingCache] = {}
         
+        # Memory management - LRU cache for stores
+        self._memory_store_access_times: Dict[str, float] = {}
+        self._max_memory_stores = 100  # Maximum number of user memory stores to keep in memory
+        
         # Greeting Skill (with config injection)
         self.greeting_skill = GreetingSkill(self.config)
         self.skills_manager.register_skill(self.greeting_skill)
@@ -182,11 +186,39 @@ class TeachingAssistant:
     # ============================================================================
 
     def _get_or_create_memory_store(self, user_id: str) -> MemoryStore:
-        """Get or create MemoryStore for user"""
+        """Get or create MemoryStore for user with LRU eviction"""
+        current_time = time.time()
+        
         if user_id not in self.memory_stores:
+            # Check if we need to evict old stores (LRU)
+            if len(self.memory_stores) >= self._max_memory_stores:
+                self._evict_oldest_memory_store()
+            
             logger.info(f"[TEACHING_ASSISTANT] Creating MemoryStore for user: {user_id}")
             self.memory_stores[user_id] = MemoryStore(user_id=user_id)
+        
+        # Update access time for LRU
+        self._memory_store_access_times[user_id] = current_time
         return self.memory_stores[user_id]
+    
+    def _evict_oldest_memory_store(self):
+        """Evict the least recently used memory store"""
+        if not self._memory_store_access_times:
+            return
+        
+        # Find oldest user
+        oldest_user = min(self._memory_store_access_times.items(), key=lambda x: x[1])[0]
+        
+        logger.info(f"[TEACHING_ASSISTANT] Evicting MemoryStore for user {oldest_user} (LRU eviction)")
+        
+        # Clean up
+        if oldest_user in self.memory_stores:
+            del self.memory_stores[oldest_user]
+        if oldest_user in self._memory_store_access_times:
+            del self._memory_store_access_times[oldest_user]
+        if oldest_user in self.memory_consolidators:
+            del self.memory_consolidators[oldest_user]
+
 
     async def start(self, user_id: str, session_id: str) -> Optional[str]:
         """
@@ -293,6 +325,17 @@ class TeachingAssistant:
                             user_text = text
                             adam_text = context.last_adam_text or ""
                             
+                            # ===== DETAILED LOGGING: Conversation Exchange =====
+                            safe_user_text = user_text.encode("utf-8", "replace").decode("utf-8")
+                            safe_adam_text = adam_text.encode("utf-8", "replace").decode("utf-8")
+                            logger.info("=" * 80)
+                            logger.info("[CONVERSATION] New Exchange")
+                            logger.info(f"[CONVERSATION] Session: {event.session_id[:20]}... | User: {event.user_id}")
+                            logger.info(f"[CONVERSATION] USER >> {safe_user_text}")
+                            logger.info(f"[CONVERSATION] ADAM >> {safe_adam_text}")
+                            logger.info("=" * 80)
+                            # ===================================================
+                            
                             # Trigger TA-light retrieval (async) but debounce to avoid
                             # running on every tiny turn in very quick succession.
                             if memory_retriever:
@@ -353,12 +396,17 @@ class TeachingAssistant:
             # 1. Sync dirty contexts to MongoDB (Write-Behind)
             if now - self.last_context_sync_time >= self.config.context_sync_interval:
                 self.context_manager.sync_dirty_contexts()
+                # Also cleanup stale contexts (TTL enforcement)
+                self.context_manager.cleanup_stale_contexts()
                 self.last_context_sync_time = now
 
             # 2. Refresh active session cache periodically (DB Polling Optimization)
             if now - self.last_session_sync_time >= self.config.session_sync_interval:
                 self.active_session_cache = self.session_manager.list_active_sessions()
                 self.last_session_sync_time = now
+                
+                # 3. Cleanup orphaned caches (sessions that ended but caches still exist)
+                self._cleanup_orphaned_caches()
                 
             # Execute skills on cached active sessions (instead of querying DB every loop)
             if not events and self.active_session_cache:
@@ -379,6 +427,27 @@ class TeachingAssistant:
             # Continuous processing - yield to event loop to prevent starvation
             if not events:
                 await asyncio.sleep(0)  # Yield control without delay
+    
+    def _cleanup_orphaned_caches(self):
+        """Clean up closing caches for sessions that have ended"""
+        active_session_ids = {session["session_id"] for session in self.active_session_cache}
+        orphaned_sessions = []
+        
+        for session_id in list(self.closing_caches.keys()):
+            if session_id not in active_session_ids:
+                orphaned_sessions.append(session_id)
+        
+        for session_id in orphaned_sessions:
+            logger.info(f"[TEACHING_ASSISTANT] Cleaning up orphaned closing cache for session {session_id}")
+            del self.closing_caches[session_id]
+        
+        # Also cleanup memory retrievers for ended sessions
+        for session_id in list(self.memory_retrievers.keys()):
+            if session_id not in active_session_ids:
+                logger.info(f"[TEACHING_ASSISTANT] Cleaning up orphaned memory retriever for session {session_id}")
+                self.memory_retrievers[session_id].clear_session(session_id)
+                del self.memory_retrievers[session_id]
+
 
     async def end(self, user_id: str, session_id: str) -> Optional[str]:
         """End session with memory consolidation"""

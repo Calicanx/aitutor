@@ -20,6 +20,11 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 class MemoryRetriever:
+    # Memory management constants
+    MAX_HISTORY_PER_SESSION = 10  # Reduced from 15
+    MAX_TOTAL_SESSIONS = 50  # Global cap on concurrent sessions
+    MAX_INJECTED_IDS = 100  # Sliding window for injected memory IDs
+    
     def __init__(self, store: MemoryStore):
         self.store = store
         self._conversation_history: Dict[str, List[dict]] = {}
@@ -27,18 +32,27 @@ class MemoryRetriever:
         self._session_retrievals: Dict[str, dict] = {}
         self._injected_memory_ids: Dict[str, Set[str]] = {}
         self._lock = threading.Lock()  # Lock for thread safety
+        self._session_access_times: Dict[str, float] = {}  # Track for LRU cleanup
 
     def on_user_turn(self, session_id: str, user_id: str, user_text: str, 
                      timestamp: float, adam_text: str = ""):
         logger = get_logger(__name__)
         
         with self._lock:
+            # Initialize session if not exists
             if session_id not in self._conversation_history:
+                # Check if we need to cleanup old sessions
+                if len(self._conversation_history) >= self.MAX_TOTAL_SESSIONS:
+                    self._cleanup_oldest_session()
+                
                 self._conversation_history[session_id] = []
                 self._turn_counts[session_id] = 0
                 self._session_retrievals[session_id] = {"light": [], "deep": {}}
                 self._injected_memory_ids[session_id] = set()
                 self._session_retrievals[session_id]["last_deep_time"] = time.time()
+            
+            # Update access time for LRU
+            self._session_access_times[session_id] = time.time()
 
             self._turn_counts[session_id] += 1
             self._conversation_history[session_id].append({
@@ -53,8 +67,15 @@ class MemoryRetriever:
                     "timestamp": timestamp
                 })
 
-        if len(self._conversation_history[session_id]) > 15:
-                self._conversation_history[session_id] = self._conversation_history[session_id][-15:]
+        # Implement rolling window - keep only last MAX_HISTORY_PER_SESSION turns
+        if len(self._conversation_history[session_id]) > self.MAX_HISTORY_PER_SESSION:
+            self._conversation_history[session_id] = self._conversation_history[session_id][-self.MAX_HISTORY_PER_SESSION:]
+        
+        # Trim injected_memory_ids to prevent unbounded growth (sliding window)
+        if len(self._injected_memory_ids[session_id]) > self.MAX_INJECTED_IDS:
+            # Keep only the most recent IDs
+            ids_list = list(self._injected_memory_ids[session_id])
+            self._injected_memory_ids[session_id] = set(ids_list[-self.MAX_INJECTED_IDS:])
 
         # Sanitize user_text snippet for consoles that don't support full Unicode
         snippet = (user_text or "")[:50]
@@ -107,22 +128,43 @@ class MemoryRetriever:
                 mem_type = r["memory"].type.value
                 type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
             
-            logger.info("[MEMORY_RETRIEVAL] Found %s memories (breakdown: %s)", len(light_results), type_counts)
-            logger.info("[MEMORY_RETRIEVAL] Top memories:")
-            for i, r in enumerate(light_results[:5], 1):  # Show top 5
-                # Sanitize text for logging to prevent UnicodeEncodeError
+            # ===== DETAILED LOGGING: Retrieved Memories =====
+            logger.info("╔" + "═" * 78 + "╗")
+            logger.info("║ [LIGHT RETRIEVAL] Found %s memories (breakdown: %s)%s║" % (
+                len(light_results), 
+                type_counts,
+                " " * (78 - 48 - len(str(len(light_results))) - len(str(type_counts)))
+            ))
+            logger.info("╠" + "═" * 78 + "╣")
+            
+            for i, r in enumerate(light_results, 1):
+                # Get safe text for logging
                 safe_text = r["memory"].text.encode("ascii", "replace").decode("ascii")
-                emotion_str = f", emotion: {r['memory'].metadata.get('emotion', 'none')}" if r['memory'].metadata.get('emotion') else ""
-                logger.info(
-                    "[MEMORY_RETRIEVAL]   %s. [%s] (score: %.3f%s) - %s",
-                    i,
-                    r["memory"].type.value.upper(),
-                    r["score"],
-                    emotion_str,
-                    safe_text[:80],
-                )
-            if len(light_results) > 5:
-                logger.info("[MEMORY_RETRIEVAL]   ... and %s more memories", len(light_results) - 5)
+                emotion = r['memory'].metadata.get('emotion', 'none')
+                mem_type = r["memory"].type.value.upper()
+                score = r["score"]
+                
+                logger.info("║ Memory #%d%s║" % (i, " " * (76 - 10)))
+                logger.info("║ ├─ Type: %s%s║" % (mem_type, " " * (78 - 10 - len(mem_type))))
+                logger.info("║ ├─ Score: %.4f (similarity)%s║" % (score, " " * (78 - 28)))
+                logger.info("║ ├─ Emotion: %s%s║" % (emotion, " " * (78 - 13 - len(emotion))))
+                logger.info("║ └─ Text: %s%s║" % (
+                    safe_text[:62] if len(safe_text) > 62 else safe_text,
+                    " " * max(0, 78 - 11 - min(len(safe_text), 62))
+                ))
+                
+                # If text is longer, continue on next lines
+                if len(safe_text) > 62:
+                    remaining = safe_text[62:]
+                    for j in range(0, len(remaining), 68):
+                        chunk = remaining[j:j+68]
+                        logger.info("║          %s%s║" % (chunk, " " * (68 - len(chunk))))
+                
+                if i < len(light_results):
+                    logger.info("║%s║" % (" " * 78))
+            
+            logger.info("╚" + "═" * 78 + "╝")
+            # ================================================
         else:
             logger.info("[MEMORY_RETRIEVAL] No memories found for query: %s...", safe_snippet)
         self._save_retrieval(session_id, user_id, "light", light_results)
@@ -140,6 +182,113 @@ class MemoryRetriever:
                 with self._lock:
                     if session_id in self._session_retrievals:
                         self._session_retrievals[session_id]["last_deep_time"] = current_time
+    
+    def _cleanup_oldest_session(self):
+        """Remove the least recently used session to free memory"""
+        if not self._session_access_times:
+            return
+        
+        # Find oldest session
+        oldest_session = min(self._session_access_times.items(), key=lambda x: x[1])[0]
+        
+        logger.info(f"[MEMORY_RETRIEVAL] Cleaning up oldest session {oldest_session} to free memory (LRU eviction)")
+        
+        # Clean up all associated data
+        if oldest_session in self._conversation_history:
+            del self._conversation_history[oldest_session]
+        if oldest_session in self._turn_counts:
+            del self._turn_counts[oldest_session]
+        if oldest_session in self._session_retrievals:
+            del self._session_retrievals[oldest_session]
+        if oldest_session in self._injected_memory_ids:
+            del self._injected_memory_ids[oldest_session]
+        if oldest_session in self._session_access_times:
+            del self._session_access_times[oldest_session]
+
+
+    def _analyze_deep_retrieval_context(self, conversation_text: str) -> str:
+        """
+        Generate a search query for Deep Retrieval based on recent conversation history.
+        Always runs to synthesize themes.
+        """
+        logger = get_logger(__name__)
+        
+        # Fallback to raw text if analysis fails
+        fallback_query = conversation_text
+
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash-lite")
+            
+            # Truncate context if too long
+            safe_context = conversation_text[:2000]
+
+            prompt = f"""You are an Expert Knowledge Synthesizer for an AI Tutor.
+            Analyze the recent conversation history (last few minutes) to generate a Deep Search Query.
+
+            Context: "{safe_context}"
+
+            GOAL:
+            Identify the **underlying themes**, **concepts**, or **patterns** that require checking long-term memory.
+            We are NOT looking for exact keyword matches of what was just said. We are looking for **related past experiences**.
+
+            INSTRUCTIONS:
+            1. Identify the core academic topic (e.g., "quadratic equations").
+            2. Identify the student's current state/struggle (e.g., "confused about variables").
+            3. Identify any personal hooks mentioned (e.g., "basketball analogy").
+            
+            GENERATE A SINGLE SEARCH STRING that combines:
+            - The Academic Concept
+            - The Type of Struggle/Interaction
+            - Potential Personal Connections
+
+            EXAMPLE:
+            Context: "I just don't get why t is negative. It's like the ball is going underground."
+            Bad Query: "t is negative ball underground"
+            Good Query: "negative variables logic physics trajectory misconceptions basketball analogies"
+
+            Return strict JSON:
+            {{
+                "deep_query": "string"
+            }}
+            """
+            
+            # ===== LOGGING: Deep Retrieval Analysis =====
+            try:
+                logger.info("┌" + "─" * 78 + "┐")
+                logger.info("│ [DEEP RETRIEVAL ANALYSIS] LLM Call for Query Generation" + " " * 21 + "│")
+                logger.info("└" + "─" * 78 + "┘")
+            except Exception:
+                pass
+            # ===========================================
+
+            response = model.generate_content(prompt)
+            text = response.text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            
+            result = json.loads(text.strip())
+            deep_query = result.get("deep_query", conversation_text)
+
+            # ===== LOGGING: Deep Query Result =====
+            try:
+                logger.info("┌" + "─" * 78 + "┐")
+                logger.info("│ [DEEP QUERY GENERATED]" + " " * 54 + "│")
+                logger.info("├" + "─" * 78 + "┤")
+                logger.info(f"│ Query: {deep_query[:69]:<69} │")
+                if len(deep_query) > 69:
+                    logger.info(f"│        {deep_query[69:138]:<69} │")
+                logger.info("└" + "─" * 78 + "┘")
+            except Exception:
+                pass
+            # ======================================
+
+            return deep_query
+
+        except Exception as e:
+            logger.warning(f"[DEEP RETRIEVAL ANALYSIS] Error, using raw text: {e}")
+            return fallback_query
 
     def _do_deep_retrieval(self, session_id: str, user_id: str):
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -156,20 +305,28 @@ class MemoryRetriever:
             "[MEMORY_RETRIEVAL] Starting TA-deep retrieval for session %s (3+ minutes since last deep retrieval)",
             session_id,
         )
-        logger.info("[MEMORY_RETRIEVAL] Using MemoryStore with index: %s", self.store.index_name)
-        convo_snippet = (conversation_text or "")[:100]
+        
+        # === ENHANCEMENT: Use LLM to generate the deep search query ===
+        deep_search_query = self._analyze_deep_retrieval_context(conversation_text)
+        
+        convo_snippet = (deep_search_query or "")[:100]
         convo_safe = convo_snippet.encode("ascii", "ignore").decode("ascii", "ignore")
-        logger.info("[MEMORY_RETRIEVAL] Conversation context: %s...", convo_safe)
+        logger.info("[MEMORY_RETRIEVAL] Using Optimized Deep Query: %s...", convo_safe)
         
         deep_results = {}
         total_results = 0
         
         # Optimize: Parallelize Pinecone searches (reduction ~4x latency)
+        # Check if deep_search_query is valid
+        if not deep_search_query or not deep_search_query.strip():
+            logger.warning("[MEMORY_RETRIEVAL] Deep search query is empty, skipping deep retrieval.")
+            return
+
         with ThreadPoolExecutor(max_workers=4) as executor:
             future_to_type = {
                 executor.submit(
                     self.store.search,
-                    query=conversation_text,
+                    query=deep_search_query,     # Use the optimized query here!
                     student_id=user_id,
                     mem_type=mem_type,
                     top_k=5 if mem_type == MemoryType.ACADEMIC else 3,
@@ -191,21 +348,59 @@ class MemoryRetriever:
         with self._lock:
             self._session_retrievals[session_id]["deep"] = deep_results
         
-        # Log detailed breakdown
+        # ===== DETAILED LOGGING: Deep Retrieval Results =====
         type_breakdown = {mem_type: len(results) for mem_type, results in deep_results.items()}
-        logger.info("[MEMORY_RETRIEVAL] TA-deep retrieval found %s total memories (breakdown: %s)", total_results, type_breakdown)
+        logger.info("╔" + "═" * 78 + "╗")
+        logger.info("║ [DEEP RETRIEVAL] Found %s total memories (breakdown: %s)%s║" % (
+            total_results,
+            type_breakdown,
+            " " * max(0, 78 - 50 - len(str(total_results)) - len(str(type_breakdown)))
+        ))
+        logger.info("╠" + "═" * 78 + "╣")
         
-        # Log top memories by type
+        # Log all memories by type with detailed information
         for mem_type, results in deep_results.items():
             if results:
-                logger.info("[MEMORY_RETRIEVAL]   %s: %s memories", mem_type.upper(), len(results))
-                for i, r in enumerate(results[:2], 1):  # Show top 2 per type
+                logger.info("║ %s%s║" % (" " * 78, ""))
+                logger.info("║ ┌─ %s (%s memories)%s║" % (
+                    mem_type.upper(),
+                    len(results),
+                    " " * max(0, 78 - 7 - len(mem_type) - len(str(len(results))) - 11)
+                ))
+                logger.info("║ │%s║" % (" " * 78))
+                
+                for i, r in enumerate(results, 1):
                     safe_text = r["memory"].text.encode("ascii", "replace").decode("ascii")
-                    logger.info("[MEMORY_RETRIEVAL]     %s. (score: %.3f) - %s", i, r["score"], safe_text[:60])
+                    score = r["score"]
+                    emotion = r["memory"].metadata.get("emotion", "none")
+                    
+                    logger.info("║ │  Memory #%d%s║" % (i, " " * (78 - 13)))
+                    logger.info("║ │  ├─ Score: %.4f%s║" % (score, " " * (78 - 18)))
+                    logger.info("║ │  ├─ Emotion: %s%s║" % (emotion, " " * (78 - 16 - len(emotion))))
+                    logger.info("║ │  └─ Text: %s%s║" % (
+                        safe_text[:59] if len(safe_text) > 59 else safe_text,
+                        " " * max(0, 78 - 14 - min(len(safe_text), 59))
+                    ))
+                    
+                    # Continue text on next lines if needed
+                    if len(safe_text) > 59:
+                        remaining = safe_text[59:]
+                        for j in range(0, len(remaining), 65):
+                            chunk = remaining[j:j+65]
+                            logger.info("║ │           %s%s║" % (chunk, " " * (65 - len(chunk))))
+                    
+                    if i < len(results):
+                        logger.info("║ │%s║" % (" " * 78))
+        
+        logger.info("╚" + "═" * 78 + "╝")
+        # ====================================================
         
         self._save_retrieval(session_id, user_id, "deep", deep_results)
+
     
     def get_memory_injection(self, session_id: str) -> Optional[str]:
+        logger = get_logger(__name__)  # Initialize logger
+        
         if session_id not in self._session_retrievals:
             return None
         
@@ -269,6 +464,14 @@ CRITICAL INSTRUCTION:
   3. DO NOT continue the conversation further than your last reply.
 - Do not mention these memories explicitly in your public response. Treat them as internal context only.
 }}}}"""
+        
+        # CRITICAL FIX: Clear retrieval results after injection to free memory
+        with self._lock:
+            if session_id in self._session_retrievals:
+                # Keep only the structure, clear the actual results
+                self._session_retrievals[session_id]["light"] = []
+                self._session_retrievals[session_id]["deep"] = {}
+                logger.debug(f"[MEMORY_RETRIEVAL] Cleared retrieval results for session {session_id} after injection")
         
         return injection_text
     
@@ -351,6 +554,8 @@ CRITICAL INSTRUCTION:
         Analyze conversation context to determine if retrieval is needed and generate an optimized query.
         Uses a lightweight LLM call.
         """
+        logger = get_logger(__name__)
+        
         if not user_text or not user_text.strip():
             return {"need_retrieval": False, "retrieval_query": ""}
 
@@ -364,26 +569,51 @@ CRITICAL INSTRUCTION:
             safe_user = user_text[:500]
             safe_model = model_text[:500] if model_text else "Startup/Greeting"
 
-            prompt = f"""Analyze this conversation turn to decide if memory retrieval is necessary using the following Schema.
-            
+            prompt = f"""You are an efficient Retrieval Augmented Generation (RAG) optimizer.
+            Analyze the conversation turn to decide precise memory retrieval needs.
+
             Previous AI: "{safe_model}"
             User Input: "{safe_user}"
 
-            Goal: Determine if the user's input requires factual context, personal preferences, or academic history to answer effectively.
-            
-            Rules:
-            - FALSE if: Input is a simple acknowledgement ("ok", "got it"), a greeting ("hi"), or short confirmation ("yes").
-            - TRUE if: Input is a question, statement of confusion ("I don't get it"), explicit preference ("I like visuals"), or changing topic.
-            
-            If TRUE, generate a "retrieval_query" that describes WHAT to look for (e.g. if user says "I don't get it", query="student struggles with [current topic] and learning preferences").
+            TASK 1: DECISION (need_retrieval)
+            - FALSE if: 
+                - Simple agreement/acknowledgment ("ok", "got it", "cool", "thanks").
+                - Phatic expressions or greetings ("hard to say", "wow", "hi").
+                - Rhetorical questions or emotional reactions without specific factual content.
+            - TRUE if: 
+                - Direct questions or requests for explanation.
+                - Statements of confusion ("I don't get the quadratic formula").
+                - Explicit statements of preference ("I hate reading").
+                - Personal disclosures ("I play basketball").
+                - Domain-specific terms that might need definition.
 
+            TASK 2: QUERY GENERATION (retrieval_query)
+            - If decision is TRUE, generate a **keyword-focused** search query.
+            - REMOVE: "student says", "user wants to know", "retrieval for".
+            - FOCUS ON: Core entities, concepts, and specific gaps.
+            - EXAMPLE: User says "I don't get the discriminant". Query: "discriminant definition purpose quadratic formula explanation"
+            - EXAMPLE: User says "My math teacher is strict". Query: "math teacher relationship classroom environment academic pressure"
+            
             Return strict JSON:
             {{
                 "need_retrieval": true/false,
-                "retrieval_query": "string"
+                "retrieval_query": "string",
+                "reasoning": "brief explanation"
             }}
             """
             
+            # ===== DETAILED LOGGING: LLM Retrieval Analysis =====
+            # Wrap in try-except to prevent logging errors from breaking retrieval
+            try:
+                logger.info("┌" + "─" * 78 + "┐")
+                logger.info("│ [LIGHT RETRIEVAL ANALYSIS] LLM Call" + " " * 41 + "│")
+                logger.info("├" + "─" * 78 + "┤")
+                logger.info(f"│ User Input: {safe_user[:60]:<60} │")
+                logger.info("└" + "─" * 78 + "┘")
+            except Exception:
+                pass
+            # ====================================================
+
             response = model.generate_content(prompt)
             text = response.text.strip()
             if text.startswith("```json"):
@@ -393,13 +623,41 @@ CRITICAL INSTRUCTION:
             
             result = json.loads(text.strip())
             
+            # ===== DETAILED LOGGING: LLM Decision =====
+            try:
+                need_retrieval = result.get("need_retrieval", True)
+                retrieval_query = result.get("retrieval_query", user_text) or user_text
+                reasoning = result.get("reasoning", "No reasoning provided") or "No reasoning provided"
+                
+                logger.info("┌" + "─" * 78 + "┐")
+                logger.info("│ [LIGHT RETRIEVAL DECISION] Result" + " " * 43 + "│")
+                logger.info("├" + "─" * 78 + "┤")
+                logger.info(f"│ Decision: {'✓ RETRIEVE' if need_retrieval else '✗ SKIP':<67} │")
+                
+                if need_retrieval:
+                    logger.info(f"│ Query: {retrieval_query[:69]:<69} │")
+                    if len(retrieval_query) > 69:
+                        logger.info(f"│        {retrieval_query[69:138]:<69} │")
+                else:
+                    logger.info(f"│ Query: N/A (skipping retrieval){' ' * 42}│")
+                
+                logger.info(f"│ Reasoning: {reasoning[:65]:<65} │")
+                logger.info("└" + "─" * 78 + "┘")
+            except Exception as log_err:
+                logger.debug(f"[RETRIEVAL ANALYSIS] Logging error: {log_err}")
+            # ==========================================
+            
             # minimal validation
             if "need_retrieval" in result:
+                if "retrieval_query" not in result or result["retrieval_query"] is None:
+                    result["retrieval_query"] = user_text
                 return result
             return fallback_result
 
         except Exception as e:
-            logger = get_logger(__name__)
-            logger.warning(f"Error in context analysis for retrieval, using fallback: {e}")
+            logger.warning(f"[RETRIEVAL ANALYSIS] Error in context analysis, using fallback: {e}")
+            logger.info(f"[RETRIEVAL ANALYSIS] Fallback: need_retrieval=True, query={user_text[:50]}...")
             return fallback_result
+
+
     

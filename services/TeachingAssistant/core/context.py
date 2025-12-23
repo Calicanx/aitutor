@@ -17,6 +17,9 @@ class SessionContext:
     session_id: str
     user_id: str
     start_time: float
+    
+    # Maximum turns to keep in memory (full history saved to MongoDB)
+    MAX_TURNS: int = 50
 
     turn_count: int = 0
     current_speaker: Optional[str] = None
@@ -79,6 +82,10 @@ class SessionContext:
             self.conversation_turns.append(
                 {"speaker": speaker, "text": text, "timestamp": timestamp}
             )
+        
+        # Implement rolling window - keep only last MAX_TURNS turns in memory
+        if len(self.conversation_turns) > self.MAX_TURNS:
+            self.conversation_turns = self.conversation_turns[-self.MAX_TURNS:]
 
         # Update last speaker and text for memory extraction
         if speaker == "user":

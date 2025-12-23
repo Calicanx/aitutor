@@ -25,6 +25,8 @@ class ContextManager:
         self.contexts = self.db.session_contexts
         self.config = config or TeachingAssistantConfig()
         self._in_memory_cache = {}  # Cache for performance
+        self._cache_timestamps = {}  # Track last access time for TTL-based eviction
+        self._cache_ttl = 3600  # 1 hour TTL for cached contexts
         self._ensure_indexes()
     
     def _ensure_indexes(self):
@@ -49,21 +51,36 @@ class ContextManager:
             {"$set": context.to_mongodb_dict()},
             upsert=True
         )
-        # Cache in memory
+        # Cache in memory with timestamp
         self._in_memory_cache[session_id] = context
+        self._cache_timestamps[session_id] = time.time()
         logger.info(f"[CONTEXT_MANAGER] Created context for session {session_id}")
     
     def get_context(self, session_id: str) -> Optional[SessionContext]:
         """Get context from cache or MongoDB"""
+        current_time = time.time()
+        
         # Check cache first
         if session_id in self._in_memory_cache:
-            return self._in_memory_cache[session_id]
+            # Check TTL - evict if expired
+            last_access = self._cache_timestamps.get(session_id, 0)
+            if current_time - last_access > self._cache_ttl:
+                logger.info(f"[CONTEXT_MANAGER] Evicting expired context from cache: {session_id}")
+                del self._in_memory_cache[session_id]
+                # Safety check before deleting timestamp
+                if session_id in self._cache_timestamps:
+                    del self._cache_timestamps[session_id]
+            else:
+                # Update access time and return cached context
+                self._cache_timestamps[session_id] = current_time
+                return self._in_memory_cache[session_id]
         
         # Load from MongoDB
         data = self.contexts.find_one({"session_id": session_id})
         if data:
             context = SessionContext.from_mongodb_dict(data)
             self._in_memory_cache[session_id] = context
+            self._cache_timestamps[session_id] = current_time
             return context
         return None
     
@@ -115,12 +132,34 @@ class ContextManager:
         if dirty_count > 0:
             logger.debug(f"[CONTEXT_MANAGER] Synced {dirty_count} dirty contexts to MongoDB")
     
+    def cleanup_stale_contexts(self):
+        """Clean up stale contexts that exceed TTL (called periodically)"""
+        current_time = time.time()
+        stale_sessions = []
+        
+        for session_id, last_access in list(self._cache_timestamps.items()):
+            if current_time - last_access > self._cache_ttl:
+                stale_sessions.append(session_id)
+        
+        for session_id in stale_sessions:
+            # Safety checks before deleting
+            if session_id in self._in_memory_cache:
+                del self._in_memory_cache[session_id]
+            if session_id in self._cache_timestamps:
+                del self._cache_timestamps[session_id]
+        
+        if stale_sessions:
+            logger.info(f"[CONTEXT_MANAGER] Cleaned up {len(stale_sessions)} stale contexts from cache")
+    
     def clear_context(self, session_id: str):
         """Clear context from cache and MongoDB"""
         if session_id in self._in_memory_cache:
             del self._in_memory_cache[session_id]
+        if session_id in self._cache_timestamps:
+            del self._cache_timestamps[session_id]
         try:
             self.contexts.delete_one({"session_id": session_id})
             logger.info(f"[CONTEXT_MANAGER] Cleared context for session {session_id}")
         except Exception as e:
             logger.error(f"[CONTEXT_MANAGER] Error clearing context: {e}")
+
