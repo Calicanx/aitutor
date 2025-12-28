@@ -34,6 +34,7 @@ const SidePanel = lazy(() => import("./components/side-panel/SidePanel"));
 const GradingSidebar = lazy(() => import("./components/grading-sidebar/GradingSidebar"));
 const ScratchpadCapture = lazy(() => import("./components/scratchpad-capture/ScratchpadCapture"));
 const FloatingControlPanel = lazy(() => import("./components/floating-control-panel/FloatingControlPanel"));
+const LearningAssetsPanel = lazy(() => import("./components/side-panel/LearningAssetsPanel"));
 
 function App() {
   // this video reference is used for displaying the active stream, whether that is the webcam or screen capture
@@ -64,6 +65,8 @@ function App() {
     screenVideoRef
   } = useMediaCapture({});
 
+  const [privacyEnabled, setPrivacyEnabled] = useState(false);
+
   // MediaMixer hook for local video mixing - uses state from useMediaCapture
   const mediaMixer = useMediaMixer({
     width: 1280,
@@ -72,6 +75,7 @@ function App() {
     quality: 0.85,
     cameraEnabled: cameraEnabled,
     screenEnabled: screenEnabled,
+    privacyEnabled: privacyEnabled,
     cameraVideoRef: cameraVideoRef,
     screenVideoRef: screenVideoRef
   });
@@ -119,17 +123,24 @@ function App() {
               />
               <div className="streaming-console">
                 <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
-                  <SidePanel
-                    open={isSidebarOpen}
-                    onToggle={toggleSidebar}
-                  />
+                  {import.meta.env.DEV ? (
+                    <SidePanel
+                      open={isSidebarOpen}
+                      onToggle={toggleSidebar}
+                    />
+                  ) : (
+                    <LearningAssetsPanel
+                      open={isSidebarOpen}
+                      onToggle={toggleSidebar}
+                    />
+                  )}
                   <GradingSidebar
                     open={isGradingSidebarOpen}
                     onToggle={toggleGradingSidebar}
                     currentSkill={currentSkill}
                   />
                   <main style={{
-                    marginRight: isSidebarOpen ? "260px" : "0",
+                    marginRight: isSidebarOpen ? (import.meta.env.DEV ? "260px" : "320px") : "0",
                     marginLeft: isGradingSidebarOpen ? "260px" : "40px",
                     transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
                   }}>
@@ -160,6 +171,8 @@ function App() {
                         screenEnabled={screenEnabled}
                         onToggleCamera={toggleCamera}
                         onToggleScreen={toggleScreen}
+                        privacyEnabled={privacyEnabled}
+                        onTogglePrivacy={setPrivacyEnabled}
                         mediaMixerCanvasRef={mediaMixer.canvasRef}
                       />
                     </div>
