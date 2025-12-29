@@ -105,7 +105,7 @@ def health_check():
 def load_perseus_items_for_dash_questions_from_mongodb(
     dash_questions: List[Question]
 ) -> List[Dict]:
-    """Load Perseus items from scraped_questions collection matching DASH-selected questions.
+    """Load Perseus items from questions_db.questions collection matching DASH-selected questions.
 
     OPTIMIZED: Uses batch query with $in instead of one query per question.
     """
@@ -119,13 +119,13 @@ def load_perseus_items_for_dash_questions_from_mongodb(
     dash_lookup = {q.question_id: q for q in dash_questions}
     question_ids = list(dash_lookup.keys())
 
-    # BATCH QUERY: Fetch all questions in one MongoDB call instead of N calls
-    scraped_docs = list(mongo_db.scraped_questions.find(
-        {"questionId": {"$in": question_ids}}
+    # BATCH QUERY: Fetch all questions in one MongoDB call from questions_db
+    question_docs = list(mongo_db.questions.find(
+        {"question_id": {"$in": question_ids}}
     ))
 
-    # Build lookup for scraped docs
-    scraped_lookup = {doc.get('questionId'): doc for doc in scraped_docs}
+    # Build lookup for question docs
+    question_lookup = {doc.get('question_id'): doc for doc in question_docs}
 
     perseus_items = []
     
@@ -133,42 +133,26 @@ def load_perseus_items_for_dash_questions_from_mongodb(
     if dash_system is None:
         logger.error("DASH system not initialized when loading Perseus items")
         return perseus_items
-    
-    for dash_q in dash_questions:
-        # question_id includes fabricated prefix (e.g., "41.1.2.1.9_x338f5e1fbc6cafdf")
-        # This matches exactly what's stored in scraped_questions.questionId
-        question_id = dash_q.question_id
-        skill_id = dash_q.skill_ids[0] if dash_q.skill_ids else None
-        
 
     for question_id, dash_q in dash_lookup.items():
-        scraped_doc = scraped_lookup.get(question_id)
+        question_doc = question_lookup.get(question_id)
 
-        if not scraped_doc:
-            logger.warning(f"No scraped question found for question_id {question_id}")
+        if not question_doc:
+            logger.warning(f"No question found in questions_db for question_id {question_id}")
             continue
 
-        # Extract assessmentData
-        assessment_data = scraped_doc.get('assessmentData', {})
-        if not assessment_data:
-            logger.warning(f"No assessmentData found for question_id {question_id}")
+        # Extract perseus_json (already parsed in questions_db)
+        perseus_json = question_doc.get('perseus_json', {})
+        if not perseus_json:
+            logger.warning(f"No perseus_json found for question_id {question_id}")
             continue
 
-        # Navigate to itemData: assessmentData.data.assessmentItem.item.itemData
+        # Extract required fields from perseus_json
         try:
-            item_data_str = assessment_data.get('data', {}).get('assessmentItem', {}).get('item', {}).get('itemData', '')
-            if not item_data_str:
-                logger.warning(f"No itemData found for question_id {question_id}")
-                continue
-
-            # Parse JSON string to get Perseus object
-            item_data = json.loads(item_data_str)
-
-            # Extract required fields
-            question = item_data.get('question', {})
-            answer_area = item_data.get('answerArea', {})
-            hints = item_data.get('hints', [])
-            item_data_version = item_data.get('itemDataVersion', {})
+            question = perseus_json.get('question', {})
+            answer_area = perseus_json.get('answerArea', {})
+            hints = perseus_json.get('hints', [])
+            item_data_version = perseus_json.get('itemDataVersion', {})
 
             # Validate required fields
             if not question:
@@ -198,14 +182,9 @@ def load_perseus_items_for_dash_questions_from_mongodb(
 
             perseus_items.append(perseus_data)
 
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse itemData JSON for question_id {question_id}: {e}")
-            continue
-        except KeyError as e:
-            logger.warning(f"Missing field in assessmentData for question_id {question_id}: {e}")
-            continue
         except Exception as e:
-            logger.warning(f"Failed to load Perseus from scraped_questions for question_id {question_id}: {e}")
+            logger.warning(f"Failed to load Perseus from questions_db for question_id {question_id}: {e}")
+            continue
 
     return perseus_items
 
@@ -456,6 +435,7 @@ def submit_answer(request: Request, answer: AnswerSubmission):
     """
     Record a question attempt and update DASH system.
     This enables tracking and adaptive difficulty.
+    Stores raw question attempt for future-proof performance tracking.
 
     OPTIMIZED: Removed redundant user loads and expensive get_skill_scores call.
     Previous latency: 4-8 seconds. Target: < 500ms.
@@ -465,6 +445,24 @@ def submit_answer(request: Request, answer: AnswerSubmission):
     user_id = get_current_user(request)
 
     logger.info(f"\n{'-'*80}")
+    
+    # Store raw question attempt in question_attempts collection (future-proof)
+    from datetime import datetime
+    attempt_doc = {
+        "user_id": user_id,
+        "question_id": answer.question_id,
+        "is_correct": answer.is_correct,
+        "skill_ids": answer.skill_ids,
+        "response_time_seconds": answer.response_time_seconds,
+        "timestamp": datetime.now(),
+        "session_id": None  # Can be added if you track sessions
+    }
+    
+    try:
+        mongo_db.question_attempts.insert_one(attempt_doc)
+        logger.info(f"[ATTEMPT_STORED] Question:{answer.question_id} | Correct:{answer.is_correct}")
+    except Exception as e:
+        logger.warning(f"[WARNING] Failed to store attempt in question_attempts: {e}")
 
     user_profile = dash_system.user_manager.load_user(user_id)
     if not user_profile:
@@ -515,12 +513,38 @@ def submit_answer(request: Request, answer: AnswerSubmission):
 def get_skill_scores(request: Request):
     """
     Get all skill scores for the current user.
-    Returns skill states in the format expected by the frontend GradingSidebar.
+    Returns skill states mapped to CURRENT skill structure (future-proof).
+    
+    NEW: Uses question_attempts collection which dynamically maps to current
+    Khan Academy hierarchy, so it works even when questions_db is updated.
     """
     ensure_dash_system()
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
+    # Try to use dynamic performance first (if question_attempts exist)
+    try:
+        performance_data = dash_system.get_dynamic_student_performance(user_id)
+        
+        # Transform to format expected by frontend
+        skill_states = {}
+        for skill_data in performance_data.get("skills", []):
+            skill_id = skill_data["skill_id"]
+            skill_states[skill_id] = {
+                "name": skill_data["skill_name"],
+                "memory_strength": skill_data["mastery"] / 100.0,  # Convert percentage to 0-1
+                "last_practice_time": skill_data.get("last_attempt"),
+                "practice_count": skill_data["questions_answered"],
+                "correct_count": skill_data["questions_correct"]
+            }
+        
+        logger.info(f"[DYNAMIC_PERFORMANCE] Loaded {len(skill_states)} skills from question_attempts")
+        return {"skill_states": skill_states}
+        
+    except Exception as e:
+        logger.warning(f"[FALLBACK] Dynamic performance failed, using legacy method: {e}")
+    
+    # Fallback to old method if dynamic fails (backward compatibility)
     # Get user profile to ensure it exists and sync skill states
     user_profile = dash_system.load_user_or_create(user_id)
     if not user_profile:

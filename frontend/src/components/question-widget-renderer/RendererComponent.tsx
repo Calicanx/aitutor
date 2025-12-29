@@ -35,13 +35,22 @@ interface RendererComponentProps {
     onQuestionChange?: (questionId: string | null) => void;
     watchedVideoIds?: string[];
     onAnswerSubmitted?: () => void;
+    // Assessment mode props
+    assessmentMode?: boolean;
+    assessmentQuestions?: any[];
+    onAssessmentAnswer?: (questionId: string, isCorrect: boolean) => void;
+    currentQuestionIndex?: number;
 }
 
 const RendererComponent = ({ 
     onSkillChange, 
     onQuestionChange,
     watchedVideoIds = [],
-    onAnswerSubmitted
+    onAnswerSubmitted,
+    assessmentMode = false,
+    assessmentQuestions = [],
+    onAssessmentAnswer,
+    currentQuestionIndex = 0
 }: RendererComponentProps) => {
     const { user } = useAuth();
     const { setTotalHints, setCurrentHintIndex, showHints, setShowHints } = useHint();
@@ -65,6 +74,17 @@ const RendererComponent = ({
 
     // Fetch questions using apiUtils with JWT authentication
     useEffect(() => {
+        // In assessment mode, use provided questions instead of fetching
+        if (assessmentMode) {
+            setPerseusItems(assessmentQuestions);
+            setItem(currentQuestionIndex);
+            setIsLoading(false);
+            setIsAnswered(false);
+            setShowFeedback(false);
+            setStartTime(Date.now());
+            return;
+        }
+
         const fetchQuestions = async () => {
             if (!jwtUtils.getToken()) {
                 setIsLoading(false);
@@ -145,7 +165,7 @@ const RendererComponent = ({
         };
 
         fetchQuestions();
-    }, [user_id]);
+    }, [user_id, assessmentMode, assessmentQuestions, currentQuestionIndex]);
 
     // Fetch questions using apiUtils with JWT authentication
     useEffect(() => {
@@ -290,7 +310,22 @@ const RendererComponent = ({
             // Calculate response time
             const responseTimeSeconds = (Date.now() - startTime) / 1000;
 
-            // Submit answer to DASH API for tracking and adaptive difficulty
+            // In assessment mode, call the assessment callback
+            if (assessmentMode && onAssessmentAnswer) {
+                const currentItem = perseusItems[item];
+                const metadata = (currentItem as any).dash_metadata || {};
+                const questionId = metadata.dash_question_id || `q_${item}`;
+                
+                setIsAnswered(true);
+                setScore(keScore);
+                setShowFeedback(true);
+                
+                // Call the callback with question ID and correctness
+                onAssessmentAnswer(questionId, keScore.correct);
+                return;
+            }
+
+            // Submit answer to DASH API for tracking and adaptive difficulty (normal mode)
             try {
                 const currentItem = perseusItems[item];
                 const metadata = (currentItem as any).dash_metadata || {};
@@ -547,21 +582,23 @@ const RendererComponent = ({
                             type="button"
                             size="sm"
                             onClick={handleSubmit}
-                            disabled={isLoading || endOfTest || perseusItems.length === 0}
+                            disabled={isLoading || endOfTest || perseusItems.length === 0 || isAnswered}
                             className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-[#C4B5FD] hover:bg-[#C4B5FD] text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:hover:shadow-[3px_3px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:hover:shadow-[3px_3px_0_0_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
                         >
                             Submit
                         </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleNext}
-                            disabled={isLoading || endOfTest || perseusItems.length === 0}
-                            className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
-                        >
-                            Next →
-                        </Button>
+                        {!assessmentMode && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleNext}
+                                disabled={isLoading || endOfTest || perseusItems.length === 0}
+                                className="transition-all duration-100 border-[2px] md:border-[3px] border-black dark:border-white bg-white dark:bg-neutral-800 hover:bg-[#FFD93D] dark:hover:bg-[#FFD93D] text-black dark:text-white dark:hover:text-black font-black uppercase tracking-wide shadow-[1px_1px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[1px_1px_0_0_rgba(255,255,255,0.3)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:disabled:hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] text-xs md:text-sm h-9 md:h-10 px-4 md:px-5"
+                            >
+                                Next →
+                            </Button>
+                        )}
                     </div>
                 </CardFooter>
             </Card>

@@ -8,13 +8,22 @@ interface QuestionDisplayProps {
   onQuestionChange?: (questionId: string | null) => void;
   watchedVideoIds?: string[];
   onAnswerSubmitted?: () => void;
+  // Assessment mode props
+  assessmentMode?: boolean;
+  assessmentQuestions?: any[];
+  onAssessmentAnswer?: (questionId: string, isCorrect: boolean) => void;
+  currentQuestionIndex?: number;
 }
 
 const QuestionDisplay: React.FC<QuestionDisplayProps> = ({ 
   onSkillChange, 
   onQuestionChange,
   watchedVideoIds,
-  onAnswerSubmitted
+  onAnswerSubmitted,
+  assessmentMode = false,
+  assessmentQuestions = [],
+  onAssessmentAnswer,
+  currentQuestionIndex = 0
 }) => {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-transparent">
@@ -24,6 +33,10 @@ const QuestionDisplay: React.FC<QuestionDisplayProps> = ({
           onQuestionChange={onQuestionChange}
           watchedVideoIds={watchedVideoIds}
           onAnswerSubmitted={onAnswerSubmitted}
+          assessmentMode={assessmentMode}
+          assessmentQuestions={assessmentQuestions}
+          onAssessmentAnswer={onAssessmentAnswer}
+          currentQuestionIndex={currentQuestionIndex}
         />
       </div>
     </div>

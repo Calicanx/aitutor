@@ -30,6 +30,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { useMediaMixer } from "./hooks/useMediaMixer";
 import { useMediaCapture } from "./hooks/useMediaCapture";
 import { useDeveloperMode } from "./hooks/use-developer-mode";
+import { apiUtils } from "./lib/api-utils";
+
+const DASH_API_URL = import.meta.env.VITE_DASH_API_URL || 'http://localhost:8000';
 
 // Lazy load heavy components
 const SidePanel = lazy(() => import("./components/side-panel/SidePanel"));
@@ -56,6 +59,13 @@ function App() {
   const [currentSkill, setCurrentSkill] = useState<string | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(null);
   const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);
+  
+  // Assessment mode state
+  const [assessmentMode, setAssessmentMode] = useState(false);
+  const [assessmentSubject, setAssessmentSubject] = useState<string | null>(null);
+  const [assessmentQuestions, setAssessmentQuestions] = useState<any[]>([]);
+  const [assessmentCurrentIndex, setAssessmentCurrentIndex] = useState(0);
+  const [assessmentAnswers, setAssessmentAnswers] = useState<any[]>([]);
 
   // Ref to hold mediaMixer instance for use in callbacks
   const mediaMixerRef = useRef<any>(null);
@@ -112,6 +122,80 @@ function App() {
     setIsGradingSidebarOpen(!isGradingSidebarOpen);
   };
 
+  // Assessment functions
+  const startAssessment = async (subject: string) => {
+    try {
+      const response = await apiUtils.post(`${DASH_API_URL}/assessment/start/${subject}`, {});
+      
+      if (!response.ok) {
+        throw new Error(`Failed to start assessment: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        // Already completed - show results
+        alert(`You've already completed this assessment! Score: ${data.score}/${data.total || 0}`);
+        return;
+      }
+
+      // Enter assessment mode
+      setAssessmentMode(true);
+      setAssessmentSubject(subject);
+      setAssessmentQuestions(data.questions);
+      setAssessmentCurrentIndex(0);
+      setAssessmentAnswers([]);
+      // Hide both sidebars
+      setIsSidebarOpen(false);
+      setIsGradingSidebarOpen(false);
+    } catch (error) {
+      console.error('Failed to start assessment:', error);
+      alert('Failed to start assessment. Please try again.');
+    }
+  };
+
+  const submitAssessment = async (finalAnswers: any[]) => {
+    try {
+      const response = await apiUtils.post(`${DASH_API_URL}/assessment/complete`, {
+        subject: assessmentSubject,
+        answers: finalAnswers
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to complete assessment: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Exit assessment mode
+      setAssessmentMode(false);
+      setAssessmentSubject(null);
+      setAssessmentQuestions([]);
+      setAssessmentCurrentIndex(0);
+      setAssessmentAnswers([]);
+      
+      // Show results
+      alert(`Assessment Complete!\nScore: ${data.score}/${data.total}\nGrade Level: ${data.estimated_grade || 'Calculating...'}`);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to complete assessment';
+      console.error('Failed to complete assessment:', err);
+      alert(errorMessage);
+    }
+  };
+
+  // Expose startAssessment globally for testing
+  useEffect(() => {
+    (window as any).startAssessment = startAssessment;
+    (window as any).exitAssessmentMode = () => {
+      setAssessmentMode(false);
+      setAssessmentSubject(null);
+      setAssessmentQuestions([]);
+      setAssessmentCurrentIndex(0);
+      setAssessmentAnswers([]);
+    };
+  }, []);
+
   useEffect(() => {
     if (mixerVideoRef.current && mixerStream) {
       mixerVideoRef.current.srcObject = mixerStream;
@@ -135,7 +219,7 @@ function App() {
     <ThemeProvider defaultTheme="light" storageKey="ai-tutor-theme">
       <div className="App">
         <AuthGuard>
-          <AssessmentGuard subject="math">
+          <AssessmentGuard subject="math" onStartAssessment={startAssessment}>
             <TutorProvider>
               <HintProvider>
                 <Header
@@ -146,13 +230,13 @@ function App() {
                 />
               <div className="streaming-console">
                 <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
-                  {isDeveloperMode && (
+                  {!assessmentMode && isDeveloperMode && (
                     <SidePanel
                       open={isSidebarOpen}
                       onToggle={toggleSidebar}
                     />
                   )}
-                  {!isDeveloperMode && (
+                  {!assessmentMode && !isDeveloperMode && (
                     <LearningAssetsPanel
                       questionId={currentQuestionId}
                       open={isSidebarOpen}
@@ -160,14 +244,16 @@ function App() {
                       onVideosWatched={setWatchedVideoIds}
                     />
                   )}
-                  <GradingSidebar
-                    open={isGradingSidebarOpen}
-                    onToggle={toggleGradingSidebar}
-                    currentSkill={currentSkill}
-                  />
+                  {!assessmentMode && (
+                    <GradingSidebar
+                      open={isGradingSidebarOpen}
+                      onToggle={toggleGradingSidebar}
+                      currentSkill={currentSkill}
+                    />
+                  )}
                   <main style={{
-                    marginRight: isSidebarOpen ? "260px" : "0",
-                    marginLeft: isGradingSidebarOpen ? "260px" : "40px",
+                    marginRight: (!assessmentMode && isSidebarOpen) ? "260px" : "0",
+                    marginLeft: (!assessmentMode && isGradingSidebarOpen) ? "260px" : "40px",
                     transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
                   }}>
                     <div className="main-app-area">
@@ -181,6 +267,31 @@ function App() {
                             onQuestionChange={setCurrentQuestionId}
                             watchedVideoIds={watchedVideoIds}
                             onAnswerSubmitted={() => setWatchedVideoIds([])}
+                            assessmentMode={assessmentMode}
+                            assessmentQuestions={assessmentQuestions}
+                            currentQuestionIndex={assessmentCurrentIndex}
+                            onAssessmentAnswer={(questionId, isCorrect) => {
+                              const currentQuestion = assessmentQuestions[assessmentCurrentIndex];
+                              const newAnswer = {
+                                question_id: questionId,
+                                skill_id: currentQuestion.dash_metadata.skill_ids[0],
+                                is_correct: isCorrect
+                              };
+                              const newAnswers = [...assessmentAnswers, newAnswer];
+                              setAssessmentAnswers(newAnswers);
+                              setWatchedVideoIds([]);
+                              
+                              if (assessmentCurrentIndex < assessmentQuestions.length - 1) {
+                                setTimeout(() => {
+                                  setAssessmentCurrentIndex(assessmentCurrentIndex + 1);
+                                }, 2000);
+                              } else {
+                                setTimeout(() => {
+                                  // Submit assessment and exit assessment mode
+                                  submitAssessment(newAnswers);
+                                }, 2000);
+                              }
+                            }}
                           />
                           {isScratchpadOpen && (
                             <div className="scratchpad-container">
