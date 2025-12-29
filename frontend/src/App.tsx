@@ -39,7 +39,7 @@ const SidePanel = lazy(() => import("./components/side-panel/SidePanel"));
 const GradingSidebar = lazy(() => import("./components/grading-sidebar/GradingSidebar"));
 const ScratchpadCapture = lazy(() => import("./components/scratchpad-capture/ScratchpadCapture"));
 const FloatingControlPanel = lazy(() => import("./components/floating-control-panel/FloatingControlPanel"));
-const LearningAssetsPanel = lazy(() => import("./components/learning-assets/LearningAssetsPanel"));
+const LearningAssetsPanel = lazy(() => import("./components/side-panel/LearningAssetsPanel"));
 
 function App() {
   // Developer mode hook for Gemini Console visibility
@@ -79,11 +79,10 @@ function App() {
     toggleCamera,
     toggleScreen,
     cameraVideoRef,
-    screenVideoRef,
-    privacyMode,
-    setPrivacyMode,
-    processedEdgesRef
+    screenVideoRef
   } = useMediaCapture({});
+
+  const [privacyEnabled, setPrivacyEnabled] = useState(false);
 
   // MediaMixer hook for local video mixing - uses state from useMediaCapture
   const mediaMixer = useMediaMixer({
@@ -93,6 +92,7 @@ function App() {
     quality: 0.85,
     cameraEnabled: cameraEnabled,
     screenEnabled: screenEnabled,
+    privacyEnabled: privacyEnabled,
     cameraVideoRef: cameraVideoRef,
     screenVideoRef: screenVideoRef
   });
@@ -230,30 +230,25 @@ function App() {
                 />
               <div className="streaming-console">
                 <Suspense fallback={<div className="flex items-center justify-center h-full w-full">Loading...</div>}>
-                  {!assessmentMode && isDeveloperMode && (
+                  {import.meta.env.DEV ? (
                     <SidePanel
                       open={isSidebarOpen}
                       onToggle={toggleSidebar}
                     />
-                  )}
-                  {!assessmentMode && !isDeveloperMode && (
+                  ) : (
                     <LearningAssetsPanel
-                      questionId={currentQuestionId}
                       open={isSidebarOpen}
                       onToggle={toggleSidebar}
-                      onVideosWatched={setWatchedVideoIds}
                     />
                   )}
-                  {!assessmentMode && (
-                    <GradingSidebar
-                      open={isGradingSidebarOpen}
-                      onToggle={toggleGradingSidebar}
-                      currentSkill={currentSkill}
-                    />
-                  )}
+                  <GradingSidebar
+                    open={isGradingSidebarOpen}
+                    onToggle={toggleGradingSidebar}
+                    currentSkill={currentSkill}
+                  />
                   <main style={{
-                    marginRight: (!assessmentMode && isSidebarOpen) ? "260px" : "0",
-                    marginLeft: (!assessmentMode && isGradingSidebarOpen) ? "260px" : "40px",
+                    marginRight: isSidebarOpen ? (import.meta.env.DEV ? "260px" : "320px") : "0",
+                    marginLeft: isGradingSidebarOpen ? "260px" : "40px",
                     transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)"
                   }}>
                     <div className="main-app-area">
@@ -313,10 +308,9 @@ function App() {
                         screenEnabled={screenEnabled}
                         onToggleCamera={toggleCamera}
                         onToggleScreen={toggleScreen}
+                        privacyEnabled={privacyEnabled}
+                        onTogglePrivacy={setPrivacyEnabled}
                         mediaMixerCanvasRef={mediaMixer.canvasRef}
-                        privacyMode={privacyMode}
-                        onTogglePrivacy={setPrivacyMode}
-                        processedEdgesRef={processedEdgesRef}
                       />
                     </div>
                   </main>
