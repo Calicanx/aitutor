@@ -55,7 +55,7 @@ function App() {
   const mixerVideoRef = useRef<HTMLVideoElement>(null);
   const [isScratchpadOpen, setScratchpadOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isGradingSidebarOpen, setIsGradingSidebarOpen] = useState(false);
+  const [isGradingSidebarOpen, setIsGradingSidebarOpen] = useState(true);
   const [currentSkill, setCurrentSkill] = useState<string | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(null);
   const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);

@@ -26,8 +26,8 @@ const QuestionDisplay: React.FC<QuestionDisplayProps> = ({
   currentQuestionIndex = 0
 }) => {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-transparent">
-      <div className="w-full h-full" id="perseus-capture-area">
+    <div className="w-full flex flex-col items-center bg-transparent">
+      <div className="w-full" id="perseus-capture-area">
         <RendererComponent 
           onSkillChange={onSkillChange} 
           onQuestionChange={onQuestionChange}

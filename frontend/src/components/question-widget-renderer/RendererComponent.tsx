@@ -19,7 +19,7 @@ import { PerseusI18nContextProvider } from "../../package/perseus/src/components
 import { mockStrings } from "../../package/perseus/src/strings";
 import { KEScore } from "@khanacademy/perseus-core";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Sparkles } from "lucide-react";
+import { CheckCircle2, XCircle, Sparkles, ChevronRight } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useHint } from "../../contexts/HintContext";
 import { apiUtils } from "../../lib/api-utils";
@@ -200,18 +200,36 @@ const RendererComponent = ({
         }
     }, [item, perseusItems, isLoading, user_id, onQuestionChange]);
 
-    // Update current module (unit_id) when question changes
+    // Update current module (unit_id) and URL when question changes
     useEffect(() => {
         if (onSkillChange && perseusItems.length > 0 && !isLoading) {
             const currentItem = perseusItems[item];
             const metadata = (currentItem as any).dash_metadata || {};
             // Extract unit_id from metadata - this is the "current module"
             const unitId = metadata.unit_id || null;
+            const mongodbId = metadata.mongodb_id || null;
+            
+            console.log('[RendererComponent] Question metadata:', {
+                question_id: metadata.dash_question_id,
+                unit_id: unitId,
+                lesson_id: metadata.lesson_id,
+                exercise_id: metadata.exercise_id,
+                skill_names: metadata.skill_names,
+                mongodb_id: mongodbId
+            });
+            
             if (unitId) {
                 onSkillChange(unitId);
+            } else {
+                console.warn('[RendererComponent] No unit_id found in metadata!');
+            }
+            
+            // Update URL to /app/{mongodb_id}
+            if (mongodbId && !assessmentMode) {
+                window.history.replaceState(null, '', `/app/${mongodbId}`);
             }
         }
-    }, [item, perseusItems, isLoading, onSkillChange]);
+    }, [item, perseusItems, isLoading, onSkillChange, assessmentMode]);
 
     // Trigger feedback animation and auto-scroll
     useEffect(() => {
@@ -448,9 +466,9 @@ const RendererComponent = ({
     }, [item, setCurrentHintIndex, setShowHints]);
 
     return (
-        <div className="framework-perseus relative flex min-h-screen w-full items-center justify-center py-4 md:py-6 px-3 md:px-4">
+        <div className="framework-perseus relative flex w-full h-full items-start justify-center px-3 md:px-4">
             {/* Neo-Brutalism Card */}
-            <Card className="relative flex w-full max-w-4xl md:max-w-5xl h-auto flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] transition-all duration-200">
+            <Card className="relative flex w-full max-w-4xl md:max-w-5xl my-4 md:my-6 flex-col border-[4px] md:border-[5px] border-black dark:border-white shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] bg-[#FFFDF5] dark:bg-[#000000] transition-all duration-200">
                 {/* Progress bar at top */}
                 <div className="absolute top-0 left-0 right-0 h-2 md:h-3 bg-[#FFFDF5] dark:bg-[#000000] border-b-[2px] md:border-b-[3px] border-black dark:border-white">
                     <div
@@ -462,17 +480,31 @@ const RendererComponent = ({
                 <CardHeader className="space-y-2 pt-6 md:pt-7 px-4 md:px-6 border-b-[3px] md:border-b-[4px] border-black dark:border-white bg-[#FFD93D]">
                     <div className="flex items-start justify-between gap-3 md:gap-4 flex-wrap">
                         <div className="space-y-1.5 flex-1">
-                            <div className="flex items-center gap-2 md:gap-3">
-                                <div className="p-1.5 md:p-2 border-[2px] md:border-[3px] border-black dark:border-white bg-[#FFFDF5] dark:bg-[#000000]">
-                                    <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-black dark:text-white font-bold" />
+                            {/* Breadcrumb Navigation */}
+                            {perseusItems.length > 0 && !isLoading && (
+                                <div className="flex items-center gap-2 flex-wrap text-xs md:text-sm font-bold text-black">
+                                    {(() => {
+                                        const currentItem = perseusItems[item];
+                                        const metadata = (currentItem as any).dash_metadata || {};
+                                        const unitName = metadata.unit_name || 'Unknown Unit';
+                                        const lessonName = metadata.lesson_name || 'Unknown Lesson';
+                                        const exerciseName = metadata.exercise_name || 'Unknown Exercise';
+                                        const mongodbId = metadata.mongodb_id || 'N/A';
+                                        
+                                        return (
+                                            <>
+                                                <span className="uppercase tracking-wide">{unitName}</span>
+                                                <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                                                <span className="uppercase tracking-wide">{lessonName}</span>
+                                                <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                                                <span className="uppercase tracking-wide">{exerciseName}</span>
+                                                <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                                                <span className="font-mono text-gray-600 dark:text-gray-400 normal-case">{mongodbId}</span>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
-                                <CardTitle className="text-lg md:text-xl font-black text-black uppercase tracking-tight">
-                                    Practice Session
-                                </CardTitle>
-                            </div>
-                            <CardDescription className="text-xs md:text-sm font-bold text-black uppercase tracking-wide">
-                                {user ? `Welcome, ${user.name}! Grade: ${user.current_grade}` : `User: ${user_id}`}
-                            </CardDescription>
+                            )}
                         </div>
 
                         {/* Neo-Brutalist Progress Badge */}
@@ -498,10 +530,10 @@ const RendererComponent = ({
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 min-h-0 px-4 md:px-6 bg-[#FFFDF5] dark:bg-[#000000]">
+                <CardContent className="px-4 md:px-6 py-4 md:py-6 bg-[#FFFDF5] dark:bg-[#000000]">
                     <div
                         ref={scrollContainerRef}
-                        className="relative w-full min-h-full"
+                        className="relative w-full max-w-4xl mx-auto"
                     >
                         {endOfTest ? (
                             <div className="flex h-full items-center justify-center px-3 md:px-4 py-4 md:py-6 text-center">
@@ -556,8 +588,8 @@ const RendererComponent = ({
                                 </p>
                             </div>
                         ) : perseusItems.length > 0 ? (
-                            <div className="space-y-4 md:space-y-6 py-3 md:py-4">
-                                <div id="question-content-container" className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 text-black dark:text-white p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)]">
+                            <div className="space-y-4 md:space-y-6">
+                                <div id="question-content-container" className="border-[3px] md:border-[4px] border-black dark:border-white bg-white dark:bg-neutral-800 text-black dark:text-white p-4 md:p-5 lg:p-6 shadow-[2px_2px_0_0_rgba(0,0,0,1)] md:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] md:dark:shadow-[2px_2px_0_0_rgba(255,255,255,0.3)] overflow-x-auto">
                                     <PerseusI18nContextProvider locale="en" strings={mockStrings}>
                                         <RenderStateRoot>
                                             <ServerItemRenderer

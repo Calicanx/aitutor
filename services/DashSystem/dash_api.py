@@ -127,6 +127,28 @@ def load_perseus_items_for_dash_questions_from_mongodb(
     # Build lookup for question docs
     question_lookup = {doc.get('question_id'): doc for doc in question_docs}
 
+    # Collect all unique unit_ids, lesson_ids, exercise_ids for batch fetching
+    unit_ids = set()
+    lesson_ids = set()
+    exercise_ids = set()
+    for doc in question_docs:
+        if doc.get('unit_id'):
+            unit_ids.add(doc.get('unit_id'))
+        if doc.get('lesson_id'):
+            lesson_ids.add(doc.get('lesson_id'))
+        if doc.get('exercise_id'):
+            exercise_ids.add(doc.get('exercise_id'))
+
+    # BATCH QUERY: Fetch units, lessons, exercises
+    unit_docs = list(mongo_db.units.find({"unit_id": {"$in": list(unit_ids)}})) if unit_ids else []
+    lesson_docs = list(mongo_db.lessons.find({"lesson_id": {"$in": list(lesson_ids)}})) if lesson_ids else []
+    exercise_docs = list(mongo_db.exercises.find({"exercise_id": {"$in": list(exercise_ids)}})) if exercise_ids else []
+
+    # Build lookups
+    unit_lookup = {doc.get('unit_id'): doc for doc in unit_docs}
+    lesson_lookup = {doc.get('lesson_id'): doc for doc in lesson_docs}
+    exercise_lookup = {doc.get('exercise_id'): doc for doc in exercise_docs}
+
     perseus_items = []
     
     # Ensure dash_system is available
@@ -146,6 +168,13 @@ def load_perseus_items_for_dash_questions_from_mongodb(
         if not perseus_json:
             logger.warning(f"No perseus_json found for question_id {question_id}")
             continue
+
+        # Get unit, lesson, exercise names (before try block)
+        unit_doc = unit_lookup.get(question_doc.get('unit_id'))
+        lesson_doc = lesson_lookup.get(question_doc.get('lesson_id'))
+        exercise_doc = exercise_lookup.get(question_doc.get('exercise_id'))
+        
+        logger.info(f"[METADATA_LOOKUP] Q:{question_id} | unit_id={question_doc.get('unit_id')} | unit_doc={'Found' if unit_doc else 'None'} | lesson_id={question_doc.get('lesson_id')} | lesson_doc={'Found' if lesson_doc else 'None'} | exercise_id={question_doc.get('exercise_id')} | exercise_doc={'Found' if exercise_doc else 'None'}")
 
         # Extract required fields from perseus_json
         try:
@@ -167,6 +196,7 @@ def load_perseus_items_for_dash_questions_from_mongodb(
             # Note: Perseus scoring uses the 'correct' property in widget choices
             # We don't need a separate answer key
             logger.info(f"[PERSEUS_LOAD] Building item for {question_id} - NO ANSWER KEY")
+            
             perseus_data = {
                 "question": question,
                 "answerArea": answer_area,
@@ -182,7 +212,11 @@ def load_perseus_items_for_dash_questions_from_mongodb(
                                    if sid in dash_system.skills],
                     'unit_id': question_doc.get('unit_id'),  # Current module (unit) ID
                     'lesson_id': question_doc.get('lesson_id'),  # Sub-skill ID
-                    'exercise_id': question_doc.get('exercise_id')
+                    'exercise_id': question_doc.get('exercise_id'),
+                    'mongodb_id': str(question_doc.get('_id')),  # MongoDB ObjectId
+                    'unit_name': unit_doc.get('title', 'Unknown Unit') if unit_doc else 'Unknown Unit',
+                    'lesson_name': lesson_doc.get('title', 'Unknown Lesson') if lesson_doc else 'Unknown Lesson',
+                    'exercise_name': exercise_doc.get('title', 'Unknown Exercise') if exercise_doc else 'Unknown Exercise'
                 }
             }
 
