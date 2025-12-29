@@ -200,14 +200,18 @@ const RendererComponent = ({
         }
     }, [item, perseusItems, isLoading, user_id, onQuestionChange]);
 
-    // Mock skill state update
+    // Update current module (unit_id) when question changes
     useEffect(() => {
-        if (onSkillChange) {
-            // Mock variable as requested
-            const mockSkill = "counting_100";
-            onSkillChange(mockSkill);
+        if (onSkillChange && perseusItems.length > 0 && !isLoading) {
+            const currentItem = perseusItems[item];
+            const metadata = (currentItem as any).dash_metadata || {};
+            // Extract unit_id from metadata - this is the "current module"
+            const unitId = metadata.unit_id || null;
+            if (unitId) {
+                onSkillChange(unitId);
+            }
         }
-    }, [onSkillChange]);
+    }, [item, perseusItems, isLoading, onSkillChange]);
 
     // Trigger feedback animation and auto-scroll
     useEffect(() => {
@@ -295,9 +299,64 @@ const RendererComponent = ({
 
     const handleSubmit = async () => {
         if (rendererRef.current) {
+            // getUserInput() returns UserInputMap (the new object format)
             const userInput = rendererRef.current.getUserInput();
-            const question = perseusItem.question;
-            const scoreResult = scorePerseusItem(question, userInput, "en");
+            const itemData = perseusItem; // Full item with question AND answer
+            
+            console.log('[SCORING] User input:', JSON.stringify(userInput, null, 2));
+            console.log('[SCORING] Item data keys:', Object.keys(itemData));
+            console.log('[SCORING] Has answer key:', !!itemData.answer);
+            console.log('[SCORING] Answer:', JSON.stringify(itemData.answer, null, 2));
+            
+            // Custom scoring since Perseus doesn't have answer keys in our questions
+            // Score based on the 'correct' property in widget choices
+            let isCorrect = false;
+            const question = itemData.question;
+            
+            // Check each widget in the user input
+            for (const [widgetId, widgetInput] of Object.entries(userInput)) {
+                const widgetDef = question.widgets?.[widgetId];
+                if (!widgetDef) continue;
+                
+                if (widgetDef.type === 'radio') {
+                    const choices = widgetDef.options?.choices || [];
+                    const selectedIds = (widgetInput as any).selectedChoiceIds || [];
+                    const isMultiSelect = widgetDef.options?.multipleSelect || false;
+                    
+                    if (isMultiSelect) {
+                        // For multi-select: all selected choices must be correct, and all correct choices must be selected
+                        const correctIndices = choices
+                            .map((c, i) => c.correct ? i : -1)
+                            .filter(i => i >= 0);
+                        const selectedIndices = selectedIds.map((id: string) => {
+                            const match = id.match(/choice-(\d+)-/);
+                            return match ? parseInt(match[1]) : -1;
+                        }).filter((i: number) => i >= 0);
+                        
+                        isCorrect = correctIndices.length === selectedIndices.length &&
+                                   correctIndices.every((idx: number) => selectedIndices.includes(idx));
+                    } else {
+                        // For single-select: the one selected choice must be correct
+                        if (selectedIds.length === 1) {
+                            const selectedId = selectedIds[0];
+                            const match = selectedId.match(/choice-(\d+)-/);
+                            if (match) {
+                                const selectedIndex = parseInt(match[1]);
+                                isCorrect = choices[selectedIndex]?.correct === true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            console.log('[SCORING] Custom score - is correct:', isCorrect);
+            
+            const scoreResult = {
+                type: isCorrect ? 'points' : 'points',
+                earned: isCorrect ? 1 : 0,
+                total: 1,
+                message: null
+            };
 
             // Continue to include an empty guess for the now defunct answer area.
             const maxCompatGuess = [rendererRef.current.getUserInputLegacy(), []];
@@ -306,6 +365,12 @@ const RendererComponent = ({
                 maxCompatGuess,
                 rendererRef.current.getSerializedState().question,
             );
+
+            console.log('[RendererComponent] KEScore:', {
+                correct: keScore.correct,
+                empty: keScore.empty,
+                guess: keScore.guess
+            });
 
             // Calculate response time
             const responseTimeSeconds = (Date.now() - startTime) / 1000;
@@ -365,20 +430,6 @@ const RendererComponent = ({
             setIsAnswered(true);
             setScore(keScore);
             console.log("Score:", keScore);
-
-            // Record question answer with TeachingAssistant
-            try {
-                const currentItem = perseusItems[item];
-                const metadata = (currentItem as any).dash_metadata || {};
-                const questionId = metadata.dash_question_id || `q_${item}_${Date.now()}`;
-
-                await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/question/answered`, {
-                    question_id: questionId,
-                    is_correct: keScore.correct || false
-                });
-            } catch (err) {
-                console.error("Error recording question answer:", err);
-            }
         }
     };
 

@@ -854,26 +854,157 @@ class DASHSystem:
         
         return affected_skills
     
-    def get_skill_scores(self, student_id: str, current_time: float) -> Dict[str, Dict[str, float]]:
-        """Get all skill scores for a student"""
-        scores = {}
-        
-        for skill_id, skill in self.skills.items():
-            state = self.get_student_state(student_id, skill_id)
-            memory_strength = self.calculate_memory_strength(student_id, skill_id, current_time)
-            probability = self.predict_correctness(student_id, skill_id, current_time)
+    def get_grading_panel_data(self, user_id: str) -> Dict[str, any]:
+        """
+        Get grading panel data from Khan Academy hierarchy.
+        Skills = Units, Sub-skills = Lessons, dynamically from questions_db.
+        This follows the DASH Integration Plan exactly.
+        """
+        try:
+            # 1. Get current Khan Academy hierarchy from questions_db
+            units = list(self.mongo.units.find({}))
             
-            scores[skill_id] = {
-                'name': skill.name,
-                'grade_level': skill.grade_level.name,
-                'memory_strength': round(memory_strength, 3),
-                'probability': round(probability, 3),
-                'practice_count': state.practice_count,
-                'correct_count': state.correct_count,
-                'accuracy': round(state.correct_count / state.practice_count, 3) if state.practice_count > 0 else 0.0
+            # 2. Get all question attempts for this student
+            attempts = list(self.mongo.question_attempts.find({"user_id": user_id}))
+            
+            # 3. Build performance map: unit_id -> {correct, total, lessons}
+            unit_performance = {}
+            
+            for attempt in attempts:
+                question_id = attempt.get("question_id")
+                
+                # Find question -> lesson -> unit path
+                question = self.mongo.questions.find_one({"question_id": question_id})
+                if not question:
+                    continue
+                    
+                lesson_id = question.get("lesson_id")
+                if not lesson_id:
+                    continue
+                    
+                lesson = self.mongo.lessons.find_one({"lesson_id": lesson_id})
+                if not lesson:
+                    continue
+                    
+                unit_id = lesson.get("unit_id")
+                if not unit_id:
+                    continue
+                
+                # Initialize unit performance
+                if unit_id not in unit_performance:
+                    unit_performance[unit_id] = {
+                        "correct": 0,
+                        "total": 0,
+                        "lessons": {}
+                    }
+                
+                # Update unit totals
+                unit_performance[unit_id]["total"] += 1
+                if attempt.get("is_correct"):
+                    unit_performance[unit_id]["correct"] += 1
+                
+                # Track lesson-level performance (sub-skills)
+                if lesson_id not in unit_performance[unit_id]["lessons"]:
+                    unit_performance[unit_id]["lessons"][lesson_id] = {
+                        "lesson_name": lesson.get("title"),
+                        "correct": 0,
+                        "total": 0
+                    }
+                
+                unit_performance[unit_id]["lessons"][lesson_id]["total"] += 1
+                if attempt.get("is_correct"):
+                    unit_performance[unit_id]["lessons"][lesson_id]["correct"] += 1
+            
+            # 4. Build grading panel structure organized by subject and grade
+            grading_data = {
+                "subjects": {},
+                "overall_grade": None,
+                "overall_mastery": 0
             }
-        
-        return scores
+            
+            total_mastery = 0
+            total_units_with_attempts = 0
+            
+            for unit in units:
+                unit_id = unit.get("unit_id")
+                course_id = unit.get("course_id")
+                
+                # Get course to determine subject
+                course = self.mongo.courses.find_one({"course_id": course_id})
+                if not course:
+                    continue
+                
+                subject = course.get("subject", "Unknown")
+                grade_level = str(unit.get("grade_level", "Unknown"))
+                
+                # Initialize subject in grading data
+                if subject not in grading_data["subjects"]:
+                    grading_data["subjects"][subject] = {
+                        "grade_levels": {}
+                    }
+                
+                # Initialize grade level
+                if grade_level not in grading_data["subjects"][subject]["grade_levels"]:
+                    grading_data["subjects"][subject]["grade_levels"][grade_level] = {
+                        "units": []
+                    }
+                
+                # Calculate unit mastery
+                perf = unit_performance.get(unit_id, {"correct": 0, "total": 0, "lessons": {}})
+                mastery = (perf["correct"] / perf["total"] * 100) if perf["total"] > 0 else 0
+                
+                if perf["total"] > 0:
+                    total_mastery += mastery
+                    total_units_with_attempts += 1
+                
+                # Build sub-skills (lessons) data
+                sub_skills = []
+                for lesson_id, lesson_perf in perf["lessons"].items():
+                    lesson_mastery = (lesson_perf["correct"] / lesson_perf["total"] * 100) if lesson_perf["total"] > 0 else 0
+                    sub_skills.append({
+                        "id": lesson_id,
+                        "name": lesson_perf["lesson_name"],
+                        "mastery": round(lesson_mastery, 1),
+                        "questions_answered": lesson_perf["total"],
+                        "questions_correct": lesson_perf["correct"]
+                    })
+                
+                # Add unit to grading data
+                grading_data["subjects"][subject]["grade_levels"][grade_level]["units"].append({
+                    "id": unit_id,
+                    "name": unit.get("title"),
+                    "mastery": round(mastery, 1),
+                    "questions_answered": perf["total"],
+                    "questions_correct": perf["correct"],
+                    "sub_skills": sub_skills
+                })
+            
+            # 5. Calculate overall grade
+            if total_units_with_attempts > 0:
+                avg_mastery = total_mastery / total_units_with_attempts
+                grading_data["overall_mastery"] = round(avg_mastery, 1)
+                
+                if avg_mastery >= 90:
+                    grading_data["overall_grade"] = "A"
+                elif avg_mastery >= 80:
+                    grading_data["overall_grade"] = "B"
+                elif avg_mastery >= 70:
+                    grading_data["overall_grade"] = "C"
+                elif avg_mastery >= 60:
+                    grading_data["overall_grade"] = "D"
+                else:
+                    grading_data["overall_grade"] = "F"
+            else:
+                grading_data["overall_grade"] = "N/A"
+            
+            log_print(f"[GRADING_PANEL] Generated data for {total_units_with_attempts} units with attempts")
+            return grading_data
+            
+        except Exception as e:
+            log_print(f"[ERROR] Error getting grading panel data: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def get_recommended_skills(
         self, 

@@ -164,6 +164,9 @@ def load_perseus_items_for_dash_questions_from_mongodb(
             slug = question_id.split('_')[0] if '_' in question_id else question_id
 
             # Build Perseus data structure
+            # Note: Perseus scoring uses the 'correct' property in widget choices
+            # We don't need a separate answer key
+            logger.info(f"[PERSEUS_LOAD] Building item for {question_id} - NO ANSWER KEY")
             perseus_data = {
                 "question": question,
                 "answerArea": answer_area,
@@ -176,7 +179,10 @@ def load_perseus_items_for_dash_questions_from_mongodb(
                     'expected_time_seconds': dash_q.expected_time_seconds,
                     'slug': slug,
                     'skill_names': [dash_system.skills[sid].name for sid in dash_q.skill_ids
-                                   if sid in dash_system.skills]
+                                   if sid in dash_system.skills],
+                    'unit_id': question_doc.get('unit_id'),  # Current module (unit) ID
+                    'lesson_id': question_doc.get('lesson_id'),  # Sub-skill ID
+                    'exercise_id': question_doc.get('exercise_id')
                 }
             }
 
@@ -385,27 +391,13 @@ def log_question_displayed(request: Request, display_info: dict):
     logger.info(f"  Skills: {', '.join(metadata.get('skill_names', []))}")
     logger.info(f"  Difficulty: {metadata.get('difficulty', 0):.2f} | Expected: {metadata.get('expected_time_seconds', 0)}s")
     
-    # Show current student state
-    user_profile = dash_system.user_manager.load_user(user_id)
-    if user_profile:
-        current_time = time.time()
-        scores = dash_system.get_skill_scores(user_id, current_time)
-        
-        # Only show practiced skills
-        practiced = {k: v for k, v in scores.items() if v['practice_count'] > 0}
-        
-        if practiced:
-            logger.info(f"\n[STUDENT_STATE]")
-            logger.info(f"  {'Skill':<20} | {'Mem':<6} | {'Prob':<6} | {'Prac':<5} | {'Acc':<6}")
-            logger.info(f"  {'-'*58}")
-            for skill_id, data in list(practiced.items())[:5]:  # Show top 5
-                logger.info(
-                    f"  {data['name'][:20]:<20} | "
-                    f"{data['memory_strength']:<6.2f} | "
-                    f"{data['probability']:<6.2f} | "
-                    f"{data['practice_count']:<5} | "
-                    f"{data['accuracy']:<6.1%}"
-                )
+    # Show current student state from question_attempts
+    try:
+        attempts_count = dash_system.mongo.question_attempts.count_documents({"user_id": user_id})
+        if attempts_count > 0:
+            logger.info(f"\n[STUDENT_STATE] {attempts_count} total question attempts recorded")
+    except Exception as e:
+        logger.debug(f"Could not fetch student state: {e}")
     
     logger.info(f"{'='*80}\n")
     return {"success": True}
@@ -441,10 +433,21 @@ def submit_answer(request: Request, answer: AnswerSubmission):
     Previous latency: 4-8 seconds. Target: < 500ms.
     """
     ensure_dash_system()
+    
+    # Import mongo_db at function level
+    from managers.mongodb_manager import mongo_db
+    
     # Get user_id from JWT token
     user_id = get_current_user(request)
 
     logger.info(f"\n{'-'*80}")
+    logger.info(f"[SUBMIT_ANSWER] User: {user_id}")
+    logger.info(f"[SUBMIT_ANSWER] Question ID: {answer.question_id}")
+    logger.info(f"[SUBMIT_ANSWER] Is Correct: {answer.is_correct}")
+    logger.info(f"[SUBMIT_ANSWER] Skill IDs: {answer.skill_ids}")
+    logger.info(f"[SUBMIT_ANSWER] Response Time: {answer.response_time_seconds}s")
+    logger.info(f"[SUBMIT_ANSWER] Answer object type: {type(answer.is_correct)}")
+    logger.info(f"[SUBMIT_ANSWER] Answer object repr: {repr(answer.is_correct)}")
     
     # Store raw question attempt in question_attempts collection (future-proof)
     from datetime import datetime
@@ -459,10 +462,12 @@ def submit_answer(request: Request, answer: AnswerSubmission):
     }
     
     try:
-        mongo_db.question_attempts.insert_one(attempt_doc)
-        logger.info(f"[ATTEMPT_STORED] Question:{answer.question_id} | Correct:{answer.is_correct}")
+        result = mongo_db.question_attempts.insert_one(attempt_doc)
+        logger.info(f"[ATTEMPT_STORED] Inserted ID: {result.inserted_id} | Question:{answer.question_id} | Correct:{answer.is_correct}")
     except Exception as e:
-        logger.warning(f"[WARNING] Failed to store attempt in question_attempts: {e}")
+        logger.error(f"[ERROR] Failed to store attempt in question_attempts: {e}")
+        import traceback
+        traceback.print_exc()
 
     user_profile = dash_system.user_manager.load_user(user_id)
     if not user_profile:
@@ -509,55 +514,26 @@ def submit_answer(request: Request, answer: AnswerSubmission):
         "message": "Answer recorded successfully"
     }
 
-@app.get("/api/skill-scores")
-def get_skill_scores(request: Request):
+@app.get("/api/grading-panel")
+def get_grading_panel(request: Request):
     """
-    Get all skill scores for the current user.
-    Returns skill states mapped to CURRENT skill structure (future-proof).
+    Get grading panel data from Khan Academy hierarchy.
+    Skills = Units, Sub-skills = Lessons (following DASH Integration Plan).
     
-    NEW: Uses question_attempts collection which dynamically maps to current
-    Khan Academy hierarchy, so it works even when questions_db is updated.
+    Returns student performance mapped to current questions_db structure.
+    This is future-proof: survives questions_db updates without data loss.
     """
     ensure_dash_system()
     # Get user_id from JWT token
     user_id = get_current_user(request)
     
-    # Try to use dynamic performance first (if question_attempts exist)
     try:
-        performance_data = dash_system.get_dynamic_student_performance(user_id)
-        
-        # Transform to format expected by frontend
-        skill_states = {}
-        for skill_data in performance_data.get("skills", []):
-            skill_id = skill_data["skill_id"]
-            skill_states[skill_id] = {
-                "name": skill_data["skill_name"],
-                "memory_strength": skill_data["mastery"] / 100.0,  # Convert percentage to 0-1
-                "last_practice_time": skill_data.get("last_attempt"),
-                "practice_count": skill_data["questions_answered"],
-                "correct_count": skill_data["questions_correct"]
-            }
-        
-        logger.info(f"[DYNAMIC_PERFORMANCE] Loaded {len(skill_states)} skills from question_attempts")
-        return {"skill_states": skill_states}
-        
+        grading_data = dash_system.get_grading_panel_data(user_id)
+        logger.info(f"[GRADING_PANEL] Generated grading data for user {user_id}")
+        return grading_data
     except Exception as e:
-        logger.warning(f"[FALLBACK] Dynamic performance failed, using legacy method: {e}")
-    
-    # Fallback to old method if dynamic fails (backward compatibility)
-    # Get user profile to ensure it exists and sync skill states
-    user_profile = dash_system.load_user_or_create(user_id)
-    if not user_profile:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Get current time for calculations
-    current_time = time.time()
-    
-    # Get all skill scores from DASH system
-    scores = dash_system.get_skill_scores(user_id, current_time)
-    
-    # Transform to format expected by frontend
-    # Frontend expects: { skill_id: { name, memory_strength, last_practice_time, practice_count, correct_count } }
+        logger.error(f"[ERROR] Error getting grading panel data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     skill_states = {}
     for skill_id, score_data in scores.items():
         # Get student state to get last_practice_time
