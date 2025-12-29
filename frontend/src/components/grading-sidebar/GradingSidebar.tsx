@@ -110,14 +110,22 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
     };
 
     const prevOpenRef = useRef(open);
+    const prevSkillRef = useRef<string | null>(null);
 
-    // Auto-scroll when open or currentSkill changes
+    // Auto-scroll when open, currentSkill, or data loading state changes
     useEffect(() => {
-        if (open && currentSkill) {
+        if (open && currentSkill && !isLoading && gradingData) {
+            // If skill changed, reset user scrolling flag and scroll immediately
+            const skillChanged = prevSkillRef.current !== currentSkill;
+            if (skillChanged) {
+                isUserScrollingRef.current = false;
+            }
+            
             // If we're transitioning from closed to open, we need to wait for the width transition (500ms)
-            // If we're already open and just changing skills, we can scroll faster
+            // If skill just changed, scroll immediately
+            // Otherwise, wait a bit for content to render
             const isOpening = !prevOpenRef.current && open;
-            const delay = isOpening ? 600 : 100;
+            const delay = isOpening ? 600 : (skillChanged ? 0 : 100);
 
             // Small delay to ensure content is rendered/expanded
             const timeoutId = setTimeout(() => {
@@ -126,10 +134,11 @@ export default function GradingSidebar({ open, onToggle, currentSkill }: Grading
                 }
             }, delay);
 
+            prevSkillRef.current = currentSkill;
             return () => clearTimeout(timeoutId);
         }
         prevOpenRef.current = open;
-    }, [open, currentSkill]);
+    }, [open, currentSkill, isLoading, gradingData]);
 
     // Handle user scrolling and inactivity
     useEffect(() => {
