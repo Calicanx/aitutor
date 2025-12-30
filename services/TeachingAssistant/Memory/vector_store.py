@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Tuple
 from pathlib import Path
 from dataclasses import dataclass
 from pinecone import Pinecone, ServerlessSpec
+from pinecone.exceptions import PineconeApiException
 from dotenv import load_dotenv
 
 # Add project root to path for imports
@@ -156,15 +157,22 @@ class MemoryStore:
                 cloud = os.getenv("PINECONE_CLOUD", "aws")  # "aws" or "gcp"
                 region = os.getenv("PINECONE_REGION", "us-east-1")
                 
-                self.pc.create_index(
-                    name=self.index_name,
-                    dimension=dimension,
-                    metric="cosine",
-                    spec=ServerlessSpec(
-                        cloud=cloud,
-                        region=region
+                try:
+                    self.pc.create_index(
+                        name=self.index_name,
+                        dimension=dimension,
+                        metric="cosine",
+                        spec=ServerlessSpec(
+                            cloud=cloud,
+                            region=region
+                        )
                     )
-                )
+                except PineconeApiException as e:
+                    # Handle race condition: another process created the index simultaneously
+                    if e.status == 409:
+                        logger.info(f"Index '{self.index_name}' was created by another process (409 Conflict). Continuing...")
+                    else:
+                        raise
                 
                 # Wait for index to be ready
                 logger.info(f"Waiting for index '{self.index_name}' to be ready...")
