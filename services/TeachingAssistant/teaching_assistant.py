@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from .skills.greeting import GreetingSkill
 from .session_manager import SessionManager
 from .core.context_manager import ContextManager
 from .core.event_processor import EventProcessor
@@ -80,8 +79,15 @@ class TeachingAssistant:
         self.queue_manager = EventQueueManager()
         self.event_processor = EventProcessor(self.context_manager, None)  # Skills added later
         
-        # Skills system
-        self.skills_manager = skills_manager or SkillsManager()
+        # Skills system with dynamic loading
+        if skills_manager:
+            self.skills_manager = skills_manager
+        else:
+            skills_dir = Path(__file__).parent / "skills"
+            self.skills_manager = SkillsManager(
+                skills_dir=str(skills_dir),
+                config=self.config
+            )
         
         # Memory system
         self.memory_stores: Dict[str, MemoryStore] = {}
@@ -93,10 +99,6 @@ class TeachingAssistant:
         # Memory management - LRU cache for stores
         self._memory_store_access_times: Dict[str, float] = {}
         self._max_memory_stores = 100  # Maximum number of user memory stores to keep in memory
-        
-        # Greeting Skill (with config injection)
-        self.greeting_skill = GreetingSkill(self.config)
-        self.skills_manager.register_skill(self.greeting_skill)
         
         # Thread pool for blocking I/O operations (managed lifecycle)
         self._executor = ThreadPoolExecutor(
@@ -119,6 +121,13 @@ class TeachingAssistant:
             "[TEACHING_ASSISTANT] Initialized with config-driven architecture, "
             f"thread pool ({self.config.io_thread_pool_workers} workers), and dependency injection"
         )
+    
+    def _get_greeting_skill(self):
+        """Get the greeting skill from skills manager"""
+        for skill in self.skills_manager.skills:
+            if skill.name == "greeting":
+                return skill
+        return None
 
     def start_session(self, user_id: str) -> dict:
         """Start a new session, returns session info (greeting moved to start() method)"""
@@ -139,10 +148,14 @@ class TeachingAssistant:
                 "session_info": {"session_active": False}
             }
 
-        closing = self.greeting_skill.get_closing(
-            duration_minutes=session_summary.get("duration_minutes", 0),
-            questions_answered=session_summary.get("questions_answered", 0)
-        )
+        greeting_skill = self._get_greeting_skill()
+        if greeting_skill:
+            closing = greeting_skill.get_closing(
+                duration_minutes=session_summary.get("duration_minutes", 0),
+                questions_answered=session_summary.get("questions_answered", 0)
+            )
+        else:
+            closing = "[SYSTEM PROMPT FOR ADAM]\nThe tutoring session is ending now. Please give the student a warm closing message."
         return {
             "prompt": closing,
             "session_info": session_summary
@@ -164,7 +177,11 @@ class TeachingAssistant:
     def check_inactivity(self, session_id: str) -> Optional[str]:
         """Check inactivity and return prompt if needed"""
         if self.session_manager.check_inactivity(session_id):
-            prompt = self.greeting_skill.get_inactivity_prompt()
+            greeting_skill = self._get_greeting_skill()
+            if greeting_skill:
+                prompt = greeting_skill.get_inactivity_prompt()
+            else:
+                prompt = "[SYSTEM PROMPT FOR ADAM]\nCheck with the student if they're there and if they want to continue."
             self.session_manager.push_instruction(session_id, prompt)
             return prompt
         return None
@@ -246,7 +263,15 @@ class TeachingAssistant:
         # 1. Generate Greeting FIRST (Fast Path)
         # We try to use cached opening data if available, but don't block heavily.
         logger.info(f"[TEACHING_ASSISTANT] Requesting greeting for session {session_id}")
-        greeting = await self.greeting_skill.start_session(user_id, session_id)
+        
+        # Get greeting skill from skills manager
+        greeting_skill = self._get_greeting_skill()
+        if greeting_skill:
+            greeting = await greeting_skill.start_session(user_id, session_id)
+        else:
+            logger.warning("[TEACHING_ASSISTANT] Greeting skill not found, using fallback")
+            greeting = "[SYSTEM PROMPT FOR ADAM]\nYou are Adam, an advanced AI Teaching Assistant.\nPlease greet the student warmly."
+        
         logger.info(f"[TEACHING_ASSISTANT] Greeting received: {bool(greeting)}, Length: {len(greeting) if greeting else 0}")
 
         # Also record greeting into conversation context immediately so it's ready
@@ -455,7 +480,12 @@ class TeachingAssistant:
             # 1. Get closing message FIRST (using last generated state)
             # This ensures we don't wait for final consolidation
             logger.info(f"[TEACHING_ASSISTANT] Requesting closing for session {session_id}")
-            closing = self.greeting_skill.end_session(user_id, session_id)
+            greeting_skill = self._get_greeting_skill()
+            if greeting_skill:
+                closing = greeting_skill.end_session(user_id, session_id)
+            else:
+                logger.warning("[TEACHING_ASSISTANT] Greeting skill not found, using fallback")
+                closing = "[SYSTEM PROMPT FOR ADAM]\nThe tutoring session is ending now. Please give the student a warm closing message."
             logger.info(f"[TEACHING_ASSISTANT] Closing received: {bool(closing)}, Length: {len(closing) if closing else 0}")
             
             # Get context before clearing

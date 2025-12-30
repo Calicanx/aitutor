@@ -461,10 +461,11 @@ async def websocket_feed(websocket: WebSocket):
 
     user_id = user_info["user_id"]
 
-    # 2. Get active session
+    # 2. Get active session and check if it's still active
     session = ta.get_active_session(user_id)
-    if not session:
-        await websocket.close(code=4002, reason="No active session")
+    if not session or not session.get("is_active"):
+        await websocket.close(code=1008, reason="Session not active or ended")
+        logger.info(f"[WS] Rejected connection - no active session for user {user_id}")
         return
 
     session_id = session["session_id"]
@@ -703,7 +704,15 @@ async def sse_instructions(request: Request, token: str = None):
             ta.session_manager.set_connection_status(session_id, sse=False)
             logger.info(f"[SSE] SSE disconnected for session {session_id}")
 
-    return EventSourceResponse(event_generator())
+    # Add CORS headers for SSE
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+        "Access-Control-Allow-Credentials": "true"
+    }
+    
+    return EventSourceResponse(event_generator(), headers=headers)
 
 
 # ============================================================================

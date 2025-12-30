@@ -303,7 +303,7 @@ class SessionClosingCache:
     @with_retry(exceptions=(Exception,), retries=2)
     async def _generate_closing_artifacts_call(self, topics, moments, emotions, current_emotion, unfinished_str):
         """Helper to make the actual LLM call, protected by decorators."""
-        import google.generativeai as genai
+        from google import genai
         
         prompt = f"""Analyze this session data and generate closing artifacts.
 
@@ -326,8 +326,11 @@ Return ONLY valid JSON:
 }}"""
 
         def _call_gemini():
-            model = genai.GenerativeModel("gemini-2.0-flash-lite")
-            response = model.generate_content(prompt)
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt
+            )
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]
@@ -341,7 +344,7 @@ Return ONLY valid JSON:
     
     def _generate_goodbye_message_sync(self) -> str:
         """Generate goodbye message based on emotional state using LLM (synchronous)."""
-        import google.generativeai as genai
+        from google import genai
         
         current_emotion = self.cache["emotional_arc"][-1] if self.cache["emotional_arc"] else "neutral"
         moments = ', '.join(self.cache["key_moments"][-3:]) if self.cache["key_moments"] else "None"
@@ -361,8 +364,11 @@ Create a brief (1-2 sentences) goodbye that:
 Return ONLY the goodbye message, nothing else."""
         
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash-lite")
-            response = model.generate_content(prompt)
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt
+            )
             return response.text.strip()
         except Exception as e:
             logger.error(f"❌ Error generating goodbye_message: {e}")
@@ -370,7 +376,7 @@ Return ONLY the goodbye message, nothing else."""
     
     def _generate_next_session_hooks_sync(self) -> list:
         """Generate next session hooks based on unfinished topics and key moments."""
-        import google.generativeai as genai
+        from google import genai
         
         unfinished = self.cache.get("unfinished_topics", [])
         moments = self.cache.get("key_moments", [])
@@ -392,8 +398,11 @@ Example: ["Continue practicing completing the square", "Explore how discriminant
 
 Return ONLY the JSON array, nothing else."""
                 try:
-                    model = genai.GenerativeModel("gemini-2.0-flash-lite")
-                    response = model.generate_content(prompt)
+                    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash-lite",
+                        contents=prompt
+                    )
                     text = response.text.strip()
                     if text.startswith("```json"):
                         text = text[7:]
@@ -421,8 +430,11 @@ Example: ["Continue practicing completing the square", "Explore how discriminant
 
 Return ONLY the JSON array, nothing else."""
             try:
-                model = genai.GenerativeModel("gemini-2.0-flash-lite")
-                response = model.generate_content(prompt)
+                client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash-lite",
+                    contents=prompt
+                )
                 text = response.text.strip()
                 if text.startswith("```json"):
                     text = text[7:]
@@ -524,7 +536,7 @@ class MemoryConsolidator:
 
     def _generate_personal_relevance(self, user_id: str) -> str:
         """Generate time-contextual personal relevance string."""
-        import google.generativeai as genai
+        from google import genai
         from datetime import datetime
         
         personal_memories = self.store.search(
@@ -558,8 +570,11 @@ If no time-specific relevance, return empty string.
 Return ONLY the relevance string or empty string, nothing else."""
 
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash-lite")
-            response = model.generate_content(prompt)
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt
+            )
             relevance = response.text.strip()
             return relevance if relevance and len(relevance) > 0 else ""
         except Exception as e:
@@ -568,9 +583,9 @@ Return ONLY the relevance string or empty string, nothing else."""
 
     def _generate_opening_context(self, user_id: str, closing_cache: SessionClosingCache) -> dict:
         """Generate personalized opening context for next session using LLM."""
-        import google.generativeai as genai
+        from google import genai
         
-        model = genai.GenerativeModel("gemini-2.0-flash-lite")
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
         # Extract data from closing cache
         session_summary = closing_cache.cache.get("session_summary", "")
@@ -600,7 +615,10 @@ Reference the specific achievement naturally. Examples:
 Return ONLY the welcome message, nothing else."""
 
             try:
-                response = model.generate_content(welcome_hook_prompt)
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash-lite",
+                    contents=welcome_hook_prompt
+                )
                 welcome_hook = response.text.strip()
             except Exception as e:
                 logger.error(f"❌ Error generating welcome_hook: {e}")
@@ -624,7 +642,10 @@ Sound like a friendly tutor who remembers them.
 Return ONLY the opener, nothing else."""
 
             try:
-                response = model.generate_content(opener_prompt)
+                response = client.models.generate_content(
+                    model="gemini-2.0-flash-lite",
+                    contents=opener_prompt
+                )
                 suggested_opener = response.text.strip()
             except Exception as e:
                 logger.error(f"❌ Error generating suggested_opener: {e}")

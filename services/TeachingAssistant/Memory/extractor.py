@@ -2,7 +2,7 @@ import os
 import sys
 import json
 from typing import List, Optional, Dict, Any
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -15,14 +15,12 @@ from .schema import Memory, MemoryType
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
 logger = get_logger(__name__)
 
 
 class MemoryExtractor:
     def __init__(self):
-        self.model = genai.GenerativeModel("gemini-2.0-flash-lite")
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     def extract_memories_batch(self, exchanges: List[Dict], student_id: str, session_id: str) -> Dict[str, Any]:
         """
@@ -107,7 +105,10 @@ Return ONLY valid JSON.
 """
 
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt
+            )
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]

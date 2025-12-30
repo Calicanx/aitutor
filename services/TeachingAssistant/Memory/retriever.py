@@ -13,11 +13,10 @@ sys.path.insert(0, str(project_root))
 from shared.logging_config import get_logger
 from .schema import Memory, MemoryType
 from .vector_store import MemoryStore
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 class MemoryRetriever:
     # Memory management constants
@@ -217,7 +216,7 @@ class MemoryRetriever:
         fallback_query = conversation_text
 
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash-lite")
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             
             # Truncate context if too long
             safe_context = conversation_text[:2000]
@@ -261,7 +260,10 @@ class MemoryRetriever:
                 pass
             # ===========================================
 
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt
+            )
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]
@@ -397,6 +399,55 @@ class MemoryRetriever:
         
         self._save_retrieval(session_id, user_id, "deep", deep_results)
 
+    def _synthesize_instruction(self, memories: list, conversation_context: str) -> Optional[str]:
+        """Use LLM to synthesize memories into actionable instruction"""
+        logger = get_logger(__name__)
+        
+        if not memories:
+            return None
+        
+        # Format memories for LLM
+        memory_texts = [f"- {m['memory'].text}" for m in memories]
+        memories_str = "\n".join(memory_texts)
+        
+        prompt = f"""You are a reflection layer for an AI tutor system.
+
+Retrieved Memories:
+{memories_str}
+
+Recent Conversation Context:
+{conversation_context}
+
+TASK: Synthesize these memories into a SINGLE actionable instruction for the tutor.
+- Only return an instruction if memories are highly relevant to current conversation
+- Make it specific and actionable
+- Focus on HOW the tutor should adapt their teaching based on these memories
+
+Return ONLY the instruction text, or "NONE" if memories aren't relevant enough.
+
+Examples:
+- "Student prefers visual diagrams - use a visual approach for this concept"
+- "Student struggled with negative numbers last time - check understanding before proceeding"
+- "Student gets frustrated with algebra - provide extra encouragement and break into smaller steps"
+"""
+        
+        try:
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt
+            )
+            instruction = response.text.strip()
+            
+            if instruction.upper() == "NONE" or not instruction:
+                logger.info("[REFLECTION] No relevant instruction synthesized from memories")
+                return None
+            
+            logger.info(f"[REFLECTION] Synthesized instruction: {instruction[:100]}...")
+            return instruction
+        except Exception as e:
+            logger.error(f"[REFLECTION] Error in reflection synthesis: {e}")
+            return None
     
     def get_memory_injection(self, session_id: str) -> Optional[str]:
         logger = get_logger(__name__)  # Initialize logger
@@ -428,42 +479,26 @@ class MemoryRetriever:
         if not memories_to_inject:
             return None
         
-        memories_by_type = {}
-        for result in memories_to_inject:
-            mem_type = result["memory"].type.value
-            if mem_type not in memories_by_type:
-                memories_by_type[mem_type] = []
-            memories_by_type[mem_type].append(result["memory"])
+        # Get conversation context for reflection
+        conversation_context = ""
+        if session_id in self._conversation_history:
+            recent_turns = self._conversation_history[session_id][-3:]
+            conversation_context = "\n".join([f"{t['speaker']}: {t['text']}" for t in recent_turns])
+        
+        # REFLECTION LAYER - Synthesize instruction from memories
+        instruction = self._synthesize_instruction(memories_to_inject, conversation_context)
+        
+        if not instruction:
+            logger.info("[MEMORY_INJECTION] Reflection layer returned no relevant instruction")
+            return None
+        
+        # Format as system instruction
+        injection_text = f"""[SYSTEM INSTRUCTION]
 
-        formatted_parts = []
-        type_names = {
-            "academic": "Academic Memories",
-            "personal": "Personal Memories",
-            "preference": "Preference Memories",
-            "context": "Context Memories"
-        }
+{instruction}
 
-        for mem_type, mems in memories_by_type.items():
-            formatted_parts.append(f"{type_names.get(mem_type, mem_type.title())}:")
-            for mem in mems:
-                emotion = mem.metadata.get("emotion", "")
-                emotion_str = f" (emotion: {emotion})" if emotion else ""
-                formatted_parts.append(f"- {mem.text}{emotion_str}")
-
-        formatted_memories = "\n".join(formatted_parts)
-
-        injection_text = f"""{{{{SYSTEM UPDATE: RELEVANT MEMORIES RETRIEVED.
-
-{formatted_memories}
-
-CRITICAL INSTRUCTION:
-- If you were about to reply to the user, use these memories to guide your response naturally.
-- If you have JUST replied to the user and this update arrived late:
-  1. DO NOT change the topic or ask a new question.
-  2. If your previous reply is still valid, REPEAT it or rephrase it slightly to be consistent with these memories.
-  3. DO NOT continue the conversation further than your last reply.
-- Do not mention these memories explicitly in your public response. Treat them as internal context only.
-}}}}"""
+Note: This instruction is based on retrieved memories from previous sessions.
+Apply it naturally without explicitly mentioning these memories to the student."""
         
         # CRITICAL FIX: Clear retrieval results after injection to free memory
         with self._lock:
@@ -563,7 +598,7 @@ CRITICAL INSTRUCTION:
         fallback_result = {"need_retrieval": True, "retrieval_query": user_text}
 
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash-lite")
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             
             # Truncate for prompt safety
             safe_user = user_text[:500]
@@ -614,7 +649,10 @@ CRITICAL INSTRUCTION:
                 pass
             # ====================================================
 
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt
+            )
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]

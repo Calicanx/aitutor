@@ -94,7 +94,14 @@ class MemoryStore:
         # Initialize configuration
         self.config = MemoryConfig()
         
-        self.pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        # Validate Pinecone API key
+        api_key = os.getenv("PINECONE_API_KEY")
+        if not api_key or api_key == "":
+            logger.error("PINECONE_API_KEY not set. Memory system will not function.")
+            logger.error("Please set PINECONE_API_KEY environment variable. See SETUP.md for instructions.")
+            raise ValueError("PINECONE_API_KEY environment variable is required for memory functionality")
+        
+        self.pc = Pinecone(api_key=api_key)
         
         # Determine index name: user_id-based or provided or env or default
         if user_id:
