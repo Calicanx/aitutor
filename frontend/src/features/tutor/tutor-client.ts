@@ -93,7 +93,7 @@ export class TutorClient extends EventEmitter<TutorClientEventTypes> {
     this.emit("log", log);
   }
 
-  async connect(config: LiveConnectConfig): Promise<boolean> {
+  async connect(config: LiveConnectConfig, preferredLanguage?: string): Promise<boolean> {
     if (this._status === "connected" || this._status === "connecting") {
       return false;
     }
@@ -102,9 +102,9 @@ export class TutorClient extends EventEmitter<TutorClientEventTypes> {
     this.config = config;
 
     try {
-      // Initialize Tutor Service
+      // Initialize Tutor Service with preferred language
       this.tutorService = new TutorService();
-      await this.tutorService.initialize();
+      await this.tutorService.initialize(preferredLanguage || "English");
 
       // Connect directly to Gemini Live API
       await this.tutorService.connect(config, {
