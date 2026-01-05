@@ -61,7 +61,8 @@ Make them feel welcome and excited to learn."""
             welcome = opening.get("welcome_hook", "")
             last_summary = opening.get("last_session_summary", "")
             unfinished = opening.get("unfinished_threads", [])
-            personal = opening.get("personal_relevance", [])
+            personal = opening.get("personal_relevance", "")  # Fixed: personal_relevance is a string, not a list
+            suggested_opener = opening.get("suggested_opener", "")  # Added: include suggested_opener
             
             # If welcome_hook is empty (LLM failed or cleared), use fallback
             if not welcome:
@@ -72,8 +73,10 @@ Make them feel welcome and excited to learn."""
                 greeting_parts.append(f"Last time we worked on: {last_summary}")
             if unfinished:
                 greeting_parts.append(f"Unfinished topics: {', '.join(unfinished)}")
-            if personal:
-                greeting_parts.append("Personal context available.")
+            if personal:  # Fixed: Now displays actual personal relevance text instead of generic message
+                greeting_parts.append(f"Personal context: {personal}")
+            if suggested_opener:  # Added: Include suggested opener if available
+                greeting_parts.append(f"Suggested opener: {suggested_opener}")
             
             greeting_text = f"{self.config.system_prompt_prefix}\n" + \
                             "[MEMORY AND INJECTION HANDLING]\n" + \
@@ -162,18 +165,25 @@ We have some very interesting problems to solve."""
 
     async def _load_opening(self, user_id: str) -> Optional[dict]:
         """
-        Load opening data from memory retrieval file.
-        Checks for file once and returns immediately (no polling).
+        Load opening data from MongoDB users collection.
+        Returns the opening_memory field from user document.
         """
-        file_path = self.config.get_opening_retrieval_path(user_id)
+        from managers.mongodb_manager import mongo_db
         
-        # Check ONCE for the opening cache file
-        # If it exists, use it. If not, return None immediately to use default fallback.
-        data = load_json_file(file_path)
-        if data:
-            return data
+        try:
+            user_data = mongo_db.users.find_one(
+                {"user_id": user_id},
+                {"opening_memory": 1}  # Only fetch opening_memory field
+            )
             
-        return None
+            if user_data and "opening_memory" in user_data:
+                opening_memory = user_data["opening_memory"]
+                return opening_memory
+            
+            return None
+        except Exception as e:
+            logger.error(f"[OPENING_MEMORY] Failed to load opening memory from MongoDB: {e}", exc_info=True)
+            return None
 
     def _load_closing(self, user_id: str, session_id: str) -> Optional[dict]:
         """Load closing data from memory retrieval file"""
@@ -185,22 +195,17 @@ We have some very interesting problems to solve."""
         return None
     
     def _clear_opening_cache(self, user_id: str):
-        """Clear opening cache after it's been used for greeting"""
-        file_path = self.config.get_opening_retrieval_path(user_id)
+        """Clear opening memory from MongoDB after it's been used for greeting"""
+        from managers.mongodb_manager import mongo_db
         
-        # Initialize with empty structure
-        opening_data = {
-            "timestamp": time.time(),
-            "welcome_hook": "",
-            "last_session_summary": "",
-            "unfinished_threads": [],
-            "personal_relevance": [],
-            "emotional_state_last": "neutral",
-            "suggested_opener": ""
-        }
-        
-        if save_json_file(file_path, opening_data):
-            logger.info(f"Cleared opening cache after use for user: {user_id}")
-        else:
-            logger.error(f"Failed to clear opening cache for user: {user_id}")
+        try:
+            # Unset opening_memory field after it's been used
+            # This ensures fresh opening memory is generated for next session
+            mongo_db.users.update_one(
+                {"user_id": user_id},
+                {"$unset": {"opening_memory": ""}}
+            )
+            logger.info(f"[OPENING_MEMORY] Cleared opening memory from MongoDB for user {user_id}")
+        except Exception as e:
+            logger.error(f"[OPENING_MEMORY] Failed to clear opening memory from MongoDB: {e}", exc_info=True)
 

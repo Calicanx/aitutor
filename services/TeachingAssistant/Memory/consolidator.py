@@ -763,14 +763,23 @@ Return ONLY the opener, nothing else."""
             json.dump(closing_data, f, indent=2, ensure_ascii=False)
 
     def _save_opening(self, user_id: str, opening_context: dict):
-        data_dir = f"services/TeachingAssistant/Memory/data/{user_id}/memory/TeachingAssistant"
-        os.makedirs(data_dir, exist_ok=True)
+        """Save opening context to MongoDB users collection"""
+        from managers.mongodb_manager import mongo_db
         
-        file_path = f"{data_dir}/TA-opening-retrieval.json"
-        opening_data = {
-            "timestamp": time.time(),
-            **opening_context
-        }
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(opening_data, f, indent=2, ensure_ascii=False)
+        try:
+            # Add timestamp to opening context (using time.time() to match existing pattern)
+            opening_data = {
+                "timestamp": time.time(),
+                **opening_context
+            }
+            
+            # Update user document with opening_memory field
+            # This ensures only one opening memory exists per user (updated on each session close)
+            mongo_db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"opening_memory": opening_data}}
+            )
+            
+            logger.info(f"[OPENING_MEMORY] Saved opening memory to MongoDB for user {user_id}")
+        except Exception as e:
+            logger.error(f"[OPENING_MEMORY] Failed to save opening memory to MongoDB: {e}", exc_info=True)
