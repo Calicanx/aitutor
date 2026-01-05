@@ -331,6 +331,14 @@ Return ONLY valid JSON:
                 model="gemini-2.0-flash-lite",
                 contents=prompt
             )
+            
+            # Track token usage for cost calculation
+            try:
+                from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                extract_and_track_tokens(response, self.session_id, "closing_artifacts_generation")
+            except Exception as track_error:
+                logger.info(f"Token tracking failed (non-critical): {track_error}")
+            
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]
@@ -369,6 +377,14 @@ Return ONLY the goodbye message, nothing else."""
                 model="gemini-2.0-flash-lite",
                 contents=prompt
             )
+            
+            # Track token usage for cost calculation
+            try:
+                from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                extract_and_track_tokens(response, self.session_id, "goodbye_generation")
+            except Exception as track_error:
+                logger.info(f"Token tracking failed (non-critical): {track_error}")
+            
             return response.text.strip()
         except Exception as e:
             logger.error(f"❌ Error generating goodbye_message: {e}")
@@ -403,6 +419,14 @@ Return ONLY the JSON array, nothing else."""
                         model="gemini-2.0-flash-lite",
                         contents=prompt
                     )
+                    
+                    # Track token usage for cost calculation
+                    try:
+                        from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                        extract_and_track_tokens(response, self.session_id, "hooks_enhancement")
+                    except Exception as track_error:
+                        logger.info(f"Token tracking failed (non-critical): {track_error}")
+                    
                     text = response.text.strip()
                     if text.startswith("```json"):
                         text = text[7:]
@@ -435,6 +459,14 @@ Return ONLY the JSON array, nothing else."""
                     model="gemini-2.0-flash-lite",
                     contents=prompt
                 )
+                
+                # Track token usage for cost calculation
+                try:
+                    from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                    extract_and_track_tokens(response, self.session_id, "hooks_from_moments")
+                except Exception as track_error:
+                    logger.info(f"Token tracking failed (non-critical): {track_error}")
+                
                 text = response.text.strip()
                 if text.startswith("```json"):
                     text = text[7:]
@@ -512,6 +544,16 @@ class MemoryConsolidator:
         # It also creates the hook for the next session.
         asyncio.create_task(self._generate_and_save_opening_background(user_id, closing_cache))
         
+        # Recalculate session costs now that memory consolidation LLM calls are complete
+        # This ensures TA token usage from memory extraction and closing generation are included
+        try:
+            from services.CostTracking.cost_tracker import CostTracker
+            cost_tracker = CostTracker(session_id, user_id)
+            cost_tracker.end_session()
+            logger.info(f"[COST_TRACKING] Recalculated costs after memory consolidation for session {session_id[:8]}...")
+        except Exception as cost_error:
+            logger.error(f"[COST_TRACKING] Failed to recalculate costs after consolidation: {cost_error}", exc_info=True)
+        
         logger.info("[MEMORY_CONSOLIDATION] Session consolidation complete for %s (Opening context generation running in background)", session_id)
 
     async def _generate_and_save_opening_background(self, user_id: str, closing_cache: SessionClosingCache):
@@ -524,6 +566,17 @@ class MemoryConsolidator:
             opening_context = await self._generate_opening_context_async(user_id, closing_cache)
             await asyncio.to_thread(self._save_opening, user_id, opening_context)
             logger.info("Background opening context generation complete for user %s", user_id)
+            
+            # Final cost recalculation after all opening context LLM calls complete
+            # This captures the opening generation tokens (personal_relevance, welcome_hook, suggested_opener)
+            try:
+                session_id = closing_cache.session_id
+                from services.CostTracking.cost_tracker import CostTracker
+                cost_tracker = CostTracker(session_id, user_id)
+                cost_tracker.end_session()
+                logger.info(f"[COST_TRACKING] Final cost recalculation after opening generation for session {session_id[:8]}...")
+            except Exception as cost_error:
+                logger.error(f"[COST_TRACKING] Failed to recalculate costs after opening generation: {cost_error}", exc_info=True)
         except Exception as e:
             logger.error(f"Error in background opening context generation: {e}", exc_info=True)
 
@@ -532,9 +585,9 @@ class MemoryConsolidator:
         logger.info("Generating opening context (async)")
         # We can implement a similar _generate_opening_context_call protected method 
         # or just wrap the existing logic in to_thread here for simplicity in this step.
-        return await asyncio.to_thread(self._generate_opening_context, user_id, closing_cache)
+        return await asyncio.to_thread(self._generate_opening_context, user_id, closing_cache, closing_cache.session_id)
 
-    def _generate_personal_relevance(self, user_id: str) -> str:
+    def _generate_personal_relevance(self, user_id: str, session_id: str = None) -> str:
         """Generate time-contextual personal relevance string."""
         from google import genai
         from datetime import datetime
@@ -575,13 +628,22 @@ Return ONLY the relevance string or empty string, nothing else."""
                 model="gemini-2.0-flash-lite",
                 contents=prompt
             )
+            
+            # Track token usage for cost calculation
+            if session_id:
+                try:
+                    from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                    extract_and_track_tokens(response, session_id, "opening_personal_relevance")
+                except Exception as track_error:
+                    logger.info(f"Token tracking failed (non-critical): {track_error}")
+            
             relevance = response.text.strip()
             return relevance if relevance and len(relevance) > 0 else ""
         except Exception as e:
             logger.error(f"❌ Error generating personal_relevance: {e}")
             return ""
 
-    def _generate_opening_context(self, user_id: str, closing_cache: SessionClosingCache) -> dict:
+    def _generate_opening_context(self, user_id: str, closing_cache: SessionClosingCache, session_id: str = None) -> dict:
         """Generate personalized opening context for next session using LLM."""
         from google import genai
         
@@ -596,7 +658,7 @@ Return ONLY the relevance string or empty string, nothing else."""
         emotional_state_last = emotional_arc[-1] if emotional_arc else "neutral"
         
         # Generate time-contextual personal relevance
-        personal_relevance = self._generate_personal_relevance(user_id)
+        personal_relevance = self._generate_personal_relevance(user_id, session_id)
         
         # Generate welcome_hook - reference specific achievements
         welcome_hook = ""
@@ -619,6 +681,15 @@ Return ONLY the welcome message, nothing else."""
                     model="gemini-2.0-flash-lite",
                     contents=welcome_hook_prompt
                 )
+                
+                # Track token usage for cost calculation
+                if session_id:
+                    try:
+                        from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                        extract_and_track_tokens(response, session_id, "opening_welcome_hook")
+                    except Exception as track_error:
+                        logger.info(f"Token tracking failed (non-critical): {track_error}")
+                
                 welcome_hook = response.text.strip()
             except Exception as e:
                 logger.error(f"❌ Error generating welcome_hook: {e}")
@@ -646,6 +717,15 @@ Return ONLY the opener, nothing else."""
                     model="gemini-2.0-flash-lite",
                     contents=opener_prompt
                 )
+                
+                # Track token usage for cost calculation
+                if session_id:
+                    try:
+                        from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                        extract_and_track_tokens(response, session_id, "opening_suggested_opener")
+                    except Exception as track_error:
+                        logger.info(f"Token tracking failed (non-critical): {track_error}")
+                
                 suggested_opener = response.text.strip()
             except Exception as e:
                 logger.error(f"❌ Error generating suggested_opener: {e}")

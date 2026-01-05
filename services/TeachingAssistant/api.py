@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from urllib.parse import parse_qs
 from sse_starlette.sse import EventSourceResponse
 
@@ -221,6 +221,9 @@ class TokenUsageRequest(BaseModel):
     promptTokenCount: int = 0
     candidatesTokenCount: int = 0
     totalTokenCount: int = 0
+    cachedContentTokenCount: int = 0  # Cached tokens (90% discount)
+    thoughtTokenCount: int = 0  # Thinking tokens (billed as output)
+    promptTokensDetails: Optional[List[Dict[str, Any]]] = []  # Modality breakdown: [{modality: "TEXT/AUDIO/VIDEO", tokenCount: number}]
 
 
 class PromptResponse(BaseModel):
@@ -254,6 +257,31 @@ async def start_session(http_request: Request, request: Optional[StartSessionReq
     try:
         # Create session in MongoDB (existing method)
         result = ta.start_session(user_id)
+        session_id = result["session_info"]["session_id"]
+        
+        # Initialize memory and context components (new method)
+        greeting = await ta.start(user_id, session_id)
+        
+        # Create session_start event
+        start_event = Event(
+            type="session_start",
+            timestamp=time.time(),
+            session_id=session_id,
+            user_id=user_id,
+            data={"session_id": session_id, "user_id": user_id}
+        )
+        ta.queue_manager.enqueue(start_event)
+        
+        # UPDATED: Return greeting in response for immediate delivery
+        # Also sent via SSE for systems that listen to instruction queue
+        # This ensures backward compatibility with frontends expecting prompt in response
+        session_id = result["session_id"]
+
+        # Initialize cost tracking for this session
+        from services.CostTracking.cost_tracker import CostTracker
+        cost_tracker = CostTracker(session_id, user_id)
+        cost_tracker.start_session()
+
         return PromptResponse(
             prompt=greeting or "",  # Return greeting directly (not empty!)
             session_info=result["session_info"]
@@ -311,7 +339,32 @@ async def end_session(http_request: Request, request: Optional[EndSessionRequest
                 session_info={'session_active': False, 'user_id': user_id}
             )
 
-        result = ta.end_session(session["session_id"])
+        session_id = session["session_id"]
+        
+        # End session with memory consolidation (new method)
+        closing = await ta.end(user_id, session_id)
+        
+        # Session end event is NO LONGER needed here because we called ta.end() directly above
+        # Queuing it would cause the event loop to call ta.end() a second time!
+        # end_event = Event(
+        #     type="session_end",
+        #     timestamp=time.time(),
+        #     session_id=session_id,
+        #     user_id=user_id,
+        #     data={"session_id": session_id, "user_id": user_id}
+        # )
+        # ta.queue_manager.enqueue(end_event)
+        
+        # Get session summary (existing method for stats)
+        result = ta.end_session(session_id)
+
+        # Finalize cost tracking for this session
+        try:
+            from services.CostTracking.cost_tracker import CostTracker
+            cost_tracker = CostTracker(session_id, user_id)
+            cost_tracker.end_session()
+        except Exception as cost_error:
+            logger.error(f"[COST_TRACKING] Failed to finalize costs: {cost_error}", exc_info=True)
 
         # Pre-load next session questions in background (non-blocking)
         try:
@@ -370,7 +423,12 @@ def record_question(http_request: Request, request: QuestionAnsweredRequest):
 
 @app.post("/tutor/token-usage")
 async def record_tutor_token_usage(http_request: Request, request: TokenUsageRequest):
-    """Record token usage from tutor service (Gemini Live API)"""
+    """
+    Record token usage from tutor service (Gemini Live API)
+    
+    IMPORTANT: In Live API, promptTokenCount is CUMULATIVE (total so far, not incremental).
+    We need to calculate deltas by comparing with last recorded values.
+    """
     try:
         user_id = get_current_user(http_request)
     except HTTPException:
@@ -383,35 +441,162 @@ async def record_tutor_token_usage(http_request: Request, request: TokenUsageReq
         # Get active session for this user
         session = ta.get_active_session(user_id)
         if not session:
+            logger.debug(f"[TOKEN_USAGE] No active session for user {user_id}")
             return {"status": "no_session"}
         
         session_id = session["session_id"]
         
-        # Store token usage in session_costs
+        # Get current session cost data to calculate deltas
         from managers.mongodb_manager import mongo_db
         from datetime import datetime
+        
+        current_session = mongo_db.session_costs.find_one({"session_id": session_id})
+        
+        # Get last cumulative values (if they exist)
+        last_prompt_tokens = 0
+        last_candidates_tokens = 0
+        last_total_tokens = 0
+        last_cached_tokens = 0
+        last_thought_tokens = 0
+        
+        if current_session:
+            tutor_data = current_session.get("api_calls", {}).get("tutor_api", {})
+            last_prompt_tokens = tutor_data.get("last_cumulative_prompt_tokens", 0)
+            last_candidates_tokens = tutor_data.get("last_cumulative_candidates_tokens", 0)
+            last_total_tokens = tutor_data.get("last_cumulative_total_tokens", 0)
+            last_cached_tokens = tutor_data.get("last_cumulative_cached_tokens", 0)
+            last_thought_tokens = tutor_data.get("last_cumulative_thought_tokens", 0)
+        
+        # Calculate deltas (new tokens since last update)
+        # Note: In Live API, these are cumulative, so we subtract last values
+        delta_prompt_tokens = max(0, request.promptTokenCount - last_prompt_tokens)
+        delta_candidates_tokens = max(0, request.candidatesTokenCount - last_candidates_tokens)
+        delta_total_tokens = max(0, request.totalTokenCount - last_total_tokens)
+        delta_cached_tokens = max(0, request.cachedContentTokenCount - last_cached_tokens)
+        delta_thought_tokens = max(0, request.thoughtTokenCount - last_thought_tokens)
+        
+        # Calculate fresh (non-cached) prompt tokens
+        # Fresh tokens = total prompt tokens - cached tokens
+        fresh_prompt_tokens = max(0, request.promptTokenCount - request.cachedContentTokenCount)
+        last_fresh_prompt_tokens = max(0, last_prompt_tokens - last_cached_tokens)
+        delta_fresh_prompt_tokens = max(0, fresh_prompt_tokens - last_fresh_prompt_tokens)
+        
+        # Parse modality breakdown for accurate pricing
+        # Note: promptTokensDetails may be cumulative or per-turn
+        # We'll track it and calculate deltas if needed
+        current_text_tokens = 0
+        current_audio_tokens = 0
+        current_video_tokens = 0
+        
+        if request.promptTokensDetails:
+            for detail in request.promptTokensDetails:
+                modality = detail.get("modality", "").upper()
+                token_count = detail.get("tokenCount", 0) or 0
+                if modality == "TEXT":
+                    current_text_tokens += token_count
+                elif modality == "AUDIO":
+                    current_audio_tokens += token_count
+                elif modality == "VIDEO":
+                    current_video_tokens += token_count
+        
+        # Get last modality values (if they exist) to calculate deltas
+        last_text_tokens = 0
+        last_audio_tokens = 0
+        last_video_tokens = 0
+        
+        if current_session:
+            tutor_data = current_session.get("api_calls", {}).get("tutor_api", {})
+            last_text_tokens = tutor_data.get("last_cumulative_text_tokens", 0)
+            last_audio_tokens = tutor_data.get("last_cumulative_audio_tokens", 0)
+            last_video_tokens = tutor_data.get("last_cumulative_video_tokens", 0)
+        
+        # Calculate modality deltas (assuming cumulative, but will work if per-turn too)
+        # If per-turn, deltas will equal current values; if cumulative, deltas will be the difference
+        delta_text_tokens = max(0, current_text_tokens - last_text_tokens)
+        delta_audio_tokens = max(0, current_audio_tokens - last_audio_tokens)
+        delta_video_tokens = max(0, current_video_tokens - last_video_tokens)
+        
+        # Use deltas for incrementing (works for both cumulative and per-turn)
+        text_tokens = delta_text_tokens
+        audio_tokens = delta_audio_tokens
+        video_tokens = delta_video_tokens
+        
+        # Store detailed token usage record
+        token_usage_record = {
+            "timestamp": datetime.utcnow(),
+            # Cumulative values (as received from API)
+            "cumulative_prompt_tokens": request.promptTokenCount,
+            "cumulative_candidates_tokens": request.candidatesTokenCount,
+            "cumulative_total_tokens": request.totalTokenCount,
+            "cumulative_cached_tokens": request.cachedContentTokenCount,
+            "cumulative_thought_tokens": request.thoughtTokenCount,
+            # Delta values (new tokens since last update)
+            "delta_prompt_tokens": delta_prompt_tokens,
+            "delta_candidates_tokens": delta_candidates_tokens,
+            "delta_total_tokens": delta_total_tokens,
+            "delta_cached_tokens": delta_cached_tokens,
+            "delta_thought_tokens": delta_thought_tokens,
+            "delta_fresh_prompt_tokens": delta_fresh_prompt_tokens,
+            # Modality breakdown (delta values)
+            "text_tokens": text_tokens,  # Delta
+            "audio_tokens": audio_tokens,  # Delta
+            "video_tokens": video_tokens,  # Delta
+            "prompt_tokens_details": request.promptTokensDetails,  # Full details from API
+            # Cumulative modality values (for reference)
+            "cumulative_text_tokens": current_text_tokens,
+            "cumulative_audio_tokens": current_audio_tokens,
+            "cumulative_video_tokens": current_video_tokens
+        }
+        
+        # Update session_costs with deltas (incremental) and latest cumulative values
+        update_operation = {
+            "$push": {
+                "tutor_token_usage": token_usage_record
+            },
+            "$inc": {
+                "api_calls.tutor_api.count": 1,
+                # Increment by deltas (new tokens)
+                "api_calls.tutor_api.prompt_tokens": delta_fresh_prompt_tokens,  # Only fresh tokens
+                "api_calls.tutor_api.cached_content_tokens": delta_cached_tokens,  # Cached tokens separately
+                "api_calls.tutor_api.output_tokens": delta_candidates_tokens,  # Output tokens
+                "api_calls.tutor_api.thinking_tokens": delta_thought_tokens,  # Thinking tokens
+                "api_calls.tutor_api.total_tokens": delta_total_tokens,
+                # Modality-based tracking
+                "api_calls.tutor_api.text_input_tokens": text_tokens,
+                "api_calls.tutor_api.audio_input_tokens": audio_tokens,
+                "api_calls.tutor_api.video_input_tokens": video_tokens
+            },
+            "$set": {
+                # Store latest cumulative values for next delta calculation
+                "api_calls.tutor_api.last_cumulative_prompt_tokens": request.promptTokenCount,
+                "api_calls.tutor_api.last_cumulative_candidates_tokens": request.candidatesTokenCount,
+                "api_calls.tutor_api.last_cumulative_total_tokens": request.totalTokenCount,
+                "api_calls.tutor_api.last_cumulative_cached_tokens": request.cachedContentTokenCount,
+                "api_calls.tutor_api.last_cumulative_thought_tokens": request.thoughtTokenCount,
+                # Store latest modality values for delta calculation
+                "api_calls.tutor_api.last_cumulative_text_tokens": current_text_tokens,
+                "api_calls.tutor_api.last_cumulative_audio_tokens": current_audio_tokens,
+                "api_calls.tutor_api.last_cumulative_video_tokens": current_video_tokens
+            }
+        }
+        
         mongo_db.session_costs.update_one(
             {"session_id": session_id},
-            {
-                "$push": {
-                    "tutor_token_usage": {
-                        "timestamp": datetime.utcnow(),
-                        "prompt_tokens": request.promptTokenCount,
-                        "candidates_tokens": request.candidatesTokenCount,
-                        "total_tokens": request.totalTokenCount
-                    }
-                },
-                "$inc": {
-                    "api_calls.tutor_api.count": 1,
-                    "api_calls.tutor_api.prompt_tokens": request.promptTokenCount,
-                    "api_calls.tutor_api.output_tokens": request.candidatesTokenCount,
-                    "api_calls.tutor_api.total_tokens": request.totalTokenCount
-                }
-            },
+            update_operation,
             upsert=True
         )
         
-        logger.debug(f"[TOKEN_USAGE] Recorded {request.totalTokenCount} tokens for session {session_id}")
+        # Log token usage details
+        logger.info(
+            f"[TOKEN_USAGE] Session {session_id[:8]}... | "
+            f"Cumulative: prompt={request.promptTokenCount}, candidates={request.candidatesTokenCount}, "
+            f"total={request.totalTokenCount}, cached={request.cachedContentTokenCount}, "
+            f"thought={request.thoughtTokenCount} | "
+            f"Deltas: prompt={delta_fresh_prompt_tokens}, cached={delta_cached_tokens}, "
+            f"output={delta_candidates_tokens}, thought={delta_thought_tokens} | "
+            f"Modality: text={text_tokens}, audio={audio_tokens}, video={video_tokens}"
+        )
+        
         return {"status": "recorded"}
     except HTTPException:
         raise

@@ -23,12 +23,20 @@ interface SessionCost {
   api_calls: {
     tutor_api: {
       count: number;
-      prompt_tokens: number;
+      prompt_tokens: number;  // Fresh (non-cached) tokens
+      cached_content_tokens?: number;  // Cached tokens (90% discount)
       output_tokens: number;
+      thinking_tokens?: number;  // Thinking tokens
       total_tokens: number;
+      text_input_tokens?: number;  // Modality breakdown
+      audio_input_tokens?: number;
+      video_input_tokens?: number;
     };
     teaching_assistant: {
       count: number;
+      input_tokens?: number;
+      output_tokens?: number;
+      total_tokens?: number;
     };
     dash_api: {
       count: number;
@@ -338,14 +346,46 @@ const CostTrackingPage: React.FC = () => {
                                   Calls: {session.api_calls.tutor_api.count}
                                 </p>
                                 <p className={cn("text-xs font-bold text-black mb-1")}>
-                                  Tokens: {session.api_calls.tutor_api.total_tokens.toLocaleString()}
+                                  Total: {session.api_calls.tutor_api.total_tokens.toLocaleString()}
                                 </p>
-                                <p className={cn("text-xs font-bold text-black")}>
-                                  Input: {session.api_calls.tutor_api.prompt_tokens.toLocaleString()}
+                                <p className={cn("text-xs font-bold text-black mb-1")}>
+                                  Fresh Input: {session.api_calls.tutor_api.prompt_tokens.toLocaleString()}
                                 </p>
-                                <p className={cn("text-xs font-bold text-black")}>
+                                {session.api_calls.tutor_api.cached_content_tokens !== undefined && session.api_calls.tutor_api.cached_content_tokens > 0 && (
+                                  <p className={cn("text-xs font-bold text-green-700 mb-1")}>
+                                    Cached: {session.api_calls.tutor_api.cached_content_tokens.toLocaleString()} (90% off)
+                                  </p>
+                                )}
+                                <p className={cn("text-xs font-bold text-black mb-1")}>
                                   Output: {session.api_calls.tutor_api.output_tokens.toLocaleString()}
                                 </p>
+                                {session.api_calls.tutor_api.thinking_tokens !== undefined && session.api_calls.tutor_api.thinking_tokens > 0 && (
+                                  <p className={cn("text-xs font-bold text-purple-700 mb-1")}>
+                                    Thinking: {session.api_calls.tutor_api.thinking_tokens.toLocaleString()}
+                                  </p>
+                                )}
+                                {(session.api_calls.tutor_api.text_input_tokens !== undefined || 
+                                  session.api_calls.tutor_api.audio_input_tokens !== undefined || 
+                                  session.api_calls.tutor_api.video_input_tokens !== undefined) && (
+                                  <div className={cn("mt-1 pt-1 border-t border-black dark:border-white")}>
+                                    <p className={cn("text-xs font-black text-black mb-0.5")}>Modality:</p>
+                                    {session.api_calls.tutor_api.text_input_tokens !== undefined && session.api_calls.tutor_api.text_input_tokens > 0 && (
+                                      <p className={cn("text-xs font-bold text-black")}>
+                                        Text: {session.api_calls.tutor_api.text_input_tokens.toLocaleString()}
+                                      </p>
+                                    )}
+                                    {session.api_calls.tutor_api.audio_input_tokens !== undefined && session.api_calls.tutor_api.audio_input_tokens > 0 && (
+                                      <p className={cn("text-xs font-bold text-black")}>
+                                        Audio: {session.api_calls.tutor_api.audio_input_tokens.toLocaleString()}
+                                      </p>
+                                    )}
+                                    {session.api_calls.tutor_api.video_input_tokens !== undefined && session.api_calls.tutor_api.video_input_tokens > 0 && (
+                                      <p className={cn("text-xs font-bold text-black")}>
+                                        Video: {session.api_calls.tutor_api.video_input_tokens.toLocaleString()}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -354,9 +394,22 @@ const CostTrackingPage: React.FC = () => {
                                 Teaching Assistant
                               </label>
                               <div className={cn("p-2 border-[2px] border-black dark:border-white bg-[#C4B5FD]")}>
-                                <p className={cn("text-xs font-bold text-black")}>
+                                <p className={cn("text-xs font-bold text-black mb-1")}>
                                   Calls: {session.api_calls.teaching_assistant.count}
                                 </p>
+                                {session.api_calls.teaching_assistant.total_tokens !== undefined && session.api_calls.teaching_assistant.total_tokens > 0 && (
+                                  <>
+                                    <p className={cn("text-xs font-bold text-black mb-1")}>
+                                      Total: {session.api_calls.teaching_assistant.total_tokens.toLocaleString()}
+                                    </p>
+                                    <p className={cn("text-xs font-bold text-black mb-1")}>
+                                      Input: {(session.api_calls.teaching_assistant.input_tokens || 0).toLocaleString()}
+                                    </p>
+                                    <p className={cn("text-xs font-bold text-black")}>
+                                      Output: {(session.api_calls.teaching_assistant.output_tokens || 0).toLocaleString()}
+                                    </p>
+                                  </>
+                                )}
                               </div>
                             </div>
 
@@ -400,4 +453,5 @@ const CostTrackingPage: React.FC = () => {
 };
 
 export default CostTrackingPage;
+
 

@@ -109,6 +109,14 @@ Return ONLY valid JSON.
                 model="gemini-2.0-flash-lite",
                 contents=prompt
             )
+            
+            # Track token usage for cost calculation
+            try:
+                from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                extract_and_track_tokens(response, session_id, "memory_extraction")
+            except Exception as track_error:
+                logger.debug(f"Token tracking failed (non-critical): {track_error}")
+            
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]

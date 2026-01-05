@@ -60,7 +60,14 @@ export interface TutorClientEventTypes {
   // Emitted when the current turn is complete
   turncomplete: () => void;
   // Emitted when token usage data is received from Gemini
-  tokenUsage: (usage: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number }) => void;
+  tokenUsage: (usage: { 
+    promptTokenCount: number; 
+    candidatesTokenCount: number; 
+    totalTokenCount: number;
+    cachedContentTokenCount?: number;
+    thoughtTokenCount?: number;
+    promptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  }) => void;
 }
 
 export class TutorClient extends EventEmitter<TutorClientEventTypes> {
@@ -235,7 +242,13 @@ export class TutorClient extends EventEmitter<TutorClientEventTypes> {
       const tokenUsage = {
         promptTokenCount: usage.promptTokenCount || usage.inputTokenCount || 0,
         candidatesTokenCount: usage.candidatesTokenCount || usage.outputTokenCount || usage.candidateTokenCount || 0,
-        totalTokenCount: usage.totalTokenCount || 0
+        totalTokenCount: usage.totalTokenCount || 0,
+        // Extract cached content tokens (for 90% discount)
+        cachedContentTokenCount: usage.cachedContentTokenCount || usage.cached_content_token_count || 0,
+        // Extract thinking tokens (billed as output)
+        thoughtTokenCount: usage.thoughtTokenCount || usage.thought_token_count || 0,
+        // Extract modality breakdown for accurate pricing
+        promptTokensDetails: usage.promptTokensDetails || usage.prompt_tokens_details || []
       };
       
       // Only emit if we have actual token counts

@@ -264,6 +264,14 @@ class MemoryRetriever:
                 model="gemini-2.0-flash-lite",
                 contents=prompt
             )
+            
+            # Track token usage for cost calculation
+            try:
+                from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                extract_and_track_tokens(response, session_id, "deep_query_generation")
+            except Exception as track_error:
+                logger.debug(f"Token tracking failed (non-critical): {track_error}")
+            
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]
@@ -437,6 +445,14 @@ Examples:
                 model="gemini-2.0-flash-lite",
                 contents=prompt
             )
+            
+            # Track token usage for cost calculation
+            try:
+                from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                extract_and_track_tokens(response, session_id, "memory_synthesis")
+            except Exception as track_error:
+                logger.debug(f"Token tracking failed (non-critical): {track_error}")
+            
             instruction = response.text.strip()
             
             if instruction.upper() == "NONE" or not instruction:
@@ -653,6 +669,14 @@ Apply it naturally without explicitly mentioning these memories to the student."
                 model="gemini-2.0-flash-lite",
                 contents=prompt
             )
+            
+            # Track token usage for cost calculation
+            try:
+                from services.TeachingAssistant.token_tracker import extract_and_track_tokens
+                extract_and_track_tokens(response, session_id, "retrieval_analysis")
+            except Exception as track_error:
+                logger.debug(f"Token tracking failed (non-critical): {track_error}")
+            
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]

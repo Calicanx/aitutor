@@ -86,7 +86,14 @@ export function useTutor(): UseTutorResults {
     const onAudio = (data: ArrayBuffer) =>
       audioStreamerRef.current?.addPCM16(new Uint8Array(data));
 
-    const onTokenUsage = async (usage: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number }) => {
+    const onTokenUsage = async (usage: { 
+      promptTokenCount: number; 
+      candidatesTokenCount: number; 
+      totalTokenCount: number;
+      cachedContentTokenCount?: number;
+      thoughtTokenCount?: number;
+      promptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+    }) => {
       try {
         const TEACHING_ASSISTANT_API_URL = import.meta.env.VITE_TEACHING_ASSISTANT_API_URL || 'http://localhost:8002';
         await apiUtils.post(`${TEACHING_ASSISTANT_API_URL}/tutor/token-usage`, usage);
