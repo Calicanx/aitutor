@@ -12,6 +12,7 @@ sys.path.insert(0, str(project_root))
 
 from shared.logging_config import get_logger
 from .schema import Memory, MemoryType
+from services.TeachingAssistant.prompts import get_memory_extraction_prompt
 
 load_dotenv()
 
@@ -55,54 +56,7 @@ class MemoryExtractor:
             exchanges_text += f"Student: {exchange['student_text']}\n"
             exchanges_text += f"AI: {exchange['ai_text']}\n"
             exchanges_text += f"Topic: {exchange['topic']}\n"
-        prompt = f"""Analyze these {len(exchanges)} conversation exchanges to update the Student Profile.
-
-{exchanges_text}
-
-Task 1: Extract STUDENT MEMORIES.
-**GOLDEN RULE**: You are recording PERMANENT FACTS about the Student. You are NOT summarizing a conversation.
-
-1. **STRICT PROHIBITION (Zero Tolerance)**:
-   - **NEVER** mention "The AI", "The Tutor", "The System", "The Assistant", or "The Conversation".
-   - **NEVER** output meta-commentary like "Student responded to the prompt" or "Student interacted with the system".
-   - **BAD Example**: "Student asked the AI for help with algebra."
-   - **GOOD Example**: "Student requested help with algebra."
-   - **BAD Example**: "Student answered the AI correctly."
-   - **GOOD Example**: "Student demonstrated mastery of [specific concept]."
-
-2. **CRITICAL TRANSCRIPTION HANDLING (Audio Artifacts)**:
-   - The "Student" text comes from realtime audio-to-text. It may contain broken words (e.g., "Cu rrent ly", "chem is try").
-   - **REPAIR**: You MUST mentally repair these fragments to capture the INTENT (e.g. treat "chem is try" as "chemistry").
-   - **NO META-MEMORIES**: DO NOT record memories about the text format (e.g., "Student types with spaces" -> DELETE THIS).
-   - **IGNORE GARBAGE**: If text is unintelligible, IGNORE IT. Do not record "Student text is unclear".
-
-3. **CATEGORIES**:
-   - **Academic**: Knowledge gaps, misconceptions, or mastery (e.g., "Understands chain rule", "Confused by integrals").
-   - **Personal**: Hobbies, life details (e.g., "Plays soccer", "Has a dog named Max").
-   - **Preference**: Learning needs (e.g., "Prefers visual examples", "Dislikes long lectures").
-   - **Context**: Emotional state (e.g., "Anxious about upcoming exam").
-
-Task 2: Detect EMOTIONS (frustrated, confused, excited, anxious, tired, happy, or neutral).
-Task 3: Identify KEY MOMENTS (breakthroughs, major struggles).
-Task 4: Identify UNFINISHED TOPICS.
-
-Return a SINGLE JSON object with this structure:
-{{
-  "memories": [
-    {{
-      "type": "academic|personal|preference|context",
-      "text": "Fact about the student (e.g. 'Struggles with quadratic formula', ' Loves sci-fi movies')",
-      "importance": 0.0-1.0,
-      "metadata": {{ "emotion": "...", "topic": "..." }}
-    }}
-  ],
-  "emotions": ["..."],
-  "key_moments": ["..."],
-  "unfinished_topics": ["..."]
-}}
-
-Return ONLY valid JSON.
-"""
+        prompt = get_memory_extraction_prompt(len(exchanges), exchanges_text)
 
         try:
             response = self.client.models.generate_content(

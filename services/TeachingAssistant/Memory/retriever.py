@@ -15,6 +15,11 @@ from .schema import Memory, MemoryType
 from .vector_store import MemoryStore
 from google import genai
 from dotenv import load_dotenv
+from services.TeachingAssistant.prompts import (
+    get_light_retrieval_analysis_prompt,
+    get_deep_query_generation_prompt,
+    get_reflection_layer_synthesis_prompt
+)
 
 load_dotenv()
 
@@ -218,7 +223,7 @@ class MemoryRetriever:
             del self._session_access_times[oldest_session]
 
 
-    def _analyze_deep_retrieval_context(self, conversation_text: str) -> str:
+    def _analyze_deep_retrieval_context(self, conversation_text: str, session_id: str = None) -> str:
         """
         Generate a search query for Deep Retrieval based on recent conversation history.
         Always runs to synthesize themes.
@@ -234,35 +239,7 @@ class MemoryRetriever:
             # Truncate context if too long
             safe_context = conversation_text[:2000]
 
-            prompt = f"""You are an Expert Knowledge Synthesizer for an AI Tutor.
-            Analyze the recent conversation history (last few minutes) to generate a Deep Search Query.
-
-            Context: "{safe_context}"
-
-            GOAL:
-            Identify the **underlying themes**, **concepts**, or **patterns** that require checking long-term memory.
-            We are NOT looking for exact keyword matches of what was just said. We are looking for **related past experiences**.
-
-            INSTRUCTIONS:
-            1. Identify the core academic topic (e.g., "quadratic equations").
-            2. Identify the student's current state/struggle (e.g., "confused about variables").
-            3. Identify any personal hooks mentioned (e.g., "basketball analogy").
-            
-            GENERATE A SINGLE SEARCH STRING that combines:
-            - The Academic Concept
-            - The Type of Struggle/Interaction
-            - Potential Personal Connections
-
-            EXAMPLE:
-            Context: "I just don't get why t is negative. It's like the ball is going underground."
-            Bad Query: "t is negative ball underground"
-            Good Query: "negative variables logic physics trajectory misconceptions basketball analogies"
-
-            Return strict JSON:
-            {{
-                "deep_query": "string"
-            }}
-            """
+            prompt = get_deep_query_generation_prompt(safe_context)
             
             # ===== LOGGING: Deep Retrieval Analysis =====
             try:
@@ -330,7 +307,7 @@ class MemoryRetriever:
         )
         
         # === ENHANCEMENT: Use LLM to generate the deep search query ===
-        deep_search_query = self._analyze_deep_retrieval_context(conversation_text)
+        deep_search_query = self._analyze_deep_retrieval_context(conversation_text, session_id)
         
         convo_snippet = (deep_search_query or "")[:100]
         convo_safe = convo_snippet.encode("ascii", "ignore").decode("ascii", "ignore")
@@ -449,26 +426,7 @@ class MemoryRetriever:
         logger.info(f"║ Context: {context_preview:<60} ║")
         logger.info("╠" + "═" * 78 + "╣")
         
-        prompt = f"""You are a reflection layer for an AI tutor system.
-
-Retrieved Memories:
-{memories_str}
-
-Recent Conversation Context:
-{conversation_context}
-
-TASK: Synthesize these memories into a SINGLE actionable instruction for the tutor.
-- Only return an instruction if memories are highly relevant to current conversation
-- Make it specific and actionable
-- Focus on HOW the tutor should adapt their teaching based on these memories
-
-Return ONLY the instruction text, or "NONE" if memories aren't relevant enough.
-
-Examples:
-- "Student prefers visual diagrams - use a visual approach for this concept"
-- "Student struggled with negative numbers last time - check understanding before proceeding"
-- "Student gets frustrated with algebra - provide extra encouragement and break into smaller steps"
-"""
+        prompt = get_reflection_layer_synthesis_prompt(memories_str, conversation_context)
         
         try:
             client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -678,38 +636,7 @@ Apply it naturally without explicitly mentioning these memories to the student."
             safe_user = user_text[:500]
             safe_model = model_text[:500] if model_text else "Startup/Greeting"
 
-            prompt = f"""You are an efficient Retrieval Augmented Generation (RAG) optimizer.
-            Analyze the conversation turn to decide precise memory retrieval needs.
-
-            Previous AI: "{safe_model}"
-            User Input: "{safe_user}"
-
-            TASK 1: DECISION (need_retrieval)
-            - FALSE if: 
-                - Simple agreement/acknowledgment ("ok", "got it", "cool", "thanks").
-                - Phatic expressions or greetings ("hard to say", "wow", "hi").
-                - Rhetorical questions or emotional reactions without specific factual content.
-            - TRUE if: 
-                - Direct questions or requests for explanation.
-                - Statements of confusion ("I don't get the quadratic formula").
-                - Explicit statements of preference ("I hate reading").
-                - Personal disclosures ("I play basketball").
-                - Domain-specific terms that might need definition.
-
-            TASK 2: QUERY GENERATION (retrieval_query)
-            - If decision is TRUE, generate a **keyword-focused** search query.
-            - REMOVE: "student says", "user wants to know", "retrieval for".
-            - FOCUS ON: Core entities, concepts, and specific gaps.
-            - EXAMPLE: User says "I don't get the discriminant". Query: "discriminant definition purpose quadratic formula explanation"
-            - EXAMPLE: User says "My math teacher is strict". Query: "math teacher relationship classroom environment academic pressure"
-            
-            Return strict JSON:
-            {{
-                "need_retrieval": true/false,
-                "retrieval_query": "string",
-                "reasoning": "brief explanation"
-            }}
-            """
+            prompt = get_light_retrieval_analysis_prompt(safe_user, safe_model)
             
             # ===== DETAILED LOGGING: LLM Retrieval Analysis =====
             # Wrap in try-except to prevent logging errors from breaking retrieval

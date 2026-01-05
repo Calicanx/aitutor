@@ -16,6 +16,15 @@ from .vector_store import MemoryStore
 from .extractor import MemoryExtractor
 from ..core.decorators import with_retry, with_circuit_breaker, CircuitBreaker
 from ..core.exceptions import LLMGenerationError
+from services.TeachingAssistant.prompts import (
+    get_closing_artifacts_generation_prompt,
+    get_goodbye_message_generation_prompt,
+    get_next_session_hooks_enhancement_prompt,
+    get_next_session_hooks_from_moments_prompt,
+    get_personal_relevance_generation_prompt,
+    get_welcome_hook_generation_prompt,
+    get_suggested_opener_generation_prompt
+)
 
 logger = get_logger(__name__)
 
@@ -305,25 +314,13 @@ class SessionClosingCache:
         """Helper to make the actual LLM call, protected by decorators."""
         from google import genai
         
-        prompt = f"""Analyze this session data and generate closing artifacts.
-
-Data:
-- Topics: {topics}
-- Key Moments: {moments}
-- Emotional Journey: {emotions} (Ending: {current_emotion})
-- Unfinished Topics: {unfinished_str}
-
-Generate a JSON object with these 3 keys:
-1. "summary": 1-2 conc sentences on what was learned and how they felt.
-2. "goodbye": A warm, natural, personal goodbye message (1-2 sentences) acknowledging their emotion.
-3. "hooks": Array of 2-3 specific, actionable next session limits/topics based on unfinished items or key moments.
-
-Return ONLY valid JSON:
-{{
-  "summary": "...",
-  "goodbye": "...",
-  "hooks": ["...", "..."]
-}}"""
+        prompt = get_closing_artifacts_generation_prompt(
+            topics=topics,
+            moments=moments,
+            emotions=emotions,
+            current_emotion=current_emotion,
+            unfinished_str=unfinished_str
+        )
 
         def _call_gemini():
             client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -358,18 +355,7 @@ Return ONLY valid JSON:
         moments = ', '.join(self.cache["key_moments"][-3:]) if self.cache["key_moments"] else "None"
         topics = ', '.join(self.cache["topics_covered"]) if self.cache["topics_covered"] else "general topics"
         
-        prompt = f"""Generate a warm, natural goodbye message for a tutoring session.
-
-Current emotional state: {current_emotion}
-Key moments: {moments}
-Topics covered: {topics}
-
-Create a brief (1-2 sentences) goodbye that:
-- Acknowledges their emotional state
-- Encourages them appropriately
-- Feels genuine and personal
-
-Return ONLY the goodbye message, nothing else."""
+        prompt = get_goodbye_message_generation_prompt(current_emotion, moments, topics)
         
         try:
             client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -403,16 +389,11 @@ Return ONLY the goodbye message, nothing else."""
             # Enhance with LLM if needed for better phrasing
             if len(hooks) < 3 and moments:
                 summary = self.cache.get("session_summary", "")
-                prompt = f"""Based on unfinished topics and key moments, suggest 1-2 additional specific continuation topics.
-
-Unfinished topics: {', '.join(unfinished)}
-Key moments: {', '.join(moments[-3:]) if moments else 'None'}
-Session summary: {summary if summary else 'Session in progress'}
-
-Return as JSON array of strings. Each should be specific and actionable.
-Example: ["Continue practicing completing the square", "Explore how discriminant relates to graph shape"]
-
-Return ONLY the JSON array, nothing else."""
+                prompt = get_next_session_hooks_enhancement_prompt(
+                    unfinished_topics=', '.join(unfinished),
+                    key_moments=', '.join(moments[-3:]) if moments else 'None',
+                    session_summary=summary if summary else 'Session in progress'
+                )
                 try:
                     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
                     response = client.models.generate_content(
@@ -443,16 +424,11 @@ Return ONLY the JSON array, nothing else."""
         if moments:
             summary = self.cache.get("session_summary", "")
             topics = ', '.join(self.cache.get("topics_covered", [])) or "general topics"
-            prompt = f"""Based on key moments from this session, suggest 2-3 specific continuation topics.
-
-Key moments: {', '.join(moments)}
-Session summary: {summary if summary else 'Session in progress'}
-Topics covered: {topics}
-
-Return as JSON array of strings. Each should be specific and actionable.
-Example: ["Continue practicing completing the square", "Explore how discriminant relates to graph shape"]
-
-Return ONLY the JSON array, nothing else."""
+            prompt = get_next_session_hooks_from_moments_prompt(
+                key_moments=', '.join(moments),
+                session_summary=summary if summary else 'Session in progress',
+                topics_covered=topics
+            )
             try:
                 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
                 response = client.models.generate_content(
@@ -607,20 +583,11 @@ class MemoryConsolidator:
         time_context = "morning" if now.hour < 12 else "afternoon" if now.hour < 17 else "evening"
         personal_texts = [m["memory"].text for m in personal_memories[:3]]
         
-        prompt = f"""Generate a brief, time-contextual personal relevance string (max 20 words) for a tutoring session.
-
-Current day: {day_name}
-Time of day: {time_context}
-Personal memories: {', '.join(personal_texts)}
-
-Create a natural, contextual string that references their personal life relevant to NOW.
-Examples:
-- "It's Friday - basketball game today?"
-- "Ready for another week of learning?"
-- "How's your week going?"
-
-If no time-specific relevance, return empty string.
-Return ONLY the relevance string or empty string, nothing else."""
+        prompt = get_personal_relevance_generation_prompt(
+            day_name=day_name,
+            time_context=time_context,
+            personal_texts=', '.join(personal_texts)
+        )
 
         try:
             client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -664,17 +631,11 @@ Return ONLY the relevance string or empty string, nothing else."""
         welcome_hook = ""
         if session_summary or key_moments:
             achievement = key_moments[-1] if key_moments else ""
-            welcome_hook_prompt = f"""Generate a warm, natural welcome message (1-2 sentences) that references a specific achievement from last session.
-
-Last session summary: {session_summary if session_summary else 'Previous session'}
-Key achievement: {achievement if achievement else 'Session completed'}
-Emotional state when they left: {emotional_state_last}
-
-Reference the specific achievement naturally. Examples:
-- "Last time you cracked the discriminant - ready to build on that?"
-- "You had that breakthrough with visual diagrams - let's keep that momentum going!"
-
-Return ONLY the welcome message, nothing else."""
+            welcome_hook_prompt = get_welcome_hook_generation_prompt(
+                session_summary=session_summary if session_summary else 'Previous session',
+                achievement=achievement if achievement else 'Session completed',
+                emotional_state_last=emotional_state_last
+            )
 
             try:
                 response = client.models.generate_content(
@@ -700,17 +661,12 @@ Return ONLY the welcome message, nothing else."""
         # Generate suggested_opener
         suggested_opener = ""
         if session_summary or personal_relevance or unfinished_threads:
-            opener_prompt = f"""Generate a natural, conversational opening line (1-2 sentences) for an AI tutor.
-
-Last session: {session_summary if session_summary else 'Previous session completed'}
-Emotional state: {emotional_state_last}
-Personal context: {personal_relevance if personal_relevance else 'None'}
-Unfinished topics: {', '.join(unfinished_threads[:2]) if unfinished_threads else 'None'}
-
-Create a warm, natural conversation starter that feels genuine. Reference last session or personal life if relevant.
-Sound like a friendly tutor who remembers them.
-
-Return ONLY the opener, nothing else."""
+            opener_prompt = get_suggested_opener_generation_prompt(
+                last_session=session_summary if session_summary else 'Previous session completed',
+                emotional_state_last=emotional_state_last,
+                personal_relevance=personal_relevance if personal_relevance else 'None',
+                unfinished_topics=', '.join(unfinished_threads[:2]) if unfinished_threads else 'None'
+            )
 
             try:
                 response = client.models.generate_content(
