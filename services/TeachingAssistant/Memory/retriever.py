@@ -127,40 +127,53 @@ class MemoryRetriever:
                 mem_type = r["memory"].type.value
                 type_counts[mem_type] = type_counts.get(mem_type, 0) + 1
             
-            # ===== DETAILED LOGGING: Retrieved Memories =====
+            # ===== DETAILED LOGGING: Retrieved Memories (Summary) =====
+            # Calculate average score for summary
+            avg_score = sum(r["score"] for r in light_results) / len(light_results) if light_results else 0
+            top_score = light_results[0]["score"] if light_results else 0
+            
             logger.info("╔" + "═" * 78 + "╗")
-            logger.info("║ [LIGHT RETRIEVAL] Found %s memories (breakdown: %s)%s║" % (
-                len(light_results), 
-                type_counts,
-                " " * (78 - 48 - len(str(len(light_results))) - len(str(type_counts)))
+            logger.info("║ [LIGHT RETRIEVAL] Search Complete" + " " * 44 + "║")
+            logger.info("╠" + "═" * 78 + "╣")
+            logger.info("║ Query: %s%s║" % (
+                safe_query[:68] if len(safe_query) > 68 else safe_query,
+                " " * (68 - len(safe_query[:68]))
             ))
+            logger.info("║ Results: %s memories (breakdown: %s)%s║" % (
+                len(light_results),
+                type_counts,
+                " " * (78 - 20 - len(str(len(light_results))) - len(str(type_counts)))
+            ))
+            logger.info("║ Top Score: %.4f | Avg Score: %.4f%s║" % (top_score, avg_score, " " * 37))
             logger.info("╠" + "═" * 78 + "╣")
             
-            for i, r in enumerate(light_results, 1):
+            # Show only top 3 memories for clean logs
+            display_count = min(3, len(light_results))
+            logger.info("║ Top %s Memories:%s║" % (display_count, " " * (78 - 16)))
+            
+            for i, r in enumerate(light_results[:display_count], 1):
                 # Get safe text for logging
                 safe_text = r["memory"].text.encode("ascii", "replace").decode("ascii")
-                emotion = r['memory'].metadata.get('emotion', 'none')
                 mem_type = r["memory"].type.value.upper()
                 score = r["score"]
                 
-                logger.info("║ Memory #%d%s║" % (i, " " * (76 - 10)))
-                logger.info("║ ├─ Type: %s%s║" % (mem_type, " " * (78 - 10 - len(mem_type))))
-                logger.info("║ ├─ Score: %.4f (similarity)%s║" % (score, " " * (78 - 28)))
-                logger.info("║ ├─ Emotion: %s%s║" % (emotion, " " * (78 - 13 - len(emotion))))
-                logger.info("║ └─ Text: %s%s║" % (
-                    safe_text[:62] if len(safe_text) > 62 else safe_text,
-                    " " * max(0, 78 - 11 - min(len(safe_text), 62))
+                # Truncate text to fit in one line
+                text_preview = safe_text[:60] + "..." if len(safe_text) > 60 else safe_text
+                logger.info("║ %s. [%s] (%.4f) \"%s\"%s║" % (
+                    i,
+                    mem_type,
+                    score,
+                    text_preview,
+                    " " * max(0, 78 - 18 - len(mem_type) - len(text_preview))
                 ))
-                
-                # If text is longer, continue on next lines
-                if len(safe_text) > 62:
-                    remaining = safe_text[62:]
-                    for j in range(0, len(remaining), 68):
-                        chunk = remaining[j:j+68]
-                        logger.info("║          %s%s║" % (chunk, " " * (68 - len(chunk))))
-                
-                if i < len(light_results):
-                    logger.info("║%s║" % (" " * 78))
+            
+            # Show remaining count if more than 3
+            if len(light_results) > 3:
+                logger.info("║%s║" % (" " * 78))
+                logger.info("║ + %s more memories (set log level to DEBUG to see all)%s║" % (
+                    len(light_results) - 3,
+                    " " * (78 - 56 - len(str(len(light_results) - 3)))
+                ))
             
             logger.info("╚" + "═" * 78 + "╝")
             # ================================================
@@ -407,16 +420,34 @@ class MemoryRetriever:
         
         self._save_retrieval(session_id, user_id, "deep", deep_results)
 
-    def _synthesize_instruction(self, memories: list, conversation_context: str) -> Optional[str]:
+    def _synthesize_instruction(self, memories: list, conversation_context: str, session_id: str = None) -> Optional[str]:
         """Use LLM to synthesize memories into actionable instruction"""
         logger = get_logger(__name__)
         
         if not memories:
+            logger.info("[REFLECTION LAYER] FALSE - No memories to synthesize")
             return None
+        
+        # Count memories by type for logging
+        memory_counts = {}
+        for m in memories:
+            mem_type = m['memory'].type.value if hasattr(m['memory'], 'type') else 'unknown'
+            memory_counts[mem_type] = memory_counts.get(mem_type, 0) + 1
         
         # Format memories for LLM
         memory_texts = [f"- {m['memory'].text}" for m in memories]
         memories_str = "\n".join(memory_texts)
+        
+        # Log reflection layer invocation
+        logger.info("╔" + "═" * 78 + "╗")
+        logger.info("║ [REFLECTION LAYER] Invoked" + " " * 51 + "║")
+        logger.info("╠" + "═" * 78 + "╣")
+        logger.info(f"║ Input: {len(memories)} Pinecone memories (breakdown: {str(memory_counts)})" + " " * (78 - len(f"Input: {len(memories)} Pinecone memories (breakdown: {str(memory_counts)})") - 2) + "║")
+        
+        # Log conversation context (truncated)
+        context_preview = conversation_context[:60].replace('\n', ' ') if conversation_context else "None"
+        logger.info(f"║ Context: {context_preview:<60} ║")
+        logger.info("╠" + "═" * 78 + "╣")
         
         prompt = f"""You are a reflection layer for an AI tutor system.
 
@@ -449,20 +480,43 @@ Examples:
             # Track token usage for cost calculation
             try:
                 from services.TeachingAssistant.token_tracker import extract_and_track_tokens
-                extract_and_track_tokens(response, session_id, "memory_synthesis")
+                extract_and_track_tokens(response, session_id, "reflection_layer_synthesis")
             except Exception as track_error:
                 logger.debug(f"Token tracking failed (non-critical): {track_error}")
             
             instruction = response.text.strip()
             
             if instruction.upper() == "NONE" or not instruction:
-                logger.info("[REFLECTION] No relevant instruction synthesized from memories")
+                logger.info("║ Status: FALSE" + " " * 64 + "║")
+                logger.info("║ Reason: LLM determined memories not relevant to current context" + " " * 10 + "║")
+                logger.info("║ Output: No instruction for Adam" + " " * 45 + "║")
+                logger.info("╚" + "═" * 78 + "╝")
                 return None
             
-            logger.info(f"[REFLECTION] Synthesized instruction: {instruction[:100]}...")
+            # Success - instruction generated
+            logger.info("║ Status: TRUE" + " " * 65 + "║")
+            logger.info("║ Output: Instruction generated for Adam" + " " * 38 + "║")
+            logger.info("╠" + "═" * 78 + "╣")
+            
+            # Log instruction (wrap if needed)
+            instruction_preview = instruction[:74] if len(instruction) <= 74 else instruction[:71] + "..."
+            logger.info(f"║ {instruction_preview:<76} ║")
+            
+            if len(instruction) > 74:
+                # Log additional lines if instruction is long
+                remaining = instruction[74:]
+                while remaining:
+                    chunk = remaining[:76]
+                    remaining = remaining[76:]
+                    logger.info(f"║ {chunk:<76} ║")
+            
+            logger.info("╚" + "═" * 78 + "╝")
             return instruction
+            
         except Exception as e:
-            logger.error(f"[REFLECTION] Error in reflection synthesis: {e}")
+            logger.error("║ Status: FALSE" + " " * 64 + "║")
+            logger.error(f"║ Error: {str(e)[:70]:<70} ║")
+            logger.error("╚" + "═" * 78 + "╝")
             return None
     
     def get_memory_injection(self, session_id: str) -> Optional[str]:
@@ -493,6 +547,7 @@ Examples:
                     injected_ids.add(mem_id)
         
         if not memories_to_inject:
+            logger.info("[REFLECTION LAYER] FALSE - No new memories available for injection")
             return None
         
         # Get conversation context for reflection
@@ -502,11 +557,14 @@ Examples:
             conversation_context = "\n".join([f"{t['speaker']}: {t['text']}" for t in recent_turns])
         
         # REFLECTION LAYER - Synthesize instruction from memories
-        instruction = self._synthesize_instruction(memories_to_inject, conversation_context)
+        instruction = self._synthesize_instruction(memories_to_inject, conversation_context, session_id)
         
         if not instruction:
-            logger.info("[MEMORY_INJECTION] Reflection layer returned no relevant instruction")
+            logger.info("[REFLECTION LAYER] FALSE - Reflection layer returned no instruction for Adam")
             return None
+        
+        # Log successful injection
+        logger.info(f"[REFLECTION LAYER] TRUE - Instruction ready, sending to Adam (session: {session_id[:8]}...)")
         
         # Format as system instruction
         injection_text = f"""[SYSTEM INSTRUCTION]

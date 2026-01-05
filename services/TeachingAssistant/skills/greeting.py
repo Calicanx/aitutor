@@ -82,7 +82,25 @@ Make them feel welcome and excited to learn."""
                             "- If you have just finished a response, simply maintain consistency with that response.\n" + \
                             "- Do not let internal system updates disrupt the natural flow of conversation.\n\n" + \
                             " ".join(greeting_parts)
-            logger.info(f"[GREETING_SKILL] Generated memory-aware greeting ({len(greeting_text)} chars)")
+            
+            # Log exact opening message with ASCII-safe box formatting
+            logger.info("+" + "=" * 78 + "+")
+            logger.info("| [OPENING MESSAGE] Generated" + " " * 52 + "|")
+            logger.info("+" + "=" * 78 + "+")
+            logger.info(f"| Length: {len(greeting_text)} characters" + " " * (78 - 20 - len(str(len(greeting_text)))) + "|")
+            logger.info("+" + "=" * 78 + "+")
+            # Log message text with wrapping
+            lines = greeting_text.split('\n')
+            for line in lines:
+                if len(line) <= 76:
+                    logger.info(f"| {line:<76} |")
+                else:
+                    # Wrap long lines
+                    for i in range(0, len(line), 76):
+                        chunk = line[i:i+76]
+                        logger.info(f"| {chunk:<76} |")
+            logger.info("+" + "=" * 78 + "+")
+            
             return greeting_text
         
         fallback_greeting = self.get_greeting(user_id)
@@ -111,7 +129,25 @@ and encourage them for next session."""
                 closing_parts.append(f"Next time: {', '.join(next_hooks)}")
             
             closing_text = f"{self.config.system_prompt_prefix}\nStudent wants to leave the session.\n" + " ".join(closing_parts)
-            logger.info(f"[GREETING_SKILL] Generated memory-aware closing ({len(closing_text)} chars)")
+            
+            # Log exact closing message with ASCII-safe box formatting
+            logger.info("+" + "=" * 78 + "+")
+            logger.info("| [CLOSING MESSAGE] Generated" + " " * 52 + "|")
+            logger.info("+" + "=" * 78 + "+")
+            logger.info(f"| Length: {len(closing_text)} characters" + " " * (78 - 20 - len(str(len(closing_text)))) + "|")
+            logger.info("+" + "=" * 78 + "+")
+            # Log message text with wrapping
+            lines = closing_text.split('\n')
+            for line in lines:
+                if len(line) <= 76:
+                    logger.info(f"| {line:<76} |")
+                else:
+                    # Wrap long lines
+                    for i in range(0, len(line), 76):
+                        chunk = line[i:i+76]
+                        logger.info(f"| {chunk:<76} |")
+            logger.info("+" + "=" * 78 + "+")
+            
             return closing_text
         
         fallback_closing = self.get_closing(0, 0)  # Fallback

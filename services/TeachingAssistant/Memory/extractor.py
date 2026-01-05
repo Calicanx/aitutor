@@ -154,15 +154,36 @@ Return ONLY valid JSON.
                     mem_type = mem.type.value
                     memory_counts[mem_type] = memory_counts.get(mem_type, 0) + 1
                 
-                logger.info("[MEMORY_EXTRACTION] Extracted %s memories from %s exchanges", len(memories), len(exchanges))
-                logger.info("[MEMORY_EXTRACTION] Memory breakdown: %s", memory_counts)
+                # Box-formatted extraction summary
+                logger.info("╔" + "═" * 78 + "╗")
+                logger.info("║ [MEMORY EXTRACTION] Batch Complete" + " " * 43 + "║")
+                logger.info("╠" + "═" * 78 + "╣")
+                logger.info("║ Exchanges Analyzed: %s%s║" % (len(exchanges), " " * (78 - 23 - len(str(len(exchanges))))))
+                logger.info("║ Memories Extracted: %s (breakdown: %s)%s║" % (
+                    len(memories),
+                    memory_counts,
+                    " " * (78 - 34 - len(str(len(memories))) - len(str(memory_counts)))
+                ))
+                logger.info("╠" + "═" * 78 + "╣")
                 
                 # Log each memory with type and importance
                 for i, mem in enumerate(memories, 1):
-                    emotion_str = f", emotion: {mem.metadata.get('emotion', 'none')}" if mem.metadata.get('emotion') else ""
+                    emotion_str = mem.metadata.get('emotion', 'none')
                     safe_text = mem.text.encode("ascii", "replace").decode("ascii")
-                    logger.info("[MEMORY_EXTRACTION] Memory %s/%s: [%s] (importance: %.2f%s) - %s", 
-                              i, len(memories), mem.type.value.upper(), mem.importance, emotion_str, safe_text[:100])
+                    text_preview = safe_text[:60] + "..." if len(safe_text) > 60 else safe_text
+                    
+                    logger.info("║ [%s] (importance: %.2f, emotion: %s)%s║" % (
+                        mem.type.value.upper(),
+                        mem.importance,
+                        emotion_str,
+                        " " * max(0, 78 - 32 - len(mem.type.value) - len(emotion_str))
+                    ))
+                    logger.info("║ \"%s\"%s║" % (text_preview, " " * max(0, 78 - 4 - len(text_preview))))
+                    
+                    if i < len(memories):
+                        logger.info("║%s║" % (" " * 78))
+                
+                logger.info("╚" + "═" * 78 + "╝")
             else:
                 logger.info("[MEMORY_EXTRACTION] No memories extracted from %s exchanges", len(exchanges))
                 

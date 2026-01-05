@@ -536,12 +536,6 @@ class MemoryStore:
         # Sanitize query snippet for console encodings that may not support all Unicode
         snippet = (query or "")[:50]
         safe_snippet = snippet.encode("ascii", "ignore").decode("ascii", "ignore")
-        logger.info(
-            "[MEMORY_STORE] Searching in index: %s for student_id: %s, query: %s...",
-            self.index_name,
-            student_id,
-            safe_snippet,
-        )
         
         query_embedding = get_query_embedding(query)
         filter_dict = {"student_id": {"$eq": student_id}}
@@ -550,9 +544,10 @@ class MemoryStore:
             filter_dict["session_id"] = {"$ne": exclude_session_id}
 
         namespaces = [mem_type.value] if mem_type else [mt.value for mt in MemoryType]
-        logger.info("[MEMORY_STORE]   Searching namespaces: %s, top_k: %s, filter: %s", namespaces, top_k, filter_dict)
-
+        
         results = []
+        namespace_counts = {}
+        
         for namespace in namespaces:
             try:
                 response = self.index.query(
@@ -562,7 +557,7 @@ class MemoryStore:
                     filter=filter_dict,
                     include_metadata=True
                 )
-                logger.info("[MEMORY_STORE]   Namespace '%s': Found %s matches", namespace, len(response.matches))
+                namespace_counts[namespace] = len(response.matches)
                 for i, match in enumerate(response.matches):
                     # Skip matches with missing metadata
                     if not match.metadata:
@@ -602,7 +597,17 @@ class MemoryStore:
                 logger.error(f"❌ Error searching namespace '{namespace}' in index '{self.index_name}': {e}", exc_info=True)
 
         # Calculate final scores using 3-factor system
-        logger.info(f"[SCORING] Calculating final scores for {len(results)} candidates")
+        # Log condensed search summary
+        total_found = len(results)
+        namespace_summary = ", ".join([f"{ns}: {count}" for ns, count in namespace_counts.items() if count > 0])
+        logger.info(
+            "[MEMORY_STORE] Searched %s (namespaces: %s) → Found %s candidates (%s) → Returning top %s after scoring",
+            self.index_name,
+            len(namespaces),
+            total_found,
+            namespace_summary if namespace_summary else "none",
+            min(top_k, total_found)
+        )
         
         for result in results:
             memory = result["memory"]
@@ -640,14 +645,6 @@ class MemoryStore:
         results.sort(key=lambda x: x["final_score"], reverse=True)
         final_results = results[:top_k]
         
-        logger.info(
-            "[MEMORY_STORE] Search complete: Returning %s results sorted by final score "
-            "(weights: sim=%.1f, rec=%.1f, imp=%.1f)",
-            len(final_results),
-            self.config.weight_similarity,
-            self.config.weight_recency,
-            self.config.weight_importance
-        )
         return final_results
 
 
