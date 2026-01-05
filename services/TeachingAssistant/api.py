@@ -3,6 +3,8 @@ import os
 import threading
 import requests
 import asyncio
+import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -15,6 +17,7 @@ from sse_starlette.sse import EventSourceResponse
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from services.TeachingAssistant.teaching_assistant import TeachingAssistant
+from services.TeachingAssistant.core.context import Event
 from shared.auth_middleware import get_current_user, get_user_from_token
 from shared.cors_config import ALLOWED_ORIGINS, ALLOW_CREDENTIALS, ALLOWED_METHODS, ALLOWED_HEADERS
 from shared.timing_middleware import UnpluggedTimingMiddleware
@@ -37,7 +40,35 @@ active_observers: Dict[str, List[WebSocket]] = {}
 OBSERVER_API_KEY = os.getenv("OBSERVER_API_KEY", "dev-observer-key-12345")
 
 
-app = FastAPI(title="Teaching Assistant API")
+# ============================================================================
+# Lifespan Context Manager (Start/Stop Event Processing Loop)
+# ============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start and stop event processing loop"""
+    global ta, event_processing_task
+    
+    # Start event processing loop
+    ta.running = True
+    event_processing_task = asyncio.create_task(ta.ongoing())
+    logger.info("[API] Started event processing loop")
+    
+    yield
+    
+    # Shutdown
+    logger.info("[API] Shutting down event processing loop...")
+    ta.running = False
+    if event_processing_task:
+        event_processing_task.cancel()
+        try:
+            await event_processing_task
+        except asyncio.CancelledError:
+            pass
+    logger.info("[API] Event processing loop stopped")
+
+
+app = FastAPI(title="Teaching Assistant API", lifespan=lifespan)
 
 # Add timing middleware for performance monitoring (Phase 1)
 app.add_middleware(UnpluggedTimingMiddleware)
@@ -104,8 +135,69 @@ async def options_handler(full_path: str):
 # Create TeachingAssistant instance (now stateless - all state in MongoDB)
 ta = TeachingAssistant()
 
+# Global task for event processing loop
+event_processing_task = None
+
 # DASH API URL for pre-loading questions
 DASH_API_URL = os.getenv("DASH_API_URL", "http://localhost:8000")
+
+
+# ============================================================================
+# Feed-to-Event Converter
+# ============================================================================
+
+def feed_message_to_event(message: dict, session_id: str, user_id: str) -> Optional[Event]:
+    """Convert WebSocket feed message to Event object"""
+    msg_type = message.get("type")
+    timestamp_str = message.get("timestamp")
+    payload = message.get("data", {})
+    
+    # Parse timestamp
+    if timestamp_str:
+        try:
+            from datetime import datetime
+            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00')).timestamp()
+        except:
+            timestamp = time.time()
+    else:
+        timestamp = time.time()
+    
+    # Convert based on message type
+    if msg_type == "transcript":
+        return Event(
+            type="text",
+            timestamp=timestamp,
+            session_id=session_id,
+            user_id=user_id,
+            data={
+                "speaker": payload.get("speaker", "user"),
+                "text": payload.get("transcript", ""),
+                "timestamp": timestamp_str
+            }
+        )
+    elif msg_type == "audio":
+        return Event(
+            type="audio",
+            timestamp=timestamp,
+            session_id=session_id,
+            user_id=user_id,
+            data={
+                "audio": payload.get("audio", ""),
+                "timestamp": timestamp_str
+            }
+        )
+    elif msg_type == "media":
+        return Event(
+            type="media",
+            timestamp=timestamp,
+            session_id=session_id,
+            user_id=user_id,
+            data={
+                "media": payload.get("media", ""),
+                "timestamp": timestamp_str
+            }
+        )
+    return None
 
 
 # ============================================================================
@@ -156,20 +248,14 @@ def health_check():
 # ============================================================================
 
 @app.post("/session/start", response_model=PromptResponse)
-def start_session(http_request: Request, request: Optional[StartSessionRequest] = None):
+async def start_session(http_request: Request, request: Optional[StartSessionRequest] = None):
     """Start a new tutoring session"""
     user_id = get_current_user(http_request)
     try:
+        # Create session in MongoDB (existing method)
         result = ta.start_session(user_id)
-        session_id = result["session_id"]
-
-        # Initialize cost tracking for this session
-        from services.CostTracking.cost_tracker import CostTracker
-        cost_tracker = CostTracker(session_id, user_id)
-        cost_tracker.start_session()
-
         return PromptResponse(
-            prompt=result["prompt"],
+            prompt=greeting or "",  # Return greeting directly (not empty!)
             session_info=result["session_info"]
         )
     except Exception as e:
@@ -213,7 +299,7 @@ def _preload_questions_background(user_id: str, token: str):
 
 
 @app.post("/session/end", response_model=PromptResponse)
-def end_session(http_request: Request, request: Optional[EndSessionRequest] = None):
+async def end_session(http_request: Request, request: Optional[EndSessionRequest] = None):
     """End the current tutoring session"""
     user_id = get_current_user(http_request)
     try:
@@ -225,14 +311,7 @@ def end_session(http_request: Request, request: Optional[EndSessionRequest] = No
                 session_info={'session_active': False, 'user_id': user_id}
             )
 
-        session_id = session["session_id"]
-
-        # Finalize cost tracking for this session
-        from services.CostTracking.cost_tracker import CostTracker
-        cost_tracker = CostTracker(session_id, user_id)
-        cost_tracker.end_session()
-
-        result = ta.end_session(session_id)
+        result = ta.end_session(session["session_id"])
 
         # Pre-load next session questions in background (non-blocking)
         try:
@@ -256,8 +335,10 @@ def end_session(http_request: Request, request: Optional[EndSessionRequest] = No
         except Exception as e:
             logger.error(f"[PRELOAD] Failed to start pre-loading thread: {e}")
 
+        
+        # Return closing message directly (also sent via SSE)
         return PromptResponse(
-            prompt=result["prompt"],
+            prompt=closing or result["prompt"],  # Use memory-aware closing or fallback
             session_info=result["session_info"]
         )
     except Exception as e:
@@ -356,7 +437,8 @@ def record_conversation_turn(http_request: Request):
     try:
         session = ta.get_active_session(user_id)
         if not session:
-            raise HTTPException(status_code=404, detail="No active session")
+            # If session is already closed (race condition with session end), just ignore
+            return {"status": "ignored", "reason": "no_active_session"}
 
         ta.record_conversation_turn(session["session_id"])
         return {"status": "recorded"}
@@ -406,10 +488,11 @@ async def websocket_feed(websocket: WebSocket):
 
     user_id = user_info["user_id"]
 
-    # 2. Get active session
+    # 2. Get active session and check if it's still active
     session = ta.get_active_session(user_id)
-    if not session:
-        await websocket.close(code=4002, reason="No active session")
+    if not session or not session.get("is_active"):
+        await websocket.close(code=1008, reason="Session not active or ended")
+        logger.info(f"[WS] Rejected connection - no active session for user {user_id}")
         return
 
     session_id = session["session_id"]
@@ -478,10 +561,31 @@ async def broadcast_to_observers(session_id: str, message: dict):
 
 async def process_audio(session_id: str, audio_base64: str, timestamp: str):
     """Process incoming audio data and broadcast to observers"""
-    # TODO: Implement audio analysis
+    # Get user_id from session
+    session = ta.session_manager.get_session_by_id(session_id)
+    if not session:
+        return
+    
+    user_id = session["user_id"]
+    
+    # Create event from feed message
+    event = feed_message_to_event(
+        {
+            "type": "audio",
+            "timestamp": timestamp,
+            "data": {"audio": audio_base64}
+        },
+        session_id,
+        user_id
+    )
+    
+    if event:
+        # Enqueue event for processing
+        ta.queue_manager.enqueue(event)
+    
+    # Broadcast to observers (keep existing functionality)
     logger.debug(f"[AUDIO] Session {session_id}: received audio at {timestamp}")
 
-    # Broadcast to observers
     await broadcast_to_observers(session_id, {
         "type": "audio",
         "timestamp": timestamp,
@@ -491,10 +595,31 @@ async def process_audio(session_id: str, audio_base64: str, timestamp: str):
 
 async def process_media(session_id: str, media_base64: str, timestamp: str):
     """Process incoming media (video frames) and broadcast to observers"""
-    # TODO: Implement media analysis
+    # Get user_id from session
+    session = ta.session_manager.get_session_by_id(session_id)
+    if not session:
+        return
+    
+    user_id = session["user_id"]
+    
+    # Create event from feed message
+    event = feed_message_to_event(
+        {
+            "type": "media",
+            "timestamp": timestamp,
+            "data": {"media": media_base64}
+        },
+        session_id,
+        user_id
+    )
+    
+    if event:
+        # Enqueue event for processing
+        ta.queue_manager.enqueue(event)
+    
+    # Broadcast to observers (keep existing functionality)
     logger.debug(f"[MEDIA] Session {session_id}: received frame at {timestamp}")
 
-    # Broadcast to observers
     await broadcast_to_observers(session_id, {
         "type": "media",
         "timestamp": timestamp,
@@ -504,11 +629,35 @@ async def process_media(session_id: str, media_base64: str, timestamp: str):
 
 async def process_transcript(session_id: str, transcript: str, timestamp: str, speaker: str = "tutor"):
     """Process incoming transcript and broadcast to observers"""
-    # TODO: Analyze transcript for instruction generation
+    # Get user_id from session
+    session = ta.session_manager.get_session_by_id(session_id)
+    if not session:
+        return
+    
+    user_id = session["user_id"]
+    
+    # Create event from feed message
+    event = feed_message_to_event(
+        {
+            "type": "transcript",
+            "timestamp": timestamp,
+            "data": {
+                "transcript": transcript,
+                "speaker": speaker
+            }
+        },
+        session_id,
+        user_id
+    )
+    
+    if event:
+        # Enqueue event for processing
+        ta.queue_manager.enqueue(event)
+    
+    # Broadcast to observers (keep existing functionality)
     speaker_label = "USER" if speaker == "user" else "TUTOR"
     logger.debug(f"[TRANSCRIPT] Session {session_id} [{speaker_label}]: {transcript[:100] if transcript else 'empty'}...")
 
-    # Broadcast to observers
     await broadcast_to_observers(session_id, {
         "type": "transcript",
         "timestamp": timestamp,
@@ -582,7 +731,15 @@ async def sse_instructions(request: Request, token: str = None):
             ta.session_manager.set_connection_status(session_id, sse=False)
             logger.info(f"[SSE] SSE disconnected for session {session_id}")
 
-    return EventSourceResponse(event_generator())
+    # Add CORS headers for SSE
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+        "Access-Control-Allow-Credentials": "true"
+    }
+    
+    return EventSourceResponse(event_generator(), headers=headers)
 
 
 # ============================================================================
@@ -625,7 +782,9 @@ def push_instruction(request: InstructionRequest, http_request: Request):
         # Push to session's instruction queue
         instruction_id = ta.session_manager.push_instruction(session_id, full_instruction)
 
-        logger.info(f"[INSTRUCTION] Pushed instruction {instruction_id} to session {session_id}")
+        # Log the instruction content
+        truncated_instruction = request.instruction[:150] + "..." if len(request.instruction) > 150 else request.instruction
+        logger.info(f"[INSTRUCTION CREATED] {instruction_id}: {truncated_instruction}")
 
         return {
             "success": True,
@@ -666,7 +825,9 @@ def push_instruction_admin(request: InstructionRequest, api_key: str = None):
         # Push instruction
         instruction_id = ta.session_manager.push_instruction(request.session_id, full_instruction)
 
-        logger.info(f"[INSTRUCTION/ADMIN] Pushed instruction {instruction_id} to session {request.session_id}")
+        # Log the instruction content
+        truncated_instruction = request.instruction[:150] + "..." if len(request.instruction) > 150 else request.instruction
+        logger.info(f"[INSTRUCTION CREATED/ADMIN] {instruction_id}: {truncated_instruction}")
 
         return {
             "success": True,
@@ -833,6 +994,11 @@ def send_instruction_to_tutor(http_request: Request):
         if instructions:
             instruction = instructions[0]
             ta.session_manager.mark_instruction_delivered(session_id, instruction["instruction_id"])
+
+            # Log the instruction being sent to tutor
+            truncated_instruction = instruction["text"][:150] + "..." if len(instruction["text"]) > 150 else instruction["text"]
+            logger.info(f"[INSTRUCTION → TUTOR] {truncated_instruction}")
+
             return PromptResponse(
                 prompt=instruction["text"],
                 session_info=ta.get_session_info(session_id)
