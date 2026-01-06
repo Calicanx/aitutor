@@ -180,7 +180,7 @@ echo "  👨‍🏫 TeachingAssistant:  http://localhost:$TEACHING_ASSISTANT_POR
 echo "  🎓 Tutor Service:      (integrated in frontend)"
 echo "  🎓 Cost Tracking Service:  http://localhost:$COST_TRACKING_PORT"
 echo "     Cost tracking interface: http://localhost:3000/app/admin/cost-tracking"
-echo "     Two way channel interface: services\TeachingAssistant\scripts\test_channel1_viewer.html"
+echo "     Two way channel interface: file://$SCRIPT_DIR/services/TeachingAssistant/scripts/test_channel1_viewer.html"
 echo "Press Ctrl+C to stop."
 echo "You can view the logs for each service in the 'logs' directory."
 
