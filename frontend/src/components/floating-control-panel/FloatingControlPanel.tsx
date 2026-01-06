@@ -164,6 +164,44 @@ function FloatingControlPanel({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }, []);
 
+  // Transcript buffers for aggregating fragments into complete sentences
+  const userTranscriptBuffer = useRef('');
+  const userTranscriptTimer = useRef<number | null>(null);
+  const tutorTranscriptBuffer = useRef('');
+  const tutorTranscriptTimer = useRef<number | null>(null);
+
+  // Check if text ends with sentence boundary
+  const isSentenceComplete = useCallback((text: string): boolean => {
+    const trimmed = text.trim();
+    return /[.!?;]$/.test(trimmed) && trimmed.length > 10;
+  }, []);
+
+  // Flush user transcript buffer
+  const flushUserTranscript = useCallback(() => {
+    const text = userTranscriptBuffer.current.trim();
+    if (text && connected) {
+      feedWebSocketService.sendTranscript(text, 'user');
+      userTranscriptBuffer.current = '';
+    }
+    if (userTranscriptTimer.current) {
+      clearTimeout(userTranscriptTimer.current);
+      userTranscriptTimer.current = null;
+    }
+  }, [connected]);
+
+  // Flush tutor transcript buffer
+  const flushTutorTranscript = useCallback(() => {
+    const text = tutorTranscriptBuffer.current.trim();
+    if (text && connected) {
+      feedWebSocketService.sendTranscript(text, 'tutor');
+      tutorTranscriptBuffer.current = '';
+    }
+    if (tutorTranscriptTimer.current) {
+      clearTimeout(tutorTranscriptTimer.current);
+      tutorTranscriptTimer.current = null;
+    }
+  }, [connected]);
+
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then((devices) => {
       const audioInputs = devices.filter(
@@ -281,9 +319,21 @@ function FloatingControlPanel({
     const onInputTranscript = (data: TranscriptionData) => {
       if (!connected) return;
 
-      // Send user's speech transcript via WebSocket
       if (data.text) {
-        feedWebSocketService.sendTranscript(data.text, 'user');
+        userTranscriptBuffer.current += data.text;
+
+        // Send immediately if sentence is complete
+        if (isSentenceComplete(userTranscriptBuffer.current)) {
+          flushUserTranscript();
+        } else {
+          // Set debounce timer to flush after 3 seconds of inactivity
+          if (userTranscriptTimer.current) {
+            clearTimeout(userTranscriptTimer.current);
+          }
+          userTranscriptTimer.current = window.setTimeout(() => {
+            flushUserTranscript();
+          }, 3000);
+        }
       }
     };
 
@@ -291,17 +341,33 @@ function FloatingControlPanel({
 
     return () => {
       client.off('inputTranscript', onInputTranscript);
+      if (userTranscriptTimer.current) {
+        clearTimeout(userTranscriptTimer.current);
+      }
+      flushUserTranscript();
     };
-  }, [client, connected]);
+  }, [client, connected, isSentenceComplete, flushUserTranscript]);
 
   // Handle output audio transcription (tutor's speech) - send via WebSocket
   useEffect(() => {
     const onOutputTranscript = (data: TranscriptionData) => {
       if (!connected) return;
 
-      // Send tutor's speech transcript via WebSocket
       if (data.text) {
-        feedWebSocketService.sendTranscript(data.text, 'tutor');
+        tutorTranscriptBuffer.current += data.text;
+
+        // Send immediately if sentence is complete
+        if (isSentenceComplete(tutorTranscriptBuffer.current)) {
+          flushTutorTranscript();
+        } else {
+          // Set debounce timer to flush after 3 seconds of inactivity
+          if (tutorTranscriptTimer.current) {
+            clearTimeout(tutorTranscriptTimer.current);
+          }
+          tutorTranscriptTimer.current = window.setTimeout(() => {
+            flushTutorTranscript();
+          }, 3000);
+        }
       }
     };
 
@@ -309,8 +375,12 @@ function FloatingControlPanel({
 
     return () => {
       client.off('outputTranscript', onOutputTranscript);
+      if (tutorTranscriptTimer.current) {
+        clearTimeout(tutorTranscriptTimer.current);
+      }
+      flushTutorTranscript();
     };
-  }, [client, connected]);
+  }, [client, connected, isSentenceComplete, flushTutorTranscript]);
 
   // Video handling - capture full MediaMixer canvas and send to tutor as JPEG
   useEffect(() => {
@@ -390,6 +460,10 @@ function FloatingControlPanel({
     if (connected) {
       // Handle disconnect with TeachingAssistant session end
       try {
+        // Flush any remaining transcripts before disconnect
+        flushUserTranscript();
+        flushTutorTranscript();
+
         interruptAudio();
 
         // Disconnect WebSocket and SSE first (optional - may not be connected)
@@ -579,7 +653,7 @@ function FloatingControlPanel({
         setupCompleteResolver = null;
       }
     }
-  }, [connected, connect, disconnect, client, interruptAudio]);
+  }, [connected, connect, disconnect, client, interruptAudio, flushUserTranscript, flushTutorTranscript]);
 
   const [verticalAlign, setVerticalAlign] = useState<"top" | "bottom">("top");
 

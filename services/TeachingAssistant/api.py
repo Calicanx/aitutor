@@ -96,8 +96,10 @@ app.add_middleware(
 # Request timeout middleware (Phase 3)
 @app.middleware("http")
 async def timeout_middleware(request: Request, call_next):
+    # Increase timeout for token-usage endpoint (MongoDB operations can be slow)
+    timeout = 60.0 if request.url.path == "/tutor/token-usage" else 30.0
     try:
-        return await asyncio.wait_for(call_next(request), timeout=30.0)
+        return await asyncio.wait_for(call_next(request), timeout=timeout)
     except asyncio.TimeoutError:
         return JSONResponse(
             status_code=504,
@@ -140,6 +142,92 @@ event_processing_task = None
 
 # DASH API URL for pre-loading questions
 DASH_API_URL = os.getenv("DASH_API_URL", "http://localhost:8000")
+
+
+# ============================================================================
+# Transcript Buffer for Debouncing Partial Transcripts
+# ============================================================================
+
+class TranscriptBuffer:
+    """Buffer transcripts to aggregate fragments before processing"""
+    def __init__(self, debounce_ms: int = 2000):
+        self.buffers: Dict[str, Dict[str, str]] = {}  # session_id -> {speaker -> text}
+        self.timers: Dict[str, asyncio.TimerHandle] = {}  # session_id:speaker -> timer
+        self.debounce_ms = debounce_ms
+
+    async def add(self, session_id: str, speaker: str, text: str, callback) -> bool:
+        """
+        Add text to buffer. Returns True if text was buffered (will be flushed later),
+        False if it was sent immediately (empty buffer or no debounce needed).
+        """
+        key = f"{session_id}:{speaker}"
+
+        # Initialize buffer for this session:speaker pair if needed
+        if session_id not in self.buffers:
+            self.buffers[session_id] = {}
+
+        # Add text to buffer
+        self.buffers[session_id][speaker] = self.buffers[session_id].get(speaker, "") + text
+        buffered_text = self.buffers[session_id][speaker]
+
+        # Cancel existing timer if any
+        if key in self.timers:
+            self.timers[key].cancel()
+            del self.timers[key]
+
+        # Set new timer to flush after debounce
+        loop = asyncio.get_event_loop()
+        self.timers[key] = loop.call_later(
+            self.debounce_ms / 1000.0,
+            lambda: asyncio.create_task(self._flush(session_id, speaker, callback))
+        )
+
+        return True
+
+    async def _flush(self, session_id: str, speaker: str, callback):
+        """Flush buffered text"""
+        if session_id not in self.buffers or speaker not in self.buffers[session_id]:
+            return
+
+        text = self.buffers[session_id][speaker].strip()
+        if text:
+            await callback(text)
+
+        # Clean up
+        del self.buffers[session_id][speaker]
+        key = f"{session_id}:{speaker}"
+        if key in self.timers:
+            del self.timers[key]
+
+    async def flush_all(self, session_id: str, callback):
+        """Flush all pending text for a session"""
+        if session_id not in self.buffers:
+            return
+
+        for speaker, text in list(self.buffers[session_id].items()):
+            text = text.strip()
+            if text:
+                await callback(text, speaker)
+
+            # Clean up timers
+            key = f"{session_id}:{speaker}"
+            if key in self.timers:
+                self.timers[key].cancel()
+                del self.timers[key]
+
+        del self.buffers[session_id]
+
+    def cleanup_session(self, session_id: str):
+        """Clean up buffers and timers for a session"""
+        if session_id in self.buffers:
+            for speaker in self.buffers[session_id].keys():
+                key = f"{session_id}:{speaker}"
+                if key in self.timers:
+                    self.timers[key].cancel()
+                    del self.timers[key]
+            del self.buffers[session_id]
+
+transcript_buffer = TranscriptBuffer(debounce_ms=2000)
 
 
 # ============================================================================
@@ -448,9 +536,14 @@ async def record_tutor_token_usage(http_request: Request, request: TokenUsageReq
         
         # Get current session cost data to calculate deltas
         from managers.mongodb_manager import mongo_db
-        from datetime import datetime
+        from datetime import datetime, timezone
         
-        current_session = mongo_db.session_costs.find_one({"session_id": session_id})
+        # Use async MongoDB operation to avoid blocking event loop
+        current_session = await asyncio.to_thread(
+            mongo_db.session_costs.find_one,
+            {"session_id": session_id},
+            {"api_calls.tutor_api": 1}  # Only fetch needed fields for performance
+        )
         
         # Get last cumulative values (if they exist)
         last_prompt_tokens = 0
@@ -523,7 +616,7 @@ async def record_tutor_token_usage(http_request: Request, request: TokenUsageReq
         
         # Store detailed token usage record
         token_usage_record = {
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
             # Cumulative values (as received from API)
             "cumulative_prompt_tokens": request.promptTokenCount,
             "cumulative_candidates_tokens": request.candidatesTokenCount,
@@ -580,7 +673,9 @@ async def record_tutor_token_usage(http_request: Request, request: TokenUsageReq
             }
         }
         
-        mongo_db.session_costs.update_one(
+        # Use async MongoDB operation to avoid blocking event loop
+        await asyncio.to_thread(
+            mongo_db.session_costs.update_one,
             {"session_id": session_id},
             update_operation,
             upsert=True
@@ -714,9 +809,11 @@ async def websocket_feed(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logger.info(f"[WS] WebSocket disconnected for session {session_id}")
+        transcript_buffer.cleanup_session(session_id)
         ta.session_manager.set_connection_status(session_id, websocket=False)
     except Exception as e:
         logger.error(f"[WS] WebSocket error for session {session_id}: {e}")
+        transcript_buffer.cleanup_session(session_id)
         ta.session_manager.set_connection_status(session_id, websocket=False)
 
 
@@ -818,36 +915,42 @@ async def process_transcript(session_id: str, transcript: str, timestamp: str, s
     session = ta.session_manager.get_session_by_id(session_id)
     if not session:
         return
-    
+
     user_id = session["user_id"]
-    
-    # Create event from feed message
-    event = feed_message_to_event(
-        {
+
+    # Define callback for when buffered transcript is ready
+    async def on_transcript_ready(buffered_text: str):
+        # Create event from feed message with buffered text
+        event = feed_message_to_event(
+            {
+                "type": "transcript",
+                "timestamp": timestamp,
+                "data": {
+                    "transcript": buffered_text,
+                    "speaker": speaker
+                }
+            },
+            session_id,
+            user_id
+        )
+
+        if event:
+            # Enqueue event for processing
+            ta.queue_manager.enqueue(event)
+
+        # Log aggregated transcript
+        speaker_label = "USER" if speaker == "user" else "TUTOR"
+        logger.debug(f"[TRANSCRIPT] Session {session_id} [{speaker_label}]: {buffered_text[:100] if buffered_text else 'empty'}...")
+
+        # Broadcast to observers
+        await broadcast_to_observers(session_id, {
             "type": "transcript",
             "timestamp": timestamp,
-            "data": {
-                "transcript": transcript,
-                "speaker": speaker
-            }
-        },
-        session_id,
-        user_id
-    )
-    
-    if event:
-        # Enqueue event for processing
-        ta.queue_manager.enqueue(event)
-    
-    # Broadcast to observers (keep existing functionality)
-    speaker_label = "USER" if speaker == "user" else "TUTOR"
-    logger.debug(f"[TRANSCRIPT] Session {session_id} [{speaker_label}]: {transcript[:100] if transcript else 'empty'}...")
+            "data": {"transcript": buffered_text, "speaker": speaker}
+        })
 
-    await broadcast_to_observers(session_id, {
-        "type": "transcript",
-        "timestamp": timestamp,
-        "data": {"transcript": transcript, "speaker": speaker}
-    })
+    # Add to buffer (will be flushed after debounce)
+    await transcript_buffer.add(session_id, speaker, transcript, on_transcript_ready)
 
 
 # ============================================================================
@@ -916,12 +1019,22 @@ async def sse_instructions(request: Request, token: str = None):
             ta.session_manager.set_connection_status(session_id, sse=False)
             logger.info(f"[SSE] SSE disconnected for session {session_id}")
 
-    # Add CORS headers for SSE
+    # Fix CORS headers for SSE - ensure proper origin handling
+    origin = request.headers.get("origin")
+    # Validate origin against allowed origins
+    if origin and origin in ALLOWED_ORIGINS:
+        allowed_origin = origin
+    else:
+        # Fallback: use first allowed origin or "*" for development
+        allowed_origin = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "*"
+    
     headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
-        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-        "Access-Control-Allow-Credentials": "true"
+        "Access-Control-Allow-Origin": allowed_origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Headers": "Cache-Control",
+        "Access-Control-Expose-Headers": "*"
     }
     
     return EventSourceResponse(event_generator(), headers=headers)
