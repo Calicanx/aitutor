@@ -539,25 +539,6 @@ def log_question_displayed(request: Request, display_info: dict):
     return {"success": True}
 
 
-class AnswerSubmission(BaseModel):
-    question_id: str
-    skill_ids: List[str]
-    is_correct: bool
-    response_time_seconds: float
-
-class RecommendNextRequest(BaseModel):
-    current_question_ids: List[str]
-    count: int = 5
-
-class AssessmentAnswer(BaseModel):
-    question_id: str
-    skill_id: str
-    is_correct: bool
-
-class CompleteAssessmentRequest(BaseModel):
-    subject: str
-    answers: List[AssessmentAnswer]
-
 @app.post("/api/submit-answer")
 def submit_answer(request: Request, answer: AnswerSubmission):
     """
