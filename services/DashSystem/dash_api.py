@@ -8,8 +8,6 @@ from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from datetime import datetime
-import asyncio
-from fastapi.concurrency import run_in_threadpool
 
 # Configure logging
 logging.basicConfig(
@@ -36,16 +34,6 @@ logger = get_logger(__name__)
 
 app = FastAPI()
 dash_system = None  # Initialize as None, will be set in startup event
-_dash_init_started = False
-
-dash_init_status = {
-    "state": "not_started",   # not_started | running | ready | failed
-    "started_at": None,
-    "ended_at": None,
-    "elapsed_seconds": None,
-    "last_step": None,
-    "error": None,
-}
 
 # Configure CORS with secure origins from environment
 app.add_middleware(
@@ -57,6 +45,26 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Helper function to ensure DASH system is initialized
+def ensure_dash_system():
+    """Ensure DASH system is initialized before use"""
+    if dash_system is None:
+        raise HTTPException(status_code=503, detail="DASHSystem not initialized")
+
+# Startup event to initialize DASH system
+@app.on_event("startup")
+async def startup_event():
+    """Initialize DASHSystem on startup"""
+    global dash_system
+    logger.info("Initializing DASHSystem...")
+    try:
+        dash_system = DASHSystem()
+        logger.info(f"DASHSystem initialized: {len(dash_system.skills)} skills, {len(dash_system.question_index)} questions in index")
+    except Exception as e:
+        logger.error(f"Failed to initialize DASHSystem: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise
 # Performance Monitoring
 from shared.timing_middleware import UnpluggedTimingMiddleware
 app.add_middleware(UnpluggedTimingMiddleware)
@@ -64,130 +72,20 @@ app.add_middleware(UnpluggedTimingMiddleware)
 # Cache Control
 app.add_middleware(CacheControlMiddleware)
 
-
-# -----------------------------
-# Pydantic models MUST come
-# BEFORE routes that reference them
-# -----------------------------
+# Perseus item model matching frontend expectations
 class PerseusQuestion(BaseModel):
     question: dict = Field(description="The question data")
     answerArea: dict = Field(description="The answer area")
     hints: List = Field(description="List of question hints")
     itemDataVersion: Optional[dict] = Field(default=None, description="Perseus item data version")
     dash_metadata: Optional[dict] = Field(default=None, description="DASH metadata for tracking")
-
+    
     class Config:
-        extra = "allow"
-
-
-class AnswerSubmission(BaseModel):
-    question_id: str
-    skill_ids: List[str]
-    is_correct: bool
-    response_time_seconds: float
-
-
-class RecommendNextRequest(BaseModel):
-    current_question_ids: List[str]
-    count: int = 5
-
-
-class AssessmentAnswer(BaseModel):
-    question_id: str
-    skill_id: str
-    is_correct: bool
-
-
-class CompleteAssessmentRequest(BaseModel):
-    subject: str
-    answers: List[AssessmentAnswer]
-
-
-# -----------------------------
-# Helpers + background init
-# -----------------------------
-def ensure_dash_system():
-    if dash_system is None:
-        raise HTTPException(status_code=503, detail="DASHSystem still initializing")
-
-
-def _init_dash_system_background():
-    global dash_system, dash_init_status
-
-    dash_init_status["state"] = "running"
-    dash_init_status["started_at"] = time.time()
-    dash_init_status["ended_at"] = None
-    dash_init_status["elapsed_seconds"] = None
-    dash_init_status["last_step"] = "DASHSystem() constructor started"
-    dash_init_status["error"] = None
-
-    logger.info("[STARTUP] DASHSystem background initialization started")
-
-    try:
-        t0 = time.time()
-        dash_system = DASHSystem()
-        dt = time.time() - t0
-
-        dash_init_status["state"] = "ready"
-        dash_init_status["ended_at"] = time.time()
-        dash_init_status["elapsed_seconds"] = dt
-        dash_init_status["last_step"] = "ready"
-
-        logger.info(
-            f"[STARTUP] DASHSystem initialized: {len(dash_system.skills)} skills, "
-            f"{len(dash_system.question_index)} questions in index | took {dt:.2f}s"
-        )
-    except Exception as e:
-        dash_system = None
-        dash_init_status["state"] = "failed"
-        dash_init_status["ended_at"] = time.time()
-        dash_init_status["elapsed_seconds"] = (
-            dash_init_status["ended_at"]
-            - (dash_init_status["started_at"] or dash_init_status["ended_at"])
-        )
-        dash_init_status["last_step"] = "failed"
-        dash_init_status["error"] = str(e)
-
-        logger.error(f"[STARTUP] Failed to initialize DASHSystem: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-
-
-@app.on_event("startup")
-async def startup_event():
-    global _dash_init_started
-
-    logger.info("[STARTUP] FastAPI startup complete (non-blocking)")
-
-    if not _dash_init_started:
-        _dash_init_started = True
-        asyncio.create_task(run_in_threadpool(_init_dash_system_background))
+        extra = "allow"  # Allow additional fields that aren't in the model
 
 # Health check endpoint for startup verification
 @app.get("/health")
 def health_check():
-    """Health check endpoint for startup verification"""
-    from fastapi import Response
-    if dash_system is None:
-        return Response(
-            content='{"status": "initializing", "ready": false}',
-            media_type="application/json",
-            status_code=503
-        )
-    return {
-        "status": "ready",
-        "ready": True,
-        "skills_count": len(dash_system.skills),
-        "questions_count": len(dash_system.question_index)
-    }
-
-# Debug endpoint to see if init is stuck + how long it's been running
-@app.get("/debug/dash-init")
-def debug_dash_init():
-    status = dict(dash_init_status)
-    if status["state"] == "running" and status["started_at"]:
-        status["elapsed_seconds"] = time.time() - status["started_at"]
-    return status
     """Health check endpoint for startup verification"""
     from fastapi import Response
     if dash_system is None:
@@ -538,6 +436,25 @@ def log_question_displayed(request: Request, display_info: dict):
     logger.info(f"{'='*80}\n")
     return {"success": True}
 
+
+class AnswerSubmission(BaseModel):
+    question_id: str
+    skill_ids: List[str]
+    is_correct: bool
+    response_time_seconds: float
+
+class RecommendNextRequest(BaseModel):
+    current_question_ids: List[str]
+    count: int = 5
+
+class AssessmentAnswer(BaseModel):
+    question_id: str
+    skill_id: str
+    is_correct: bool
+
+class CompleteAssessmentRequest(BaseModel):
+    subject: str
+    answers: List[AssessmentAnswer]
 
 @app.post("/api/submit-answer")
 def submit_answer(request: Request, answer: AnswerSubmission):
